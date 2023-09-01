@@ -8,6 +8,11 @@ public class TransactionException extends Exception {
 
   @Nullable private final String transactionId;
 
+  public TransactionException(String message) {
+    super(message);
+    this.transactionId = null;
+  }
+
   public TransactionException(String message, @Nullable String transactionId) {
     super(addTransactionIdToMessage(message, transactionId));
     this.transactionId = transactionId;
