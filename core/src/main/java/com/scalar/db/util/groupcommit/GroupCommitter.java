@@ -1,14 +1,11 @@
 package com.scalar.db.util.groupcommit;
 
-import com.google.common.util.concurrent.MoreExecutors;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.google.common.util.concurrent.Uninterruptibles;
+import com.codahale.metrics.ConsoleReporter;
+import com.codahale.metrics.MetricRegistry;
 import com.scalar.db.util.groupcommit.KeyManipulator.Keys;
 import java.io.Closeable;
-import java.time.Instant;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,13 +33,13 @@ public class GroupCommitter<PARENT_KEY, CHILD_KEY, FULL_KEY, EMIT_KEY, V> implem
       delayedSlotMoveWorker;
   private final GroupCleanupWorker<PARENT_KEY, CHILD_KEY, FULL_KEY, EMIT_KEY, V> groupCleanupWorker;
 
-  // Executors
-  private final ExecutorService monitorExecutorService;
-
   // This contains logics of how to treat keys.
   private final KeyManipulator<PARENT_KEY, CHILD_KEY, FULL_KEY, EMIT_KEY> keyManipulator;
 
   private final GroupManager<PARENT_KEY, CHILD_KEY, FULL_KEY, EMIT_KEY, V> groupManager;
+
+  // Metrics reporters
+  @Nullable private final ConsoleReporter metricsConsoleReporter;
 
   /**
    * @param label A label used for thread name.
@@ -67,38 +64,29 @@ public class GroupCommitter<PARENT_KEY, CHILD_KEY, FULL_KEY, EMIT_KEY, V> implem
     this.groupManager.setGroupSizeFixWorker(groupSizeFixWorker);
     this.groupManager.setGroupCleanupWorker(groupCleanupWorker);
 
-    // TODO: This should be replaced by other metrics mechanism.
-    this.monitorExecutorService =
-        Executors.newSingleThreadExecutor(
-            new ThreadFactoryBuilder()
-                .setDaemon(true)
-                .setNameFormat(label + "-group-commit-monitor-%d")
-                .build());
-    startMonitorExecutorService();
+    if (config.metricsConsoleReporterEnabled()) {
+      MetricRegistry metricsRegistry = createMetricsRegistry(label);
+      metricsConsoleReporter = ConsoleReporter.forRegistry(metricsRegistry).build();
+      metricsConsoleReporter.start(1, TimeUnit.SECONDS);
+    } else {
+      metricsConsoleReporter = null;
+    }
   }
 
-  Metrics getMetrics() {
-    return new Metrics(
+  private MetricRegistry createMetricsRegistry(String label) {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    String metricsName = label + "-groupcommit";
+    metricRegistry.registerGauge(metricsName, this::getMetrics);
+    return metricRegistry;
+  }
+
+  GroupCommitMetrics getMetrics() {
+    return new GroupCommitMetrics(
         groupSizeFixWorker.size(),
         delayedSlotMoveWorker.size(),
         groupCleanupWorker.size(),
         groupManager.sizeOfNormalGroupMap(),
         groupManager.sizeOfDelayedGroupMap());
-  }
-
-  // TODO: This should be replaced by other metrics mechanism.
-  private void startMonitorExecutorService() {
-    Runnable print =
-        () -> logger.debug("[MONITOR] Timestamp={}, Metrics={}", Instant.now(), getMetrics());
-
-    monitorExecutorService.execute(
-        () -> {
-          while (!monitorExecutorService.isShutdown()) {
-            print.run();
-            Uninterruptibles.sleepUninterruptibly(1, TimeUnit.SECONDS);
-          }
-          print.run();
-        });
   }
 
   /**
@@ -184,11 +172,11 @@ public class GroupCommitter<PARENT_KEY, CHILD_KEY, FULL_KEY, EMIT_KEY, V> implem
    */
   @Override
   public void close() {
-    if (monitorExecutorService != null) {
-      MoreExecutors.shutdownAndAwaitTermination(monitorExecutorService, 5, TimeUnit.SECONDS);
-    }
     delayedSlotMoveWorker.close();
     groupSizeFixWorker.close();
     groupCleanupWorker.close();
+    if (metricsConsoleReporter != null) {
+      metricsConsoleReporter.stop();
+    }
   }
 }

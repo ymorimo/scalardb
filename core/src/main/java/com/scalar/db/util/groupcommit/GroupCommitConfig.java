@@ -11,6 +11,7 @@ public class GroupCommitConfig {
   private final int delayedSlotMoveTimeoutMillis;
   private final int oldGroupAbortTimeoutSeconds;
   private final int timeoutCheckIntervalMillis;
+  private final boolean metricsConsoleReporterEnabled;
 
   /**
    * A configuration of group commit.
@@ -21,18 +22,37 @@ public class GroupCommitConfig {
    *     to {@link DelayedGroup}.
    * @param oldGroupAbortTimeoutSeconds A timeout to abort too old {@link Group}.
    * @param timeoutCheckIntervalMillis An interval to check the queues.
+   * @param metricsConsoleReporterEnabled Whether to enable the console reporter for metrics.
    */
   public GroupCommitConfig(
       int slotCapacity,
       int groupSizeFixTimeoutMillis,
       int delayedSlotMoveTimeoutMillis,
       int oldGroupAbortTimeoutSeconds,
-      int timeoutCheckIntervalMillis) {
+      int timeoutCheckIntervalMillis,
+      boolean metricsConsoleReporterEnabled) {
     this.slotCapacity = slotCapacity;
     this.groupSizeFixTimeoutMillis = groupSizeFixTimeoutMillis;
     this.delayedSlotMoveTimeoutMillis = delayedSlotMoveTimeoutMillis;
     this.oldGroupAbortTimeoutSeconds = oldGroupAbortTimeoutSeconds;
     this.timeoutCheckIntervalMillis = timeoutCheckIntervalMillis;
+    this.metricsConsoleReporterEnabled = metricsConsoleReporterEnabled;
+  }
+
+  // Mainly only for testing.
+  public GroupCommitConfig(
+      int slotCapacity,
+      int groupSizeFixTimeoutMillis,
+      int delayedSlotMoveTimeoutMillis,
+      int oldGroupAbortTimeoutSeconds,
+      int timeoutCheckIntervalMillis) {
+    this(
+        slotCapacity,
+        groupSizeFixTimeoutMillis,
+        delayedSlotMoveTimeoutMillis,
+        oldGroupAbortTimeoutSeconds,
+        timeoutCheckIntervalMillis,
+        false);
   }
 
   // For the SpotBugs warning CT_CONSTRUCTOR_THROW
@@ -59,6 +79,10 @@ public class GroupCommitConfig {
     return timeoutCheckIntervalMillis;
   }
 
+  public boolean metricsConsoleReporterEnabled() {
+    return metricsConsoleReporterEnabled;
+  }
+
   @Override
   public String toString() {
     return MoreObjects.toStringHelper(this)
@@ -67,6 +91,7 @@ public class GroupCommitConfig {
         .add("delayedSlotMoveTimeoutMillis", delayedSlotMoveTimeoutMillis)
         .add("oldGroupAbortTimeoutSeconds", oldGroupAbortTimeoutSeconds)
         .add("timeoutCheckIntervalMillis", timeoutCheckIntervalMillis)
+        .add("metricsConsoleReporterEnabled", metricsConsoleReporterEnabled)
         .toString();
   }
 }

@@ -49,4 +49,31 @@ class GroupCommitConfigTest {
     // Act / Assert
     assertThat(config.timeoutCheckIntervalMillis()).isEqualTo(50);
   }
+
+  @Test
+  void metricsConsoleReporterEnabled_GivenTrue_ShouldReturnTrue() {
+    // Arrange
+    GroupCommitConfig config = new GroupCommitConfig(10, 20, 30, 40, 50, true);
+
+    // Act / Assert
+    assertThat(config.metricsConsoleReporterEnabled()).isTrue();
+  }
+
+  @Test
+  void metricsConsoleReporterEnabled_GivenFalse_ShouldReturnFalse() {
+    // Arrange
+    GroupCommitConfig config = new GroupCommitConfig(10, 20, 30, 40, 50, false);
+
+    // Act / Assert
+    assertThat(config.metricsConsoleReporterEnabled()).isFalse();
+  }
+
+  @Test
+  void metricsConsoleReporterEnabled_GivenNothing_ShouldReturnFalse() {
+    // Arrange
+    GroupCommitConfig config = new GroupCommitConfig(10, 20, 30, 40, 50);
+
+    // Act / Assert
+    assertThat(config.metricsConsoleReporterEnabled()).isFalse();
+  }
 }
