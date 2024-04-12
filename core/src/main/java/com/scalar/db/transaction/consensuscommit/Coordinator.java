@@ -20,6 +20,7 @@ import com.scalar.db.exception.storage.ExecutionException;
 import com.scalar.db.exception.storage.NoMutationException;
 import com.scalar.db.io.DataType;
 import com.scalar.db.io.Key;
+import com.scalar.db.io.Value;
 import com.scalar.db.transaction.consensuscommit.CoordinatorGroupCommitter.CoordinatorGroupCommitKeyManipulator;
 import com.scalar.db.util.groupcommit.KeyManipulator.Keys;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
@@ -219,9 +220,11 @@ public class Coordinator {
           .forNamespace(coordinatorNamespace)
           .forTable(TABLE);
     } else {
-      return new Put(new Key(Attribute.toIdValue(state.getId())), DEFAULT_SUB_ID_KEY)
-          .withValue(Attribute.toChildIdsValue(Joiner.on(',').join(state.getChildIds())))
-          .withValue(Attribute.toStateValue(state.getState()))
+      Put put = new Put(new Key(Attribute.toIdValue(state.getId())), DEFAULT_SUB_ID_KEY);
+      if (!state.getChildIds().isEmpty()) {
+        put.withValue(Attribute.toChildIdsValue(Joiner.on(',').join(state.getChildIds())));
+      }
+      return put.withValue(Attribute.toStateValue(state.getState()))
           .withValue(Attribute.toCreatedAtValue(state.getCreatedAt()))
           .withConsistency(Consistency.LINEARIZABLE)
           .withCondition(new PutIfNotExists())
@@ -269,9 +272,15 @@ public class Coordinator {
       subId = result.getValue("tx_sub_id").get().getAsString().orElse(null);
       state = TransactionState.getInstance(result.getValue(Attribute.STATE).get().getAsInt());
       createdAt = result.getValue(Attribute.CREATED_AT).get().getAsLong();
-      Optional<String> childIdsOpt = result.getValue(Attribute.CHILD_IDS).get().getAsString();
+      Optional<Value<?>> childIdsOpt = result.getValue(Attribute.CHILD_IDS);
+      Optional<String> childIdsStrOpt;
+      if (childIdsOpt.isPresent()) {
+        childIdsStrOpt = childIdsOpt.get().getAsString();
+      } else {
+        childIdsStrOpt = Optional.empty();
+      }
       childIds =
-          childIdsOpt
+          childIdsStrOpt
               .map(s -> Splitter.on(CHILD_IDS_DELIMITER).omitEmptyStrings().splitToList(s))
               .orElse(EMPTY_CHILD_IDS);
     }
