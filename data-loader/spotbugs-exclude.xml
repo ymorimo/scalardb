@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!-- Suppress EI, EI2 warning for all classes since we do DI for Beans by lombok @RequiredArgsConstructor -->
+    <Match>
+        <Bug code="EI, EI2"/>
+    </Match>
+</FindBugsFilter>

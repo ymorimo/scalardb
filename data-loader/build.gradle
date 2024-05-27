@@ -1,11 +1,14 @@
-subprojects {
+allprojects {
+
     group = "scalardb.dataloader"
 
     ext {
         apacheCommonsLangVersion = '3.14.0'
         apacheCommonsIoVersion = '2.16.1'
     }
+
     dependencies {
+
         // AssertJ
         testImplementation("org.assertj:assertj-core:${assertjVersion}")
 
@@ -23,5 +26,11 @@ subprojects {
         testImplementation "org.mockito:mockito-core:${mockitoVersion}"
         testImplementation "org.mockito:mockito-inline:${mockitoVersion}"
         testImplementation "org.mockito:mockito-junit-jupiter:${mockitoVersion}"
+
+        // Lombok
+        compileOnly 'org.projectlombok:lombok:1.18.32'
+        annotationProcessor 'org.projectlombok:lombok:1.18.32'
+        testCompileOnly 'org.projectlombok:lombok:1.18.32'
+        testAnnotationProcessor 'org.projectlombok:lombok:1.18.32'
     }
 }
