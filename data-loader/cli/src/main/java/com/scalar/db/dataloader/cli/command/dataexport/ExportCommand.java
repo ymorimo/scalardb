@@ -5,7 +5,9 @@ import com.scalar.db.common.error.CoreError;
 import com.scalar.db.dataloader.cli.exception.DirectoryValidationException;
 import com.scalar.db.dataloader.cli.exception.InvalidFileExtensionException;
 import com.scalar.db.dataloader.cli.util.DirectoryUtils;
+import com.scalar.db.dataloader.core.ScanParameters;
 import com.scalar.db.dataloader.core.dataexport.ExportOptions;
+import com.scalar.db.dataloader.core.exception.KeyParsingException;
 import com.scalar.db.dataloader.core.tablemetadata.TableMetadataService;
 import com.scalar.db.dataloader.core.util.KeyUtils;
 import com.scalar.db.io.Key;
@@ -36,12 +38,11 @@ public class ExportCommand extends ExportCommandOptions implements Callable<Inte
     TableMetadataService metadataService = createTableMetadataService(storageFactory);
     TableMetadata tableMetadata = metadataService.getTableMetadata(namespace, tableName);
 
-    Key partitionKey = KeyUtils.parseKeyValue(partitionKeyValue, tableMetadata);
-    Key scanStartKey = KeyUtils.parseKeyValue(scanStartKeyValue, tableMetadata);
-    Key scanEndKey = KeyUtils.parseKeyValue(scanEndKeyValue, tableMetadata);
+    // Create the scan parameters
+    ScanParameters scanParameters = createScanParameters(tableMetadata);
 
     // Create the export options
-    buildExportOptions(partitionKey, scanStartKey, scanEndKey);
+    buildExportOptions(scanParameters);
     return 0;
   }
 
@@ -93,22 +94,34 @@ public class ExportCommand extends ExportCommandOptions implements Callable<Inte
     return new TableMetadataService(storageFactory);
   }
 
-  private ExportOptions buildExportOptions(
-      @Nullable Key partitionKey, @Nullable Key scanStartKey, @Nullable Key scanEndKey) {
-    return ExportOptions.builder(namespace, tableName, partitionKey, outputFormat)
-        .sortOrders(sortOrders)
-        .includeHeaderRow(!excludeHeader)
-        .includeTransactionMetadata(!excludeTransactionMetadata)
-        .csvDelimiter(csvDelimiter)
-        .scanLimit(limit)
-        .maxThreadCount(maxThreads)
-        .dataChunkSize(dataChunkSize)
-        .prettyPrintJson(prettyPrint)
+  private ScanParameters createScanParameters(TableMetadata tableMetadata)
+      throws KeyParsingException {
+    Key partitionKey = KeyUtils.parseKeyValue(partitionKeyValue, tableMetadata);
+    Key scanStartKey = KeyUtils.parseKeyValue(scanStartKeyValue, tableMetadata);
+    Key scanEndKey = KeyUtils.parseKeyValue(scanEndKeyValue, tableMetadata);
+
+    return ScanParameters.builder()
+        .namespace(namespace)
+        .tableName(tableName)
+        .partitionKey(partitionKey)
         .scanStartKey(scanStartKey)
         .scanEndKey(scanEndKey)
         .isStartInclusive(!scanStartExclusive)
         .isEndInclusive(!scanEndExclusive)
         .projectionColumns(projectionColumns)
+        .sortOrders(sortOrders)
+        .limit(limit)
+        .build();
+  }
+
+  private ExportOptions buildExportOptions(ScanParameters scanParameters) {
+    return ExportOptions.builder(scanParameters, outputFormat)
+        .includeHeaderRow(!excludeHeader)
+        .includeTransactionMetadata(!excludeTransactionMetadata)
+        .csvDelimiter(csvDelimiter)
+        .maxThreadCount(maxThreads)
+        .dataChunkSize(dataChunkSize)
+        .prettyPrintJson(prettyPrint)
         .build();
   }
 }
