@@ -1,5 +1,7 @@
 package com.scalar.db.dataloader.cli;
 
+import com.scalar.db.api.Scan;
+import com.scalar.db.dataloader.cli.command.ScanOrderingConverter;
 import com.scalar.db.dataloader.cli.command.dataexport.ExportCommand;
 import com.scalar.db.dataloader.cli.command.dataimport.ImportCommand;
 import picocli.CommandLine;
@@ -20,6 +22,7 @@ public class DataLoaderCli {
   public static void main(String[] args) {
     int exitCode =
         new CommandLine(new DataLoaderCli())
+            .registerConverter(Scan.Ordering.class, new ScanOrderingConverter())
             .setCaseInsensitiveEnumValuesAllowed(true)
             .execute(args);
     System.exit(exitCode);
