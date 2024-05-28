@@ -5,6 +5,7 @@ allprojects {
     ext {
         apacheCommonsLangVersion = '3.14.0'
         apacheCommonsIoVersion = '2.16.1'
+        lombokVersion = '1.18.32'
     }
 
     dependencies {
@@ -23,14 +24,14 @@ allprojects {
         implementation("commons-io:commons-io:${apacheCommonsIoVersion}")
 
         // Mockito
-        testImplementation "org.mockito:mockito-core:${mockitoVersion}"
-        testImplementation "org.mockito:mockito-inline:${mockitoVersion}"
-        testImplementation "org.mockito:mockito-junit-jupiter:${mockitoVersion}"
+        testImplementation("org.mockito:mockito-core:${mockitoVersion}")
+        testImplementation("org.mockito:mockito-inline:${mockitoVersion}")
+        testImplementation("org.mockito:mockito-junit-jupiter:${mockitoVersion}")
 
         // Lombok
-        compileOnly 'org.projectlombok:lombok:1.18.32'
-        annotationProcessor 'org.projectlombok:lombok:1.18.32'
-        testCompileOnly 'org.projectlombok:lombok:1.18.32'
-        testAnnotationProcessor 'org.projectlombok:lombok:1.18.32'
+        compileOnly("org.projectlombok:lombok:${lombokVersion}")
+        annotationProcessor("org.projectlombok:lombok:${lombokVersion}")
+        testCompileOnly("org.projectlombok:lombok:${lombokVersion}")
+        testAnnotationProcessor("org.projectlombok:lombok:${lombokVersion}")
     }
 }

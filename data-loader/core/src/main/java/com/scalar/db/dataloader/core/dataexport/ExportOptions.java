@@ -3,6 +3,7 @@ package com.scalar.db.dataloader.core.dataexport;
 import com.scalar.db.api.Scan;
 import com.scalar.db.dataloader.core.FileFormat;
 import com.scalar.db.io.Key;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.util.List;
 import lombok.Builder;
 import lombok.Value;
@@ -10,10 +11,11 @@ import lombok.Value;
 /** Options for a ScalarDB export data operation */
 @Value
 @Builder(builderMethodName = "internalBuilder")
-@SuppressWarnings("SameNameButDifferent")
+@SuppressWarnings({"SameNameButDifferent", "MissingSummary"})
+@SuppressFBWarnings({"EI_EXPOSE_REP2", "EI_EXPOSE_REP"})
 public class ExportOptions {
 
-  // Fields with no default values
+  // Fields without default values
   String namespace;
   String tableName;
   FileFormat outputFileFormat;
