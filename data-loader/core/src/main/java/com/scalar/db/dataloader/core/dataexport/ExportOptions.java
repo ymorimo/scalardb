@@ -3,7 +3,6 @@ package com.scalar.db.dataloader.core.dataexport;
 import com.scalar.db.api.Scan;
 import com.scalar.db.dataloader.core.FileFormat;
 import com.scalar.db.io.Key;
-import java.util.Collections;
 import java.util.List;
 import lombok.Builder;
 import lombok.Value;
@@ -23,17 +22,17 @@ public class ExportOptions {
   Key scanEndKey;
   boolean isStartInclusive;
   boolean isEndInclusive;
-  int limit;
+  int scanLimit;
   int maxThreadCount;
   boolean prettyPrintJson;
   List<Scan.Ordering> sortOrders;
+  List<String> projectionColumns;
 
   // Fields with default values
-  @Builder.Default int dataChunkSize = Integer.MAX_VALUE;
-  @Builder.Default String delimiter = ",";
-  @Builder.Default boolean excludeHeaderRow = false;
+  @Builder.Default int dataChunkSize = 0;
+  @Builder.Default String csvDelimiter = ",";
+  @Builder.Default boolean includeHeaderRow = true;
   @Builder.Default boolean includeTransactionMetadata = false;
-  @Builder.Default List<String> projectionColumns = Collections.emptyList();
 
   /**
    * Custom builder for ExportOptions including the minimum required fields

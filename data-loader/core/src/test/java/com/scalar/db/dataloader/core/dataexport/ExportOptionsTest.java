@@ -41,9 +41,9 @@ class ExportOptionsTest {
         ExportOptions.builder(namespace, tableName, scanPartitionKey, outputFileFormat).build();
 
     // Assert
-    assertThat(exportOptions.getDataChunkSize()).isEqualTo(Integer.MAX_VALUE);
-    assertThat(exportOptions.getDelimiter()).isEqualTo(",");
-    assertThat(exportOptions.isExcludeHeaderRow()).isFalse();
+    assertThat(exportOptions.getDataChunkSize()).isEqualTo(0);
+    assertThat(exportOptions.getCsvDelimiter()).isEqualTo(",");
+    assertThat(exportOptions.isIncludeHeaderRow()).isTrue();
     assertThat(exportOptions.isIncludeTransactionMetadata()).isFalse();
     assertThat(exportOptions.getProjectionColumns()).isEmpty();
   }

@@ -5,8 +5,10 @@ import com.scalar.db.common.error.CoreError;
 import com.scalar.db.dataloader.cli.exception.DirectoryValidationException;
 import com.scalar.db.dataloader.cli.exception.InvalidFileExtensionException;
 import com.scalar.db.dataloader.cli.util.DirectoryUtils;
+import com.scalar.db.dataloader.core.dataexport.ExportOptions;
 import com.scalar.db.dataloader.core.tablemetadata.TableMetadataService;
 import com.scalar.db.dataloader.core.util.KeyUtils;
+import com.scalar.db.io.Key;
 import com.scalar.db.service.StorageFactory;
 import java.io.File;
 import java.io.IOException;
@@ -34,9 +36,12 @@ public class ExportCommand extends ExportCommandOptions implements Callable<Inte
     TableMetadataService metadataService = createTableMetadataService(storageFactory);
     TableMetadata tableMetadata = metadataService.getTableMetadata(namespace, tableName);
 
-    KeyUtils.parseKeyValue(partitionKeyValue, tableMetadata);
-    KeyUtils.parseKeyValue(scanStartKeyValue, tableMetadata);
-    KeyUtils.parseKeyValue(scanEndKeyValue, tableMetadata);
+    Key partitionKey = KeyUtils.parseKeyValue(partitionKeyValue, tableMetadata);
+    Key scanStartKey = KeyUtils.parseKeyValue(scanStartKeyValue, tableMetadata);
+    Key scanEndKey = KeyUtils.parseKeyValue(scanEndKeyValue, tableMetadata);
+
+    // Create the export options
+    buildExportOptions(partitionKey, scanStartKey, scanEndKey);
     return 0;
   }
 
@@ -86,5 +91,24 @@ public class ExportCommand extends ExportCommandOptions implements Callable<Inte
 
   protected TableMetadataService createTableMetadataService(StorageFactory storageFactory) {
     return new TableMetadataService(storageFactory);
+  }
+
+  private ExportOptions buildExportOptions(
+      @Nullable Key partitionKey, @Nullable Key scanStartKey, @Nullable Key scanEndKey) {
+    return ExportOptions.builder(namespace, tableName, partitionKey, outputFormat)
+        .sortOrders(sortOrders)
+        .includeHeaderRow(!excludeHeader)
+        .includeTransactionMetadata(!excludeTransactionMetadata)
+        .csvDelimiter(csvDelimiter)
+        .scanLimit(limit)
+        .maxThreadCount(maxThreads)
+        .dataChunkSize(dataChunkSize)
+        .prettyPrintJson(prettyPrint)
+        .scanStartKey(scanStartKey)
+        .scanEndKey(scanEndKey)
+        .isStartInclusive(!scanStartExclusive)
+        .isEndInclusive(!scanEndExclusive)
+        .projectionColumns(projectionColumns)
+        .build();
   }
 }
