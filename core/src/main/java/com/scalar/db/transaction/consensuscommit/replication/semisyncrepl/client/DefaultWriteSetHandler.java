@@ -9,7 +9,7 @@ import com.scalar.db.exception.storage.ExecutionException;
 import com.scalar.db.transaction.consensuscommit.TransactionResult;
 import com.scalar.db.transaction.consensuscommit.TransactionTableMetadata;
 import com.scalar.db.transaction.consensuscommit.TransactionTableMetadataManager;
-import com.scalar.db.transaction.consensuscommit.replication.LogRecorder;
+import com.scalar.db.transaction.consensuscommit.replication.WriteSetHandler;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Column;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.DeletedTuple;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.InsertedTuple;
@@ -30,8 +30,8 @@ import javax.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class DefaultLogRecorder implements LogRecorder {
-  private static final Logger logger = LoggerFactory.getLogger(DefaultLogRecorder.class);
+public class DefaultWriteSetHandler implements WriteSetHandler {
+  private static final Logger logger = LoggerFactory.getLogger(DefaultWriteSetHandler.class);
 
   private static final String ENV_VAR_GROUP_COMMIT_ENABLED = "LOG_RECORDER_GROUP_COMMIT_ENABLED";
   private static final String ENV_VAR_GROUP_COMMIT_NUM_OF_THREADS =
@@ -59,7 +59,7 @@ public class DefaultLogRecorder implements LogRecorder {
     this.defaultNamespace = defaultNamespace;
   }
 
-  public DefaultLogRecorder(
+  public DefaultWriteSetHandler(
       TransactionTableMetadataManager tableMetadataManager,
       ReplicationTransactionRepository replicationTransactionRepository) {
     this.tableMetadataManager = tableMetadataManager;
@@ -243,7 +243,7 @@ public class DefaultLogRecorder implements LogRecorder {
   }
 
   @Override
-  public Future<Void> record(PrepareMutationComposerForReplication composer)
+  public Future<Void> handle(PrepareMutationComposerForReplication composer)
       throws ExecutionException {
     return executorService.submit(
         () -> {

@@ -21,8 +21,8 @@ import com.scalar.db.exception.transaction.ValidationException;
 import com.scalar.db.service.StorageFactory;
 import com.scalar.db.transaction.consensuscommit.Coordinator.State;
 import com.scalar.db.transaction.consensuscommit.ParallelExecutor.ParallelExecutorTask;
-import com.scalar.db.transaction.consensuscommit.replication.LogRecorder;
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.client.DefaultLogRecorder;
+import com.scalar.db.transaction.consensuscommit.replication.WriteSetHandler;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.client.DefaultWriteSetHandler;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.client.PrepareMutationComposerForReplication;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationTransactionRepository;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
@@ -44,10 +44,10 @@ public class CommitHandler {
   private final ParallelExecutor parallelExecutor;
 
   // FIXME
-  private final LogRecorder logRecorder;
+  private final WriteSetHandler writeSetHandler;
   private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
-  private Optional<LogRecorder> prepareLogRecorder() {
+  private Optional<WriteSetHandler> prepareLogRecorder() {
     String replicationDbConfigPath = System.getenv("LOG_RECORDER_REPLICATION_CONFIG");
     if (replicationDbConfigPath == null) {
       return Optional.empty();
@@ -65,7 +65,7 @@ public class CommitHandler {
     }
 
     return Optional.of(
-        new DefaultLogRecorder(tableMetadataManager, replicationTransactionRepository));
+        new DefaultWriteSetHandler(tableMetadataManager, replicationTransactionRepository));
   }
 
   @SuppressFBWarnings("EI_EXPOSE_REP2")
@@ -79,7 +79,7 @@ public class CommitHandler {
     this.tableMetadataManager = checkNotNull(tableMetadataManager);
     this.parallelExecutor = checkNotNull(parallelExecutor);
     // PoC
-    logRecorder = prepareLogRecorder().orElse(null);
+    writeSetHandler = prepareLogRecorder().orElse(null);
   }
 
   protected void onPrepareFailure(Snapshot snapshot) {}
@@ -87,10 +87,10 @@ public class CommitHandler {
   protected void onValidateFailure(Snapshot snapshot) {}
 
   public void commit(Snapshot snapshot) throws CommitException, UnknownTransactionStatusException {
-    Optional<Future<Void>> logRecordFuture;
+    Optional<Future<Void>> writeSetHandleFuture;
 
     try {
-      logRecordFuture = prepare(snapshot);
+      writeSetHandleFuture = prepare(snapshot);
     } catch (PreparationException e) {
       abortState(snapshot.getId());
       rollbackRecords(snapshot);
@@ -118,19 +118,19 @@ public class CommitHandler {
     }
 
     // TODO: Move this before validate() ???
-    logRecordFuture.ifPresent(
+    writeSetHandleFuture.ifPresent(
         logRecord -> {
           try {
             logRecord.get();
           } catch (InterruptedException e) {
             throw new RuntimeException(
                 String.format(
-                    "Log recording failed due to an interruption. transactionId:%s",
+                    "Write-set handling failed due to an interruption. transactionId:%s",
                     snapshot.getId()),
                 e);
           } catch (java.util.concurrent.ExecutionException e) {
             throw new RuntimeException(
-                String.format("Log recording failed. transactionId:%s", snapshot.getId()), e);
+                String.format("Write-set handling failed. transactionId:%s", snapshot.getId()), e);
           }
         });
 
@@ -187,11 +187,11 @@ public class CommitHandler {
     // PoC
     PrepareMutationComposer composer;
     Optional<Future<Void>> logRecordFuture = Optional.empty();
-    if (logRecorder != null) {
+    if (writeSetHandler != null) {
       composer = new PrepareMutationComposerForReplication(snapshot.getId(), tableMetadataManager);
       snapshot.to(composer);
       logRecordFuture =
-          Optional.of(logRecorder.record((PrepareMutationComposerForReplication) composer));
+          Optional.of(writeSetHandler.handle((PrepareMutationComposerForReplication) composer));
     } else {
       composer = new PrepareMutationComposer(snapshot.getId(), tableMetadataManager);
       snapshot.to(composer);
