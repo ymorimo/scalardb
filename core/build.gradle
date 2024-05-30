@@ -3,6 +3,8 @@ plugins {
     id 'net.ltgt.errorprone' version "${errorpronePluginVersion}"
     id 'maven-publish'
     id 'signing'
+    // PoC
+    id 'application'
 }
 
 sourceSets {
@@ -86,6 +88,7 @@ configurations {
 
 dependencies {
     // PoC
+    implementation "org.slf4j:slf4j-simple:${slf4jVersion}"
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.15.3'
 
     implementation project(':rpc')
@@ -291,4 +294,11 @@ publishing {
 signing {
     required { project.gradle.taskGraph.hasTask("publish") }
     sign publishing.publications.mavenJava
+}
+
+
+// PoC
+application {
+    mainClassName = 'com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server.LogApplier'
+    applicationDefaultJvmArgs = ['-Dorg.slf4j.simpleLogger.defaultLogLevel=DEBUG']
 }
