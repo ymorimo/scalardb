@@ -2,6 +2,8 @@ package com.scalar.db.transaction.consensuscommit;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.google.common.collect.ImmutableList;
 import com.scalar.db.api.DistributedStorage;
 import com.scalar.db.api.TransactionState;
@@ -16,12 +18,19 @@ import com.scalar.db.exception.transaction.PreparationException;
 import com.scalar.db.exception.transaction.UnknownTransactionStatusException;
 import com.scalar.db.exception.transaction.ValidationConflictException;
 import com.scalar.db.exception.transaction.ValidationException;
+import com.scalar.db.service.StorageFactory;
 import com.scalar.db.transaction.consensuscommit.Coordinator.State;
 import com.scalar.db.transaction.consensuscommit.ParallelExecutor.ParallelExecutorTask;
+import com.scalar.db.transaction.consensuscommit.replication.LogRecorder;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.client.DefaultLogRecorder;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.client.PrepareMutationComposerForReplication;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationTransactionRepository;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Future;
 import javax.annotation.concurrent.ThreadSafe;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +43,31 @@ public class CommitHandler {
   private final TransactionTableMetadataManager tableMetadataManager;
   private final ParallelExecutor parallelExecutor;
 
+  // FIXME
+  private final LogRecorder logRecorder;
+  private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+
+  private Optional<LogRecorder> prepareLogRecorder() {
+    String replicationDbConfigPath = System.getenv("LOG_RECORDER_REPLICATION_CONFIG");
+    if (replicationDbConfigPath == null) {
+      return Optional.empty();
+    }
+    ReplicationTransactionRepository replicationTransactionRepository;
+    try {
+      replicationTransactionRepository =
+          new ReplicationTransactionRepository(
+              StorageFactory.create(replicationDbConfigPath).getStorage(),
+              objectMapper,
+              "replication",
+              "transactions");
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+
+    return Optional.of(
+        new DefaultLogRecorder(tableMetadataManager, replicationTransactionRepository));
+  }
+
   @SuppressFBWarnings("EI_EXPOSE_REP2")
   public CommitHandler(
       DistributedStorage storage,
@@ -44,6 +78,8 @@ public class CommitHandler {
     this.coordinator = checkNotNull(coordinator);
     this.tableMetadataManager = checkNotNull(tableMetadataManager);
     this.parallelExecutor = checkNotNull(parallelExecutor);
+    // PoC
+    logRecorder = prepareLogRecorder().orElse(null);
   }
 
   protected void onPrepareFailure(Snapshot snapshot) {}
@@ -51,8 +87,10 @@ public class CommitHandler {
   protected void onValidateFailure(Snapshot snapshot) {}
 
   public void commit(Snapshot snapshot) throws CommitException, UnknownTransactionStatusException {
+    Optional<Future<Void>> logRecordFuture;
+
     try {
-      prepare(snapshot);
+      logRecordFuture = prepare(snapshot);
     } catch (PreparationException e) {
       abortState(snapshot.getId());
       rollbackRecords(snapshot);
@@ -78,6 +116,23 @@ public class CommitHandler {
       onValidateFailure(snapshot);
       throw e;
     }
+
+    // TODO: Move this before validate() ???
+    logRecordFuture.ifPresent(
+        logRecord -> {
+          try {
+            logRecord.get();
+          } catch (InterruptedException e) {
+            throw new RuntimeException(
+                String.format(
+                    "Log recording failed due to an interruption. transactionId:%s",
+                    snapshot.getId()),
+                e);
+          } catch (java.util.concurrent.ExecutionException e) {
+            throw new RuntimeException(
+                String.format("Log recording failed. transactionId:%s", snapshot.getId()), e);
+          }
+        });
 
     commitState(snapshot);
     commitRecords(snapshot);
@@ -110,9 +165,9 @@ public class CommitHandler {
     }
   }
 
-  public void prepare(Snapshot snapshot) throws PreparationException {
+  public Optional<Future<Void>> prepare(Snapshot snapshot) throws PreparationException {
     try {
-      prepareRecords(snapshot);
+      return prepareRecords(snapshot);
     } catch (NoMutationException e) {
       throw new PreparationConflictException(
           CoreError.CONSENSUS_COMMIT_PREPARING_RECORD_EXISTS.buildMessage(), e, snapshot.getId());
@@ -127,11 +182,21 @@ public class CommitHandler {
     }
   }
 
-  private void prepareRecords(Snapshot snapshot)
+  private Optional<Future<Void>> prepareRecords(Snapshot snapshot)
       throws ExecutionException, PreparationConflictException {
-    PrepareMutationComposer composer =
-        new PrepareMutationComposer(snapshot.getId(), tableMetadataManager);
-    snapshot.to(composer);
+    // PoC
+    PrepareMutationComposer composer;
+    Optional<Future<Void>> logRecordFuture = Optional.empty();
+    if (logRecorder != null) {
+      composer = new PrepareMutationComposerForReplication(snapshot.getId(), tableMetadataManager);
+      snapshot.to(composer);
+      logRecordFuture =
+          Optional.of(logRecorder.record((PrepareMutationComposerForReplication) composer));
+    } else {
+      composer = new PrepareMutationComposer(snapshot.getId(), tableMetadataManager);
+      snapshot.to(composer);
+    }
+
     PartitionedMutations mutations = new PartitionedMutations(composer.get());
 
     ImmutableList<PartitionedMutations.Key> orderedKeys = mutations.getOrderedKeys();
@@ -140,6 +205,8 @@ public class CommitHandler {
       tasks.add(() -> storage.mutate(mutations.get(key)));
     }
     parallelExecutor.prepare(tasks, snapshot.getId());
+
+    return logRecordFuture;
   }
 
   public void validate(Snapshot snapshot) throws ValidationException {
