@@ -35,6 +35,27 @@
       "updated_at": "BIGINT"
     }
   },
+  "replication.updated_records": {
+    "transaction": false,
+    "partition-key": [
+      "partition_id"
+    ],
+    "clustering-key": [
+      "updated_at",
+      "namespace",
+      "table",
+      "pk",
+      "ck"
+    ],
+    "columns": {
+      "partition_id": "INT",
+      "updated_at": "BIGINT",
+      "namespace": "TEXT",
+      "table": "TEXT",
+      "pk": "TEXT",
+      "ck": "TEXT"
+    }
+  },
   "replication.records": {
     "transaction": false,
     "partition-key": [
