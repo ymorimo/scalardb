@@ -9,6 +9,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
+// TODO: Rename this to WriteOperation
 public class Record {
   public final String namespace;
   public final String table;
@@ -16,6 +17,7 @@ public class Record {
   public final Key ck;
   public final long version;
   @Nullable public final String currentTxId;
+  // TODO: Rename this to `reservedTxId`?
   @Nullable public final String prepTxId;
   public final Set<Value> values;
   public final Set<String> insertTxIds;

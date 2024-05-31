@@ -7,6 +7,7 @@ import java.util.Collection;
 import javax.annotation.concurrent.Immutable;
 
 @Immutable
+// TODO: Rename this to WriteSet
 public class Transaction {
   public final int partitionId;
   public final Instant createdAt;

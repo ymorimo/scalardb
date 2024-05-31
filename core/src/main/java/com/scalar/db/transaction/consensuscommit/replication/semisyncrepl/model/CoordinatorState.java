@@ -3,6 +3,7 @@ package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model
 import com.scalar.db.api.TransactionState;
 import java.time.Instant;
 
+// TODO: Replace this and the repository with `Coordinator`?
 public class CoordinatorState {
   public final String txId;
   public final TransactionState txState;
