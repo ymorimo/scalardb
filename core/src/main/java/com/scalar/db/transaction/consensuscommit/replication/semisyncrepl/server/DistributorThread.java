@@ -17,6 +17,7 @@ import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.reposi
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationTransactionRepository;
 import java.io.Closeable;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Queue;
@@ -190,6 +191,22 @@ public class DistributorThread implements Closeable {
     metricsLogger.incrementHandledCommittedTransactions();
   }
 
+  private void copyWrittenTuplesToRecordsForBulkTransaction(
+      Transaction transaction, CoordinatorState coordinatorState) throws ExecutionException {
+    metricsLogger.incrementScannedTransactions();
+    // TODO: Revisit this condition.
+    if (coordinatorState.txState != TransactionState.COMMITTED) {
+      metricsLogger.incrementUncommittedTransactions();
+      return;
+    }
+
+    // Copy written tuples to `records` table
+    for (WrittenTuple writtenTuple : transaction.writtenTuples) {
+      handleWrittenTuple(transaction.transactionId, writtenTuple, coordinatorState.txCommittedAt);
+    }
+    metricsLogger.incrementHandledCommittedTransactions();
+  }
+
   private boolean fetchAndHandleTransactions(int partitionId) throws ExecutionException {
     List<Transaction> scannedTxns =
         metricsLogger.execFetchTransactions(
@@ -202,18 +219,40 @@ public class DistributorThread implements Closeable {
     return scannedTxns.size() >= conf.fetchThreadSize;
   }
 
+  // Return true if it's likely there is no remaining rows.
   private boolean fetchAndHandleBulkTransactions(int partitionId) throws ExecutionException {
+    boolean allBulkScansHandled = true;
+
     List<BulkTransaction> scannedBulkTxns =
         metricsLogger.execFetchBulkTransactions(
             () -> replicationTransactionRepository.bulkScan(partitionId, conf.fetchThreadSize));
     for (BulkTransaction bulkTransaction : scannedBulkTxns) {
+      List<CoordinatorState> coordinatorStates = new ArrayList<>();
       for (Transaction transaction : bulkTransaction.transactions) {
-        copyWrittenTuplesToRecords(transaction);
+        Optional<CoordinatorState> coordinatorState =
+            coordinatorStateRepository.get(transaction.transactionId);
+        if (coordinatorState.isPresent()) {
+          coordinatorStates.add(coordinatorState.get());
+        } else {
+          // There is any ongoing transaction.
+          break;
+        }
       }
-      replicationTransactionRepository.delete(bulkTransaction);
+
+      if (coordinatorStates.size() >= bulkTransaction.transactions.size()) {
+        int coordinatorStateIndex = 0;
+        for (Transaction transaction : bulkTransaction.transactions) {
+          CoordinatorState coordinatorState = coordinatorStates.get(coordinatorStateIndex);
+          copyWrittenTuplesToRecordsForBulkTransaction(transaction, coordinatorState);
+        }
+        replicationTransactionRepository.delete(bulkTransaction);
+      } else {
+        allBulkScansHandled = false;
+      }
     }
 
-    return scannedBulkTxns.size() >= conf.fetchThreadSize;
+    // TODO: Should return true only if empty?
+    return allBulkScansHandled && scannedBulkTxns.size() >= conf.fetchThreadSize;
   }
 
   public DistributorThread run() {
