@@ -545,26 +545,21 @@ begin
                 *)
 
                 \* Write the operation to the secondary DB record using CAS.
-                if secondary_db_record["tx_id"] /= fetched_cur_record["tx_id"] then
-                    RecheckSecondaryDbRecordIsUpdated:
-                    if secondary_db_record["tx_id"] /= fetched_cur_record["prep_tx_id"] then
-                        \* This can happen when a previous transaction failed right after write to secondary DB...
-                        failed_to_write_to_secondary_db := TRUE;
-                    else
-                        \* Leave the deleted record as "deleted" status.
-                        secondary_db_record := [
-                            tx_id |-> new_cur_record_info["tx_id"],
-                            deleted |-> new_cur_record_info["deleted"],
-                            applied_tx_ids |-> tmp_applied_tx_ids_on_secondary_db
-                        ];
-                    end if;
-                else
+                if secondary_db_record["tx_id"] = fetched_cur_record["tx_id"] then
                     \* Leave the deleted record as "deleted" status.
                     secondary_db_record := [
                         tx_id |-> new_cur_record_info["tx_id"],
                         deleted |-> new_cur_record_info["deleted"],
                         applied_tx_ids |-> tmp_applied_tx_ids_on_secondary_db
                     ];
+                else
+                    RecheckSecondaryDbRecordIsUpdated:
+                    if secondary_db_record["tx_id"] = new_cur_record_info["tx_id"] then
+                        \* The secondary DB table is already desired state.
+                        \* This can happen when a previous transaction failed right after write to secondary DB.
+                    else
+                        failed_to_write_to_secondary_db := TRUE;
+                    end if;
                 end if;
 
                 UpdateCurrentReplDbRecord:
@@ -593,7 +588,7 @@ begin
 end process;
 
 end algorithm *)
-\* BEGIN TRANSLATION (chksum(pcal) = "df4b28da" /\ chksum(tla) = "73f7bd58")
+\* BEGIN TRANSLATION (chksum(pcal) = "e912922a" /\ chksum(tla) = "b204a20f")
 VARIABLES stored_ops, expected_applied_tx_id_on_secondary_db, repl_db_record, 
           secondary_db_record, retry_of_enqueue, pc
 
@@ -843,15 +838,15 @@ SetPrepTxIdOfReplDbRecord(self) == /\ pc[self] = "SetPrepTxIdOfReplDbRecord"
 
 WriteOpsToSecondaryDbRecord(self) == /\ pc[self] = "WriteOpsToSecondaryDbRecord"
                                      /\ tmp_applied_tx_ids_on_secondary_db' = [tmp_applied_tx_ids_on_secondary_db EXCEPT ![self] = ComputeSecondaryDbRecord(ops_to_be_moved[self], secondary_db_record["applied_tx_ids"])]
-                                     /\ IF secondary_db_record["tx_id"] /= fetched_cur_record[self]["tx_id"]
-                                           THEN /\ pc' = [pc EXCEPT ![self] = "RecheckSecondaryDbRecordIsUpdated"]
-                                                /\ UNCHANGED secondary_db_record
-                                           ELSE /\ secondary_db_record' =                        [
+                                     /\ IF secondary_db_record["tx_id"] = fetched_cur_record[self]["tx_id"]
+                                           THEN /\ secondary_db_record' =                        [
                                                                               tx_id |-> new_cur_record_info[self]["tx_id"],
                                                                               deleted |-> new_cur_record_info[self]["deleted"],
                                                                               applied_tx_ids |-> tmp_applied_tx_ids_on_secondary_db'[self]
                                                                           ]
                                                 /\ pc' = [pc EXCEPT ![self] = "UpdateCurrentReplDbRecord"]
+                                           ELSE /\ pc' = [pc EXCEPT ![self] = "RecheckSecondaryDbRecordIsUpdated"]
+                                                /\ UNCHANGED secondary_db_record
                                      /\ UNCHANGED << stored_ops, 
                                                      expected_applied_tx_id_on_secondary_db, 
                                                      repl_db_record, 
@@ -864,19 +859,14 @@ WriteOpsToSecondaryDbRecord(self) == /\ pc[self] = "WriteOpsToSecondaryDbRecord"
                                                      candidate_separate_ops >>
 
 RecheckSecondaryDbRecordIsUpdated(self) == /\ pc[self] = "RecheckSecondaryDbRecordIsUpdated"
-                                           /\ IF secondary_db_record["tx_id"] /= fetched_cur_record[self]["prep_tx_id"]
-                                                 THEN /\ failed_to_write_to_secondary_db' = [failed_to_write_to_secondary_db EXCEPT ![self] = TRUE]
-                                                      /\ UNCHANGED secondary_db_record
-                                                 ELSE /\ secondary_db_record' =                        [
-                                                                                    tx_id |-> new_cur_record_info[self]["tx_id"],
-                                                                                    deleted |-> new_cur_record_info[self]["deleted"],
-                                                                                    applied_tx_ids |-> tmp_applied_tx_ids_on_secondary_db[self]
-                                                                                ]
-                                                      /\ UNCHANGED failed_to_write_to_secondary_db
+                                           /\ IF secondary_db_record["tx_id"] = new_cur_record_info[self]["tx_id"]
+                                                 THEN /\ UNCHANGED failed_to_write_to_secondary_db
+                                                 ELSE /\ failed_to_write_to_secondary_db' = [failed_to_write_to_secondary_db EXCEPT ![self] = TRUE]
                                            /\ pc' = [pc EXCEPT ![self] = "UpdateCurrentReplDbRecord"]
                                            /\ UNCHANGED << stored_ops, 
                                                            expected_applied_tx_id_on_secondary_db, 
                                                            repl_db_record, 
+                                                           secondary_db_record, 
                                                            retry_of_enqueue, 
                                                            need_to_stop, 
                                                            fetched_cur_record, 
