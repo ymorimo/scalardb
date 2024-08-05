@@ -545,12 +545,19 @@ begin
                 *)
 
                 \* Write the operation to the secondary DB record using CAS.
-                \* TODO: Check if this is possible
-                if secondary_db_record["tx_id"] /= fetched_cur_record["tx_id"]
-                \* This can happen when a previous transaction failed right after write to secondary DB...
-                    /\ secondary_db_record["tx_id"] /= fetched_cur_record["prep_tx_id"] then
-
-                    failed_to_write_to_secondary_db := TRUE;
+                if secondary_db_record["tx_id"] /= fetched_cur_record["tx_id"] then
+                    RecheckSecondaryDbRecordIsUpdated:
+                    if secondary_db_record["tx_id"] /= fetched_cur_record["prep_tx_id"] then
+                        \* This can happen when a previous transaction failed right after write to secondary DB...
+                        failed_to_write_to_secondary_db := TRUE;
+                    else
+                        \* Leave the deleted record as "deleted" status.
+                        secondary_db_record := [
+                            tx_id |-> new_cur_record_info["tx_id"],
+                            deleted |-> new_cur_record_info["deleted"],
+                            applied_tx_ids |-> tmp_applied_tx_ids_on_secondary_db
+                        ];
+                    end if;
                 else
                     \* Leave the deleted record as "deleted" status.
                     secondary_db_record := [
@@ -586,7 +593,7 @@ begin
 end process;
 
 end algorithm *)
-\* BEGIN TRANSLATION (chksum(pcal) = "22969165" /\ chksum(tla) = "1acad16f")
+\* BEGIN TRANSLATION (chksum(pcal) = "df4b28da" /\ chksum(tla) = "73f7bd58")
 VARIABLES stored_ops, expected_applied_tx_id_on_secondary_db, repl_db_record, 
           secondary_db_record, retry_of_enqueue, pc
 
@@ -750,14 +757,14 @@ BuildNextOperationByMergingOperationChain(self) == /\ pc[self] = "BuildNextOpera
                                                    /\ IF ~need_to_stop[self]
                                                          THEN /\ IF ~CurrentRecordExists(new_cur_record_info[self]) /\ candidate_separate_ops[self]["ins_ops"] /= {}
                                                                     THEN /\ Assert(fetched_cur_record[self]["prep_tx_id"] = Null \/ \E x \in candidate_separate_ops[self]["ins_ops"] : x["tx_id"] = fetched_cur_record[self]["prep_tx_id"], 
-                                                                                   "Failure of assertion at line 286, column 17.")
+                                                                                   "Failure of assertion at line 288, column 17.")
                                                                          /\ IF fetched_cur_record[self]["prep_tx_id"] /= Null
                                                                                THEN /\ \E x \in {x \in candidate_separate_ops[self]["ins_ops"] : x["tx_id"] = fetched_cur_record[self]["prep_tx_id"]}:
                                                                                          tmp_op' = [tmp_op EXCEPT ![self] = x]
                                                                                ELSE /\ \E x \in candidate_separate_ops[self]["ins_ops"]:
                                                                                          tmp_op' = [tmp_op EXCEPT ![self] = x]
                                                                          /\ Assert(tmp_op'[self]["type"] = "insert", 
-                                                                                   "Failure of assertion at line 302, column 17.")
+                                                                                   "Failure of assertion at line 304, column 17.")
                                                                          /\ candidate_separate_ops' = [candidate_separate_ops EXCEPT ![self]["ins_ops"] = candidate_separate_ops[self]["ins_ops"] \ {tmp_op'[self]}]
                                                                          /\ new_cur_record_info' = [new_cur_record_info EXCEPT ![self] =                        [new_cur_record_info[self] EXCEPT
                                                                                                                                              !.tx_id = tmp_op'[self]["tx_id"],
@@ -783,7 +790,7 @@ BuildNextOperationByMergingOperationChain(self) == /\ pc[self] = "BuildNextOpera
                                                                                                                                                                               !.deleted = TRUE
                                                                                                                                                                           ]]
                                                                                                      ELSE /\ Assert(FALSE, 
-                                                                                                                    "Failure of assertion at line 332, column 21.")
+                                                                                                                    "Failure of assertion at line 334, column 21.")
                                                                                                           /\ UNCHANGED new_cur_record_info
                                                                                     /\ ops_to_be_moved' = [ops_to_be_moved EXCEPT ![self] = Append(ops_to_be_moved[self], tmp_op'[self])]
                                                                                     /\ IF fetched_cur_record[self]["prep_tx_id"] /= Null /\ tmp_op'[self]["tx_id"] = fetched_cur_record[self]["prep_tx_id"]
@@ -796,7 +803,7 @@ BuildNextOperationByMergingOperationChain(self) == /\ pc[self] = "BuildNextOpera
                                                                                                     candidate_separate_ops >>
                                                               /\ IF fetched_cur_record[self]["prep_tx_id"] /= Null /\ need_to_stop'[self] /\ ops_to_be_moved'[self] /= <<>>
                                                                     THEN /\ Assert(tmp_op'[self]["tx_id"] = fetched_cur_record[self]["prep_tx_id"], 
-                                                                                   "Failure of assertion at line 351, column 17.")
+                                                                                   "Failure of assertion at line 354, column 17.")
                                                                     ELSE /\ TRUE
                                                               /\ pc' = [pc EXCEPT ![self] = "BuildNextOperationByMergingOperationChain"]
                                                          ELSE /\ IF ops_to_be_moved[self] /= <<>>
@@ -837,17 +844,14 @@ SetPrepTxIdOfReplDbRecord(self) == /\ pc[self] = "SetPrepTxIdOfReplDbRecord"
 WriteOpsToSecondaryDbRecord(self) == /\ pc[self] = "WriteOpsToSecondaryDbRecord"
                                      /\ tmp_applied_tx_ids_on_secondary_db' = [tmp_applied_tx_ids_on_secondary_db EXCEPT ![self] = ComputeSecondaryDbRecord(ops_to_be_moved[self], secondary_db_record["applied_tx_ids"])]
                                      /\ IF secondary_db_record["tx_id"] /= fetched_cur_record[self]["tx_id"]
-                                           
-                                            /\ secondary_db_record["tx_id"] /= fetched_cur_record[self]["prep_tx_id"]
-                                           THEN /\ failed_to_write_to_secondary_db' = [failed_to_write_to_secondary_db EXCEPT ![self] = TRUE]
+                                           THEN /\ pc' = [pc EXCEPT ![self] = "RecheckSecondaryDbRecordIsUpdated"]
                                                 /\ UNCHANGED secondary_db_record
                                            ELSE /\ secondary_db_record' =                        [
                                                                               tx_id |-> new_cur_record_info[self]["tx_id"],
                                                                               deleted |-> new_cur_record_info[self]["deleted"],
                                                                               applied_tx_ids |-> tmp_applied_tx_ids_on_secondary_db'[self]
                                                                           ]
-                                                /\ UNCHANGED failed_to_write_to_secondary_db
-                                     /\ pc' = [pc EXCEPT ![self] = "UpdateCurrentReplDbRecord"]
+                                                /\ pc' = [pc EXCEPT ![self] = "UpdateCurrentReplDbRecord"]
                                      /\ UNCHANGED << stored_ops, 
                                                      expected_applied_tx_id_on_secondary_db, 
                                                      repl_db_record, 
@@ -856,7 +860,31 @@ WriteOpsToSecondaryDbRecord(self) == /\ pc[self] = "WriteOpsToSecondaryDbRecord"
                                                      fetched_cur_record, 
                                                      new_cur_record_info, 
                                                      tmp_op, ops_to_be_moved, 
+                                                     failed_to_write_to_secondary_db, 
                                                      candidate_separate_ops >>
+
+RecheckSecondaryDbRecordIsUpdated(self) == /\ pc[self] = "RecheckSecondaryDbRecordIsUpdated"
+                                           /\ IF secondary_db_record["tx_id"] /= fetched_cur_record[self]["prep_tx_id"]
+                                                 THEN /\ failed_to_write_to_secondary_db' = [failed_to_write_to_secondary_db EXCEPT ![self] = TRUE]
+                                                      /\ UNCHANGED secondary_db_record
+                                                 ELSE /\ secondary_db_record' =                        [
+                                                                                    tx_id |-> new_cur_record_info[self]["tx_id"],
+                                                                                    deleted |-> new_cur_record_info[self]["deleted"],
+                                                                                    applied_tx_ids |-> tmp_applied_tx_ids_on_secondary_db[self]
+                                                                                ]
+                                                      /\ UNCHANGED failed_to_write_to_secondary_db
+                                           /\ pc' = [pc EXCEPT ![self] = "UpdateCurrentReplDbRecord"]
+                                           /\ UNCHANGED << stored_ops, 
+                                                           expected_applied_tx_id_on_secondary_db, 
+                                                           repl_db_record, 
+                                                           retry_of_enqueue, 
+                                                           need_to_stop, 
+                                                           fetched_cur_record, 
+                                                           new_cur_record_info, 
+                                                           tmp_op, 
+                                                           ops_to_be_moved, 
+                                                           tmp_applied_tx_ids_on_secondary_db, 
+                                                           candidate_separate_ops >>
 
 UpdateCurrentReplDbRecord(self) == /\ pc[self] = "UpdateCurrentReplDbRecord"
                                    /\ IF ~failed_to_write_to_secondary_db[self] /\ fetched_cur_record[self]["version"] = repl_db_record["version"]
@@ -890,6 +918,7 @@ RecordWriter(self) == Repeat(self)
                          \/ BuildNextOperationByMergingOperationChain(self)
                          \/ SetPrepTxIdOfReplDbRecord(self)
                          \/ WriteOpsToSecondaryDbRecord(self)
+                         \/ RecheckSecondaryDbRecordIsUpdated(self)
                          \/ UpdateCurrentReplDbRecord(self)
 
 (* Allow infinite stuttering to prevent deadlock on termination. *)
