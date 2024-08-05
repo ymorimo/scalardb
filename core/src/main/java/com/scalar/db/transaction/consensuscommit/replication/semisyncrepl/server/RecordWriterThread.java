@@ -209,7 +209,6 @@ public class RecordWriterThread implements Closeable {
           });
     }
 
-    String newCurrentTxId;
     Buildable putBuilder =
         Put.newBuilder()
             .namespace(record.namespace)
@@ -226,6 +225,8 @@ public class RecordWriterThread implements Closeable {
     putBuilder.intValue("tx_version", lastValue.txVersion);
     putBuilder.bigIntValue("tx_prepared_at", lastValue.txPreparedAtInMillis);
     putBuilder.bigIntValue("tx_committed_at", lastValue.txCommittedAtInMillis);
+
+    String newCurrentTxId;
     if (lastValue.type.equals("delete")) {
       // Physical delete causes some issues when there are any following INSERT.
       // TODO: Logically deleted records will be removed by lazy recovery.
