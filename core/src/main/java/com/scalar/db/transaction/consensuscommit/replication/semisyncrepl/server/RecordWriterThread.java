@@ -3,8 +3,6 @@ package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.serve
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Streams;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.scalar.db.api.Delete;
-import com.scalar.db.api.DeleteBuilder;
 import com.scalar.db.api.DistributedStorage;
 import com.scalar.db.api.Put;
 import com.scalar.db.api.PutBuilder.Buildable;
@@ -212,47 +210,36 @@ public class RecordWriterThread implements Closeable {
     }
 
     String newCurrentTxId;
+    Buildable putBuilder =
+        Put.newBuilder()
+            .namespace(record.namespace)
+            .table(record.table)
+            .partitionKey(
+                com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
+                    .toScalarDbKey(record.pk));
+    if (!record.ck.columns.isEmpty()) {
+      putBuilder.clusteringKey(
+          com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
+              .toScalarDbKey(record.ck));
+    }
+    putBuilder.textValue("tx_id", lastValue.txId);
+    putBuilder.intValue("tx_version", lastValue.txVersion);
+    putBuilder.bigIntValue("tx_prepared_at", lastValue.txPreparedAtInMillis);
+    putBuilder.bigIntValue("tx_committed_at", lastValue.txCommittedAtInMillis);
     if (lastValue.type.equals("delete")) {
-      DeleteBuilder.Buildable deleteBuilder =
-          Delete.newBuilder()
-              .namespace(record.namespace)
-              .table(record.table)
-              .partitionKey(
-                  com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
-                      .toScalarDbKey(record.pk));
-      if (!record.ck.columns.isEmpty()) {
-        deleteBuilder.clusteringKey(
-            com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
-                .toScalarDbKey(record.ck));
-      }
-      // TODO: Consider partial commit issues
-      backupScalarDbStorage.delete(deleteBuilder.build());
+      // Physical delete causes some issues when there are any following INSERT.
+      // TODO: Logically deleted records will be removed by lazy recovery.
+      //       But, a cleanup worker may be needed in the Semi-Sync Replication itself.
+      putBuilder.intValue("tx_state", TransactionState.DELETED.get());
       newCurrentTxId = null;
     } else {
-      Buildable putBuilder =
-          Put.newBuilder()
-              .namespace(record.namespace)
-              .table(record.table)
-              .partitionKey(
-                  com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
-                      .toScalarDbKey(record.pk));
-      if (!record.ck.columns.isEmpty()) {
-        putBuilder.clusteringKey(
-            com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
-                .toScalarDbKey(record.ck));
-      }
-      putBuilder.textValue("tx_id", lastValue.txId);
       putBuilder.intValue("tx_state", TransactionState.COMMITTED.get());
-      putBuilder.intValue("tx_version", lastValue.txVersion);
-      putBuilder.bigIntValue("tx_prepared_at", lastValue.txPreparedAtInMillis);
-      putBuilder.bigIntValue("tx_committed_at", lastValue.txCommittedAtInMillis);
       for (Column<?> column : nextValue.updatedColumns) {
         putBuilder.value(Column.toScalarDbColumn(column));
       }
-
-      backupScalarDbStorage.put(putBuilder.build());
       newCurrentTxId = lastValue.txId;
     }
+    backupScalarDbStorage.put(putBuilder.build());
 
     try {
       metricsLogger.execUpdateRecord(
