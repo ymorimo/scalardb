@@ -20,6 +20,7 @@ public class Record {
   // TODO: Rename this to `reservedTxId`?
   @Nullable public final String prepTxId;
   public final Set<Value> values;
+  // TODO: Add `deleted`, and then we can remove this field?
   public final Set<String> insertTxIds;
   @Nullable public final Instant appendedAt;
   @Nullable public final Instant shrinkedAt;

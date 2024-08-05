@@ -3,12 +3,20 @@ package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.serve
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Streams;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.scalar.db.api.ConditionBuilder;
+import com.scalar.db.api.ConditionalExpression;
+import com.scalar.db.api.ConditionalExpression.Operator;
 import com.scalar.db.api.DistributedStorage;
+import com.scalar.db.api.Get;
+import com.scalar.db.api.GetBuilder.BuildableGet;
 import com.scalar.db.api.Put;
 import com.scalar.db.api.PutBuilder.Buildable;
+import com.scalar.db.api.Result;
 import com.scalar.db.api.TransactionState;
 import com.scalar.db.exception.storage.ExecutionException;
+import com.scalar.db.exception.storage.NoMutationException;
 import com.scalar.db.io.Key;
+import com.scalar.db.io.TextColumn;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Column;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record.Value;
@@ -226,6 +234,18 @@ public class RecordWriterThread implements Closeable {
     putBuilder.bigIntValue("tx_prepared_at", lastValue.txPreparedAtInMillis);
     putBuilder.bigIntValue("tx_committed_at", lastValue.txCommittedAtInMillis);
 
+    ConditionalExpression conditionalExpression;
+    if (record.currentTxId == null) {
+      // FIXME: PutIfNotExists or PutIf(tx_id and tx_state:DELETED).
+      //        Probably `record.deleted` field needs to be added and `record.currentTxId` shouldn't
+      //        be reset.
+    } else {
+      conditionalExpression =
+          ConditionBuilder.buildConditionalExpression(
+              TextColumn.of("tx_id", record.currentTxId), Operator.EQ);
+      putBuilder.condition(ConditionBuilder.putIf(conditionalExpression).build());
+    }
+
     String newCurrentTxId;
     if (lastValue.type.equals("delete")) {
       // Physical delete causes some issues when there are any following INSERT.
@@ -240,7 +260,30 @@ public class RecordWriterThread implements Closeable {
       }
       newCurrentTxId = lastValue.txId;
     }
-    backupScalarDbStorage.put(putBuilder.build());
+
+    try {
+      backupScalarDbStorage.put(putBuilder.build());
+    } catch (NoMutationException e) {
+      BuildableGet getBuilder =
+          Get.newBuilder()
+              .namespace(record.namespace)
+              .table(record.table)
+              .partitionKey(
+                  com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
+                      .toScalarDbKey(record.pk));
+      if (!record.ck.columns.isEmpty()) {
+        getBuilder.clusteringKey(
+            com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
+                .toScalarDbKey(record.ck));
+      }
+      Optional<Result> result = backupScalarDbStorage.get(getBuilder.build());
+      if (result.isPresent() && result.get().getText("tx_id").equals(lastValue.txId)) {
+        // The backup DB table is already updated.
+      } else {
+        // TODO: Revisit which exception is better.
+        throw e;
+      }
+    }
 
     try {
       metricsLogger.execUpdateRecord(
