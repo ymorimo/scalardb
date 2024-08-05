@@ -4,11 +4,11 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Streams;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.scalar.db.api.ConditionBuilder;
-import com.scalar.db.api.ConditionalExpression;
 import com.scalar.db.api.ConditionalExpression.Operator;
 import com.scalar.db.api.DistributedStorage;
 import com.scalar.db.api.Get;
 import com.scalar.db.api.GetBuilder.BuildableGet;
+import com.scalar.db.api.MutationCondition;
 import com.scalar.db.api.Put;
 import com.scalar.db.api.PutBuilder.Buildable;
 import com.scalar.db.api.Result;
@@ -74,6 +74,7 @@ public class RecordWriterThread implements Closeable {
   @Immutable
   static class NextValue {
     public final Value nextValue;
+    public final boolean deleted;
     public final Set<Value> restValues;
     public final Collection<Column<?>> updatedColumns;
     public final Collection<String> insertTxIds;
@@ -81,11 +82,13 @@ public class RecordWriterThread implements Closeable {
 
     public NextValue(
         Value nextValue,
+        boolean deleted,
         Set<Value> restValues,
         Collection<Column<?>> updatedColumns,
         Collection<String> insertTxIds,
         boolean shouldHandleTheSameKey) {
       this.nextValue = nextValue;
+      this.deleted = deleted;
       this.restValues = restValues;
       this.updatedColumns = updatedColumns;
       this.insertTxIds = insertTxIds;
@@ -122,12 +125,13 @@ public class RecordWriterThread implements Closeable {
     // t1 and t3 should be handled to reach t2.
     boolean suspendFollowingOperation = false;
     Value lastValue = null;
+    boolean deleted = false;
     Set<Column<?>> updatedColumns = new HashSet<>();
     Set<String> insertTxIds = new HashSet<>();
     @Nullable String currentTxId = record.currentTxId;
     while (!suspendFollowingOperation) {
       Value value;
-      if (currentTxId == null) {
+      if (currentTxId == null || deleted) {
         value = valuesForInsert.poll();
       } else {
         value = valuesForNonInsert.remove(currentTxId);
@@ -152,18 +156,19 @@ public class RecordWriterThread implements Closeable {
         }
         updatedColumns.addAll(value.columns);
         insertTxIds.add(value.txId);
-        currentTxId = value.txId;
         suspendFollowingOperation = true;
+        deleted = false;
       } else if (value.type.equals("update")) {
         updatedColumns.removeAll(value.columns);
         updatedColumns.addAll(value.columns);
-        currentTxId = value.txId;
+        deleted = false;
       } else if (value.type.equals("delete")) {
         updatedColumns.clear();
-        currentTxId = null;
+        deleted = true;
       } else {
         throw new AssertionError();
       }
+      currentTxId = value.txId;
 
       lastValue = value;
       /*
@@ -183,6 +188,7 @@ public class RecordWriterThread implements Closeable {
 
     return new NextValue(
         lastValue,
+        deleted,
         Streams.concat(valuesForInsert.stream(), valuesForNonInsert.values().stream())
             .collect(Collectors.toSet()),
         updatedColumns,
@@ -190,7 +196,7 @@ public class RecordWriterThread implements Closeable {
         suspendFollowingOperation);
   }
 
-  private boolean handleKey(Key key) throws ExecutionException {
+  private boolean handleKey(Key key, boolean logicalDelete) throws ExecutionException {
     Optional<Record> recordOpt =
         metricsLogger.execGetRecord(() -> replicationRecordRepository.get(key));
     if (!recordOpt.isPresent()) {
@@ -234,31 +240,35 @@ public class RecordWriterThread implements Closeable {
     putBuilder.bigIntValue("tx_prepared_at", lastValue.txPreparedAtInMillis);
     putBuilder.bigIntValue("tx_committed_at", lastValue.txCommittedAtInMillis);
 
-    ConditionalExpression conditionalExpression;
+    MutationCondition mutationCondition;
     if (record.currentTxId == null) {
-      // FIXME: PutIfNotExists or PutIf(tx_id and tx_state:DELETED).
-      //        Probably `record.deleted` field needs to be added and `record.currentTxId` shouldn't
-      //        be reset.
+      // The first insert
+      mutationCondition = ConditionBuilder.putIfNotExists();
     } else {
-      conditionalExpression =
-          ConditionBuilder.buildConditionalExpression(
-              TextColumn.of("tx_id", record.currentTxId), Operator.EQ);
-      putBuilder.condition(ConditionBuilder.putIf(conditionalExpression).build());
+      // TODO: This should contain `putIfExists`?
+      mutationCondition =
+          ConditionBuilder.putIf(
+                  ConditionBuilder.buildConditionalExpression(
+                      TextColumn.of("tx_id", record.currentTxId), Operator.EQ))
+              .build();
     }
+    putBuilder.condition(mutationCondition);
 
-    String newCurrentTxId;
     if (lastValue.type.equals("delete")) {
-      // Physical delete causes some issues when there are any following INSERT.
-      // TODO: Logically deleted records will be removed by lazy recovery.
-      //       But, a cleanup worker may be needed in the Semi-Sync Replication itself.
-      putBuilder.intValue("tx_state", TransactionState.DELETED.get());
-      newCurrentTxId = null;
+      if (logicalDelete) {
+        // Physical delete causes some issues when there are any following INSERT.
+        // TODO: Logically deleted records will be removed by lazy recovery.
+        //       But, a cleanup worker may be needed in the Semi-Sync Replication itself.
+        putBuilder.intValue("tx_state", TransactionState.DELETED.get());
+      } else {
+        // FIXME for usecase of write heavy logging-ish situation.
+        throw new AssertionError();
+      }
     } else {
       putBuilder.intValue("tx_state", TransactionState.COMMITTED.get());
       for (Column<?> column : nextValue.updatedColumns) {
         putBuilder.value(Column.toScalarDbColumn(column));
       }
-      newCurrentTxId = lastValue.txId;
     }
 
     try {
@@ -289,7 +299,12 @@ public class RecordWriterThread implements Closeable {
       metricsLogger.execUpdateRecord(
           () -> {
             replicationRecordRepository.updateWithValues(
-                key, record, newCurrentTxId, nextValue.restValues, nextValue.insertTxIds);
+                key,
+                record,
+                lastValue.txId,
+                nextValue.deleted,
+                nextValue.restValues,
+                nextValue.insertTxIds);
             return null;
           });
       return nextValue.shouldHandleTheSameKey;
@@ -320,7 +335,7 @@ public class RecordWriterThread implements Closeable {
               }
 
               try {
-                if (handleKey(key)) {
+                if (handleKey(key, true)) {
                   recordWriterQueue.add(key);
                 }
               } catch (Throwable e) {

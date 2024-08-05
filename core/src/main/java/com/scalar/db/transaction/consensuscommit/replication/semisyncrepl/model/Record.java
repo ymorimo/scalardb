@@ -20,7 +20,8 @@ public class Record {
   // TODO: Rename this to `reservedTxId`?
   @Nullable public final String prepTxId;
   public final Set<Value> values;
-  // TODO: Add `deleted`, and then we can remove this field?
+  public final boolean deleted;
+  // TODO: `deleted` is added, so we can remove this field?
   public final Set<String> insertTxIds;
   @Nullable public final Instant appendedAt;
   @Nullable public final Instant shrinkedAt;
@@ -104,6 +105,7 @@ public class Record {
       long version,
       @Nullable String currentTxId,
       @Nullable String prepTxId,
+      boolean deleted,
       Set<Value> values,
       Set<String> insertTxIds,
       @Nullable Instant appendedAt,
@@ -115,6 +117,7 @@ public class Record {
     this.version = version;
     this.currentTxId = currentTxId;
     this.prepTxId = prepTxId;
+    this.deleted = deleted;
     this.values = values;
     this.insertTxIds = insertTxIds;
     this.appendedAt = appendedAt;
@@ -131,6 +134,7 @@ public class Record {
         .add("version", version)
         .add("currentTxId", currentTxId)
         .add("prepTxId", prepTxId)
+        .add("deleted", deleted)
         .add("values", values)
         .add("insertTxIds", insertTxIds)
         .add("appendedAt", appendedAt)
@@ -147,6 +151,7 @@ public class Record {
         .add("version", version)
         .add("currentTxId", currentTxId)
         .add("prepTxId", prepTxId)
+        .add("deleted", deleted)
         .add(
             "values",
             "["

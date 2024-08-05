@@ -106,6 +106,7 @@ public class ReplicationRecordRepository {
                     r.getBigInt("version"),
                     r.getText("current_tx_id"),
                     r.getText("prep_tx_id"),
+                    r.getBoolean("deleted"),
                     objectMapper.readValue(r.getText("values"), typeRefForValueInRecords),
                     objectMapper.readValue(
                         r.getText("insert_tx_ids"), typeRefForInsertTxIdsInRecords),
@@ -176,6 +177,7 @@ public class ReplicationRecordRepository {
       Key key,
       Record record,
       @Nullable String newTxId,
+      boolean deleted,
       Collection<Value> values,
       Collection<String> newInsertions)
       throws ExecutionException {
@@ -219,6 +221,7 @@ public class ReplicationRecordRepository {
               .textValue("current_tx_id", newTxId)
               // Clear `prep_tx_id` for subsequent transactions
               .textValue("prep_tx_id", null)
+              .booleanValue("deleted", deleted)
               .build());
     } catch (JsonProcessingException e) {
       throw new RuntimeException("Failed to serialize `values` for key:" + key, e);
