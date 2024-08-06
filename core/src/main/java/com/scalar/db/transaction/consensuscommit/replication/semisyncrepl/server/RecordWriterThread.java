@@ -190,7 +190,8 @@ public class RecordWriterThread implements Closeable {
           suspendFollowingOperation);
     }
 
-    private boolean handleKey(Key key, boolean logicalDelete) throws ExecutionException {
+    @VisibleForTesting
+    boolean handleKey(Key key, boolean logicalDelete) throws ExecutionException {
       Optional<Record> recordOpt =
           metricsLogger.execGetRecord(() -> replicationRecordRepository.get(key));
       if (!recordOpt.isPresent()) {

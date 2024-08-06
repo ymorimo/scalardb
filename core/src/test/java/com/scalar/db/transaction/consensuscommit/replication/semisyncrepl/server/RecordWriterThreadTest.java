@@ -1,7 +1,6 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.*;
 
 import com.google.common.collect.Sets;
 import com.google.errorprone.annotations.concurrent.LazyInit;
@@ -31,7 +30,7 @@ class RecordWriterThreadTest {
   }
 
   @Test
-  void findNextValue_GivenOneInsert_WithNoExistingRecord_ShouldReturnProperNextValue() {
+  void findNextValue_GivenInsert_WithNoExistingRecord_ShouldProcessAllValuesAndReturnNextValue() {
     // Arrange
     com.scalar.db.io.Key key = com.scalar.db.io.Key.ofInt("key", 42);
     Record record =
@@ -79,7 +78,42 @@ class RecordWriterThreadTest {
   }
 
   @Test
-  void findNextValue_GivenSequentialTwoUpdates_WithExistingRecord_ShouldReturnProperNextValue() {
+  void findNextValue_GivenUpdate_WithNoExistingRecord_ShouldReturnNull() {
+    // Arrange
+    com.scalar.db.io.Key key = com.scalar.db.io.Key.ofInt("key", 42);
+    Record record =
+        new Record(
+            "ns",
+            "tbl",
+            new Key(new Column<>("pk", "pk1")),
+            new Key(new Column<>("ck", "ck1")),
+            0,
+            null,
+            null,
+            false,
+            Sets.newHashSet(
+                new Value(
+                    "tx1",
+                    "tx2",
+                    2,
+                    System.currentTimeMillis(),
+                    System.currentTimeMillis(),
+                    "update",
+                    Collections.singletonList(new Column<>("name", "user1")))),
+            Collections.emptySet(),
+            null,
+            null);
+
+    // Act
+    NextValue nextValue = keyHandler.findNextValue(key, record);
+
+    // Assert
+    assertThat(nextValue).isNull();
+  }
+
+  @Test
+  void
+      findNextValue_GivenConnectedTwoUpdates_WithExistingRecord_ShouldProcessAllValuesAndReturnNextValue() {
     // Arrange
     com.scalar.db.io.Key key = com.scalar.db.io.Key.ofInt("key", 42);
     Record record =
@@ -139,7 +173,160 @@ class RecordWriterThreadTest {
 
   @Test
   void
-      findNextValue_GivenSequentialTwoUpdates_WithExistingRecord_WithPrepareTxId_ShouldStopAtPreparedTxId() {
+      findNextValue_GivenDiscreteTwoUpdates_WithExistingRecord_ShouldProcessOnlyOneValueAndReturnNextValue() {
+    // Arrange
+    com.scalar.db.io.Key key = com.scalar.db.io.Key.ofInt("key", 42);
+    Record record =
+        new Record(
+            "ns",
+            "tbl",
+            new Key(new Column<>("pk", "pk1")),
+            new Key(new Column<>("ck", "ck1")),
+            1,
+            "tx1",
+            null,
+            false,
+            Sets.newHashSet(
+                new Value(
+                    "tx20",
+                    "tx3",
+                    3,
+                    System.currentTimeMillis(),
+                    System.currentTimeMillis(),
+                    "update",
+                    Arrays.asList(new Column<>("comment", "hello"), new Column<>("age", 33))),
+                new Value(
+                    "tx1",
+                    "tx2",
+                    2,
+                    System.currentTimeMillis(),
+                    System.currentTimeMillis(),
+                    "update",
+                    Arrays.asList(new Column<>("name", "user2"), new Column<>("age", 22)))),
+            Sets.newHashSet("tx1"),
+            null,
+            null);
+
+    // Act
+    NextValue nextValue = keyHandler.findNextValue(key, record);
+
+    // Assert
+    assertThat(nextValue).isNotNull();
+    assertThat(nextValue.nextValue.txId).isEqualTo("tx2");
+    assertThat(nextValue.nextValue.prevTxId).isEqualTo("tx1");
+    assertThat(nextValue.nextValue.txVersion).isEqualTo(2);
+    assertThat(nextValue.nextValue.type).isEqualTo("update");
+    // TODO: This isn't used actually.
+    assertThat(nextValue.nextValue.columns.size()).isEqualTo(2);
+    assertThat(nextValue.nextValue.columns)
+        .containsExactlyInAnyOrder(new Column<>("name", "user2"), new Column<>("age", 22));
+    assertThat(nextValue.deleted).isFalse();
+    assertThat(nextValue.insertTxIds).containsExactlyInAnyOrder("tx1");
+    assertThat(nextValue.restValues.stream().map(v -> v.txId)).containsExactlyInAnyOrder("tx3");
+    assertThat(nextValue.shouldHandleTheSameKey).isFalse();
+    assertThat(nextValue.updatedColumns)
+        .containsExactlyInAnyOrder(new Column<>("name", "user2"), new Column<>("age", 22));
+  }
+
+  @Test
+  void findNextValue_GivenUpdatesNotConnectedToPreviousTxId_WithExistingRecord_ShouldReturnNull() {
+    // Arrange
+    com.scalar.db.io.Key key = com.scalar.db.io.Key.ofInt("key", 42);
+    Record record =
+        new Record(
+            "ns",
+            "tbl",
+            new Key(new Column<>("pk", "pk1")),
+            new Key(new Column<>("ck", "ck1")),
+            1,
+            "tx1",
+            null,
+            false,
+            Sets.newHashSet(
+                new Value(
+                    "tx2",
+                    "tx3",
+                    3,
+                    System.currentTimeMillis(),
+                    System.currentTimeMillis(),
+                    "update",
+                    Arrays.asList(new Column<>("comment", "hello"), new Column<>("age", 33))),
+                new Value(
+                    "tx100",
+                    "tx2",
+                    2,
+                    System.currentTimeMillis(),
+                    System.currentTimeMillis(),
+                    "update",
+                    Arrays.asList(new Column<>("name", "user2"), new Column<>("age", 22)))),
+            Sets.newHashSet("tx1"),
+            null,
+            null);
+
+    // Act
+    NextValue nextValue = keyHandler.findNextValue(key, record);
+
+    // Assert
+    assertThat(nextValue).isNull();
+  }
+
+  @Test
+  void
+      findNextValue_GivenConnectedUpdateAndDelete_WithExistingRecord_ShouldProcessAllValuesAndReturnNextValue() {
+    // Arrange
+    com.scalar.db.io.Key key = com.scalar.db.io.Key.ofInt("key", 42);
+    Record record =
+        new Record(
+            "ns",
+            "tbl",
+            new Key(new Column<>("pk", "pk1")),
+            new Key(new Column<>("ck", "ck1")),
+            1,
+            "tx1",
+            null,
+            false,
+            Sets.newHashSet(
+                new Value(
+                    "tx2",
+                    "tx3",
+                    3,
+                    System.currentTimeMillis(),
+                    System.currentTimeMillis(),
+                    "delete",
+                    Collections.emptyList()),
+                new Value(
+                    "tx1",
+                    "tx2",
+                    2,
+                    System.currentTimeMillis(),
+                    System.currentTimeMillis(),
+                    "update",
+                    Arrays.asList(new Column<>("name", "user2"), new Column<>("age", 22)))),
+            Sets.newHashSet("tx1"),
+            null,
+            null);
+
+    // Act
+    NextValue nextValue = keyHandler.findNextValue(key, record);
+
+    // Assert
+    assertThat(nextValue).isNotNull();
+    assertThat(nextValue.nextValue.txId).isEqualTo("tx3");
+    assertThat(nextValue.nextValue.prevTxId).isEqualTo("tx2");
+    assertThat(nextValue.nextValue.txVersion).isEqualTo(3);
+    assertThat(nextValue.nextValue.type).isEqualTo("delete");
+    // TODO: This isn't used actually.
+    assertThat(nextValue.nextValue.columns).isEmpty();
+    assertThat(nextValue.deleted).isTrue();
+    assertThat(nextValue.insertTxIds).containsExactlyInAnyOrder("tx1");
+    assertThat(nextValue.restValues).isEmpty();
+    assertThat(nextValue.shouldHandleTheSameKey).isFalse();
+    assertThat(nextValue.updatedColumns).isEmpty();
+  }
+
+  @Test
+  void
+      findNextValue_GivenConnectedTwoUpdates_WithExistingRecord_WithPrepareTxId_ShouldStopAtPreparedTxIdAndReturnNextValue() {
     // Arrange
     com.scalar.db.io.Key key = com.scalar.db.io.Key.ofInt("key", 42);
     Record record =
@@ -196,7 +383,7 @@ class RecordWriterThreadTest {
 
   @Test
   void
-      findNextValue_GivenSequentialAllTypeOperations_WithExistingRecord_ShouldStopAfterInsertAndReturnProperNextValue() {
+      findNextValue_GivenConnectedAllTypeOperations_WithExistingRecord_ShouldStopAfterInsertAndReturnNextValue() {
     // Arrange
     com.scalar.db.io.Key key = com.scalar.db.io.Key.ofInt("key", 42);
     Record record =
