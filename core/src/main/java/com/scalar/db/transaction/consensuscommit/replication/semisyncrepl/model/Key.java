@@ -3,6 +3,7 @@ package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.MoreObjects;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -13,6 +14,10 @@ public class Key {
 
   public Key(@JsonProperty("columns") List<Column<?>> columns) {
     this.columns = columns;
+  }
+
+  public Key(@JsonProperty("columns") Column<?>... columns) {
+    this.columns = Arrays.asList(columns);
   }
 
   public static Key fromScalarDbKey(@Nullable com.scalar.db.io.Key key) {

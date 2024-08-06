@@ -1,0 +1,269 @@
+package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.*;
+
+import com.google.common.collect.Sets;
+import com.google.errorprone.annotations.concurrent.LazyInit;
+import com.scalar.db.api.DistributedStorage;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Column;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record.Value;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationRecordRepository;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server.RecordWriterThread.KeyHandler;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server.RecordWriterThread.KeyHandler.NextValue;
+import java.util.Arrays;
+import java.util.Collections;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mock;
+
+class RecordWriterThreadTest {
+  @Mock private ReplicationRecordRepository replRecordRepo;
+  @Mock private DistributedStorage storage;
+  @Mock private MetricsLogger metricsLogger;
+  @LazyInit private KeyHandler keyHandler;
+
+  @BeforeEach
+  void setUp() {
+    keyHandler = new KeyHandler(replRecordRepo, storage, metricsLogger);
+  }
+
+  @Test
+  void findNextValue_GivenOneInsert_WithNoExistingRecord_ShouldReturnProperNextValue() {
+    // Arrange
+    com.scalar.db.io.Key key = com.scalar.db.io.Key.ofInt("key", 42);
+    Record record =
+        new Record(
+            "ns",
+            "tbl",
+            new Key(new Column<>("pk", "pk1")),
+            new Key(new Column<>("ck", "ck1")),
+            0,
+            null,
+            null,
+            false,
+            Sets.newHashSet(
+                new Value(
+                    null,
+                    "tx1",
+                    1,
+                    System.currentTimeMillis(),
+                    System.currentTimeMillis(),
+                    "insert",
+                    Collections.singletonList(new Column<>("name", "user1")))),
+            Collections.emptySet(),
+            null,
+            null);
+
+    // Act
+    NextValue nextValue = keyHandler.findNextValue(key, record);
+
+    // Assert
+    assertThat(nextValue).isNotNull();
+    assertThat(nextValue.nextValue.txId).isEqualTo("tx1");
+    assertThat(nextValue.nextValue.prevTxId).isNull();
+    assertThat(nextValue.nextValue.txVersion).isEqualTo(1);
+    assertThat(nextValue.nextValue.type).isEqualTo("insert");
+    // TODO: This isn't used actually.
+    assertThat(nextValue.nextValue.columns.size()).isEqualTo(1);
+    assertThat(nextValue.nextValue.columns)
+        .containsExactlyInAnyOrder(new Column<>("name", "user1"));
+    assertThat(nextValue.deleted).isFalse();
+    assertThat(nextValue.insertTxIds).containsExactlyInAnyOrder("tx1");
+    assertThat(nextValue.restValues).isEmpty();
+    // TODO: In terms of optimization, this should be false since the rest of values is empty.
+    assertThat(nextValue.shouldHandleTheSameKey).isTrue();
+    assertThat(nextValue.updatedColumns).containsExactlyInAnyOrder(new Column<>("name", "user1"));
+  }
+
+  @Test
+  void findNextValue_GivenSequentialTwoUpdates_WithExistingRecord_ShouldReturnProperNextValue() {
+    // Arrange
+    com.scalar.db.io.Key key = com.scalar.db.io.Key.ofInt("key", 42);
+    Record record =
+        new Record(
+            "ns",
+            "tbl",
+            new Key(new Column<>("pk", "pk1")),
+            new Key(new Column<>("ck", "ck1")),
+            1,
+            "tx1",
+            null,
+            false,
+            Sets.newHashSet(
+                new Value(
+                    "tx2",
+                    "tx3",
+                    3,
+                    System.currentTimeMillis(),
+                    System.currentTimeMillis(),
+                    "update",
+                    Arrays.asList(new Column<>("comment", "hello"), new Column<>("age", 33))),
+                new Value(
+                    "tx1",
+                    "tx2",
+                    2,
+                    System.currentTimeMillis(),
+                    System.currentTimeMillis(),
+                    "update",
+                    Arrays.asList(new Column<>("name", "user2"), new Column<>("age", 22)))),
+            Sets.newHashSet("tx1"),
+            null,
+            null);
+
+    // Act
+    NextValue nextValue = keyHandler.findNextValue(key, record);
+
+    // Assert
+    assertThat(nextValue).isNotNull();
+    assertThat(nextValue.nextValue.txId).isEqualTo("tx3");
+    assertThat(nextValue.nextValue.prevTxId).isEqualTo("tx2");
+    assertThat(nextValue.nextValue.txVersion).isEqualTo(3);
+    assertThat(nextValue.nextValue.type).isEqualTo("update");
+    // TODO: This isn't used actually.
+    assertThat(nextValue.nextValue.columns.size()).isEqualTo(2);
+    assertThat(nextValue.nextValue.columns)
+        .containsExactlyInAnyOrder(new Column<>("comment", "hello"), new Column<>("age", 33));
+    assertThat(nextValue.deleted).isFalse();
+    assertThat(nextValue.insertTxIds).containsExactlyInAnyOrder("tx1");
+    assertThat(nextValue.restValues).isEmpty();
+    assertThat(nextValue.shouldHandleTheSameKey).isFalse();
+    assertThat(nextValue.updatedColumns)
+        .containsExactlyInAnyOrder(
+            new Column<>("name", "user2"),
+            new Column<>("comment", "hello"),
+            new Column<>("age", 33));
+  }
+
+  @Test
+  void
+      findNextValue_GivenSequentialTwoUpdates_WithExistingRecord_WithPrepareTxId_ShouldStopAtPreparedTxId() {
+    // Arrange
+    com.scalar.db.io.Key key = com.scalar.db.io.Key.ofInt("key", 42);
+    Record record =
+        new Record(
+            "ns",
+            "tbl",
+            new Key(new Column<>("pk", "pk1")),
+            new Key(new Column<>("ck", "ck1")),
+            1,
+            "tx1",
+            "tx2",
+            false,
+            Sets.newHashSet(
+                new Value(
+                    "tx2",
+                    "tx3",
+                    3,
+                    System.currentTimeMillis(),
+                    System.currentTimeMillis(),
+                    "update",
+                    Arrays.asList(new Column<>("comment", "hello"), new Column<>("age", 33))),
+                new Value(
+                    "tx1",
+                    "tx2",
+                    2,
+                    System.currentTimeMillis(),
+                    System.currentTimeMillis(),
+                    "update",
+                    Arrays.asList(new Column<>("name", "user2"), new Column<>("age", 22)))),
+            Sets.newHashSet("tx1"),
+            null,
+            null);
+
+    // Act
+    NextValue nextValue = keyHandler.findNextValue(key, record);
+
+    // Assert
+    assertThat(nextValue).isNotNull();
+    assertThat(nextValue.nextValue.txId).isEqualTo("tx2");
+    assertThat(nextValue.nextValue.prevTxId).isEqualTo("tx1");
+    assertThat(nextValue.nextValue.txVersion).isEqualTo(2);
+    assertThat(nextValue.nextValue.type).isEqualTo("update");
+    // TODO: This isn't used actually.
+    assertThat(nextValue.nextValue.columns.size()).isEqualTo(2);
+    assertThat(nextValue.nextValue.columns)
+        .containsExactlyInAnyOrder(new Column<>("name", "user2"), new Column<>("age", 22));
+    assertThat(nextValue.deleted).isFalse();
+    assertThat(nextValue.insertTxIds).containsExactlyInAnyOrder("tx1");
+    assertThat(nextValue.restValues.stream().map(v -> v.txId)).containsExactlyInAnyOrder("tx3");
+    assertThat(nextValue.shouldHandleTheSameKey).isTrue();
+    assertThat(nextValue.updatedColumns)
+        .containsExactlyInAnyOrder(new Column<>("name", "user2"), new Column<>("age", 22));
+  }
+
+  @Test
+  void
+      findNextValue_GivenSequentialAllTypeOperations_WithExistingRecord_ShouldStopAfterInsertAndReturnProperNextValue() {
+    // Arrange
+    com.scalar.db.io.Key key = com.scalar.db.io.Key.ofInt("key", 42);
+    Record record =
+        new Record(
+            "ns",
+            "tbl",
+            new Key(new Column<>("pk", "pk1")),
+            new Key(new Column<>("ck", "ck1")),
+            1,
+            "tx1",
+            null,
+            false,
+            Sets.newHashSet(
+                new Value(
+                    "tx1",
+                    "tx2",
+                    2,
+                    System.currentTimeMillis(),
+                    System.currentTimeMillis(),
+                    "update",
+                    Arrays.asList(new Column<>("name", "user2"), new Column<>("age", 22))),
+                new Value(
+                    "tx2",
+                    "tx3",
+                    3,
+                    System.currentTimeMillis(),
+                    System.currentTimeMillis(),
+                    "delete",
+                    Collections.emptyList()),
+                new Value(
+                    null,
+                    "tx4",
+                    1,
+                    System.currentTimeMillis(),
+                    System.currentTimeMillis(),
+                    "insert",
+                    Arrays.asList(new Column<>("name", "user11"), new Column<>("age", 111))),
+                new Value(
+                    "tx4",
+                    "tx5",
+                    2,
+                    System.currentTimeMillis(),
+                    System.currentTimeMillis(),
+                    "update",
+                    Arrays.asList(new Column<>("comment", "hello"), new Column<>("age", 222)))),
+            Sets.newHashSet("tx1"),
+            null,
+            null);
+
+    // Act
+    NextValue nextValue = keyHandler.findNextValue(key, record);
+
+    // Assert
+    assertThat(nextValue).isNotNull();
+    assertThat(nextValue.nextValue.txId).isEqualTo("tx4");
+    assertThat(nextValue.nextValue.prevTxId).isNull();
+    assertThat(nextValue.nextValue.txVersion).isEqualTo(1);
+    assertThat(nextValue.nextValue.type).isEqualTo("insert");
+    // TODO: This isn't used actually.
+    assertThat(nextValue.nextValue.columns.size()).isEqualTo(2);
+    assertThat(nextValue.nextValue.columns)
+        .containsExactlyInAnyOrder(new Column<>("name", "user111"), new Column<>("age", 111));
+    assertThat(nextValue.deleted).isFalse();
+    assertThat(nextValue.insertTxIds).containsExactlyInAnyOrder("tx1", "tx4");
+    assertThat(nextValue.restValues.stream().map(v -> v.txId)).containsExactlyInAnyOrder("tx5");
+    assertThat(nextValue.shouldHandleTheSameKey).isTrue();
+    assertThat(nextValue.updatedColumns)
+        .containsExactlyInAnyOrder(new Column<>("name", "user111"), new Column<>("age", 111));
+  }
+}
