@@ -121,7 +121,7 @@ public class RecordWriterThread implements Closeable {
       Value lastValue = null;
       boolean deleted = false;
       Set<Column<?>> updatedColumns = new HashSet<>();
-      Set<String> insertTxIds = new HashSet<>(record.insertTxIds);
+      Set<String> insertTxIds = new HashSet<>();
       @Nullable String currentTxId = record.currentTxId;
       while (!suspendFollowingOperation) {
         Value value;
@@ -187,7 +187,8 @@ public class RecordWriterThread implements Closeable {
               .collect(Collectors.toSet()),
           updatedColumns,
           insertTxIds,
-          suspendFollowingOperation);
+          suspendFollowingOperation
+              && (!valuesForInsert.isEmpty() || !valuesForNonInsert.isEmpty()));
     }
 
     @VisibleForTesting
