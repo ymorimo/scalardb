@@ -26,6 +26,7 @@ import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
@@ -119,14 +120,32 @@ public class RecordWriterThread implements Closeable {
       // t1 and t3 should be handled to reach t2.
       boolean suspendFollowingOperation = false;
       Value lastValue = null;
-      boolean deleted = false;
+      boolean deleted = record.deleted;
       Set<Column<?>> updatedColumns = new HashSet<>();
       Set<String> insertTxIds = new HashSet<>();
       @Nullable String currentTxId = record.currentTxId;
       while (!suspendFollowingOperation) {
-        Value value;
+        Value value = null;
         if (currentTxId == null || deleted) {
-          value = valuesForInsert.poll();
+          if (record.prepTxId == null) {
+            value = valuesForInsert.poll();
+          } else {
+            Iterator<Value> iterator = valuesForInsert.iterator();
+            while (iterator.hasNext()) {
+              Value v = iterator.next();
+              if (v.txId.equals(record.prepTxId)) {
+                // The previous attempt used this transaction ID. It must be used this time, too.
+                value = v;
+                iterator.remove();
+              }
+            }
+            if (value == null) {
+              throw new AssertionError(
+                  String.format(
+                      "`tx_prep_id` is set, but it doesn't exist in INSERT operations. Prepared Tx ID: %s",
+                      record.prepTxId));
+            }
+          }
         } else {
           value = valuesForNonInsert.remove(currentTxId);
         }
