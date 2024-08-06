@@ -1,9 +1,12 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -12,9 +15,12 @@ import com.google.errorprone.annotations.concurrent.LazyInit;
 import com.scalar.db.api.ConditionBuilder;
 import com.scalar.db.api.ConditionalExpression.Operator;
 import com.scalar.db.api.DistributedStorage;
+import com.scalar.db.api.Get;
 import com.scalar.db.api.Put;
+import com.scalar.db.api.Result;
 import com.scalar.db.api.TransactionState;
 import com.scalar.db.exception.storage.ExecutionException;
+import com.scalar.db.exception.storage.NoMutationException;
 import com.scalar.db.io.TextColumn;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Column;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key;
@@ -76,6 +82,21 @@ class RecordWriterThreadTest {
     }
   }
 
+  private void assertStorageGetOperationMetadata(Get get, String fullTableName, Key pk, Key ck) {
+    assertThat(get.forFullTableName()).isPresent().isEqualTo(Optional.of(fullTableName));
+    assertThat(get.getPartitionKey().getColumns().size()).isEqualTo(pk.columns.size());
+    for (int i = 0; i < pk.columns.size(); i++) {
+      assertThat(get.getPartitionKey().getColumnName(i)).isEqualTo(pk.columns.get(i).name);
+      assertThat(get.getPartitionKey().getTextValue(i)).isEqualTo(pk.columns.get(i).value);
+    }
+    assertThat(get.getClusteringKey()).isPresent();
+    assertThat(get.getClusteringKey().get().size()).isEqualTo(ck.columns.size());
+    for (int i = 0; i < ck.columns.size(); i++) {
+      assertThat(get.getClusteringKey().get().getColumnName(i)).isEqualTo(ck.columns.get(i).name);
+      assertThat(get.getClusteringKey().get().getTextValue(i)).isEqualTo(ck.columns.get(i).value);
+    }
+  }
+
   @Test
   void handleKey_GivenInsert_WithNoExistingRecord_ShouldUpdateRecordsProperly()
       throws ExecutionException {
@@ -117,6 +138,7 @@ class RecordWriterThreadTest {
     verify(replRecordRepo)
         .updateWithValues(
             key, currentRecord, "tx1", false, Collections.emptySet(), Collections.singleton("tx1"));
+
     ArgumentCaptor<Put> storagePutArgumentCaptor = ArgumentCaptor.forClass(Put.class);
     verify(storage).put(storagePutArgumentCaptor.capture());
     Put put = storagePutArgumentCaptor.getValue();
@@ -176,6 +198,7 @@ class RecordWriterThreadTest {
     verify(replRecordRepo, never()).updateWithPrepTxId(any(), any(), any());
     verify(replRecordRepo, never())
         .updateWithValues(any(), any(), any(), anyBoolean(), any(), any());
+
     verify(storage, never()).put(any(Put.class));
   }
 
@@ -221,6 +244,7 @@ class RecordWriterThreadTest {
     verify(replRecordRepo, never()).updateWithPrepTxId(any(), any(), any());
     verify(replRecordRepo, never())
         .updateWithValues(any(), any(), any(), anyBoolean(), any(), any());
+
     verify(storage, never()).put(any(Put.class));
   }
 
@@ -264,6 +288,7 @@ class RecordWriterThreadTest {
     verify(replRecordRepo, never()).updateWithPrepTxId(any(), any(), any());
     verify(replRecordRepo, never())
         .updateWithValues(any(), any(), any(), anyBoolean(), any(), any());
+
     verify(storage, never()).put(any(Put.class));
   }
 
@@ -317,6 +342,7 @@ class RecordWriterThreadTest {
     verify(replRecordRepo)
         .updateWithValues(
             key, currentRecord, "tx3", false, Collections.emptySet(), Collections.emptySet());
+
     ArgumentCaptor<Put> storagePutArgumentCaptor = ArgumentCaptor.forClass(Put.class);
     verify(storage).put(storagePutArgumentCaptor.capture());
     Put put = storagePutArgumentCaptor.getValue();
@@ -341,6 +367,184 @@ class RecordWriterThreadTest {
                         ConditionBuilder.buildConditionalExpression(
                             TextColumn.of("tx_id", "tx1"), Operator.EQ))
                     .build()));
+  }
+
+  @Test
+  void
+      handleKey_GivenConnectedTwoUpdates_WithExistingRecord_WhenBackupDbTableIsAlreadyUpdated_ShouldUpdateRecordsProperly()
+          throws ExecutionException {
+    // Arrange
+    Value valueTx2 =
+        new Value(
+            "tx1",
+            "tx2",
+            2,
+            System.currentTimeMillis(),
+            System.currentTimeMillis(),
+            "update",
+            Arrays.asList(new Column<>("name", "user2"), new Column<>("age", 22)));
+    Value valueTx3 =
+        new Value(
+            "tx2",
+            "tx3",
+            3,
+            preparedAtInMillisOfLastValue,
+            committedAtInMillisOfLastValue,
+            "update",
+            Arrays.asList(new Column<>("comment", "hello"), new Column<>("age", 33)));
+    Record currentRecord =
+        new Record(
+            "ns",
+            "tbl",
+            pk,
+            ck,
+            1,
+            "tx1",
+            null,
+            false,
+            Sets.newHashSet(valueTx2, valueTx3),
+            Collections.emptySet(),
+            null,
+            null);
+
+    doReturn(Optional.of(currentRecord)).when(replRecordRepo).get(any());
+
+    doThrow(NoMutationException.class).doNothing().when(storage).put(any(Put.class));
+    Result result = mock(Result.class);
+    // The backup DB table is already updated. Probably, updating the replication DB table failed
+    // after that.
+    doReturn("tx3").when(result).getText("tx_id");
+    doReturn(Optional.of(result)).when(storage).get(any(Get.class));
+
+    // Act
+    boolean shouldHandleTheSameKey = keyHandler.handleKey(key, true);
+
+    // Assert
+    assertThat(shouldHandleTheSameKey).isFalse();
+
+    verify(replRecordRepo).get(key);
+    verify(replRecordRepo).updateWithPrepTxId(key, currentRecord, "tx3");
+    verify(replRecordRepo)
+        .updateWithValues(
+            key, currentRecord, "tx3", false, Collections.emptySet(), Collections.emptySet());
+
+    ArgumentCaptor<Put> storagePutArgumentCaptor = ArgumentCaptor.forClass(Put.class);
+    verify(storage).put(storagePutArgumentCaptor.capture());
+    Put put = storagePutArgumentCaptor.getValue();
+    assertStoragePutOperationMetadata(put, "ns.tbl", pk, ck);
+    assertThat(put.getColumns().size()).isEqualTo(8);
+    assertThat(put.getColumns().get("tx_id").getTextValue()).isEqualTo("tx3");
+    assertThat(put.getColumns().get("tx_version").getIntValue()).isEqualTo(3);
+    assertThat(put.getColumns().get("tx_state").getIntValue())
+        .isEqualTo(TransactionState.COMMITTED.get());
+    assertThat(put.getColumns().get("tx_prepared_at").getBigIntValue())
+        .isEqualTo(preparedAtInMillisOfLastValue);
+    assertThat(put.getColumns().get("tx_committed_at").getBigIntValue())
+        .isEqualTo(committedAtInMillisOfLastValue);
+    assertThat(put.getColumns().get("name").getTextValue()).isEqualTo("user2");
+    assertThat(put.getColumns().get("comment").getTextValue()).isEqualTo("hello");
+    assertThat(put.getColumns().get("age").getIntValue()).isEqualTo(33);
+    assertThat(put.getCondition())
+        .isPresent()
+        .isEqualTo(
+            Optional.of(
+                ConditionBuilder.putIf(
+                        ConditionBuilder.buildConditionalExpression(
+                            TextColumn.of("tx_id", "tx1"), Operator.EQ))
+                    .build()));
+
+    ArgumentCaptor<Get> storageGetArgumentCaptor = ArgumentCaptor.forClass(Get.class);
+    verify(storage).get(storageGetArgumentCaptor.capture());
+    Get get = storageGetArgumentCaptor.getValue();
+    assertStorageGetOperationMetadata(get, "ns.tbl", pk, ck);
+  }
+
+  @Test
+  void
+      handleKey_GivenConnectedTwoUpdates_WithExistingRecord_WhenBackupDbTableProceedsTooMuch_ShouldThrowException()
+          throws ExecutionException {
+    // Arrange
+    Value valueTx2 =
+        new Value(
+            "tx1",
+            "tx2",
+            2,
+            System.currentTimeMillis(),
+            System.currentTimeMillis(),
+            "update",
+            Arrays.asList(new Column<>("name", "user2"), new Column<>("age", 22)));
+    Value valueTx3 =
+        new Value(
+            "tx2",
+            "tx3",
+            3,
+            preparedAtInMillisOfLastValue,
+            committedAtInMillisOfLastValue,
+            "update",
+            Arrays.asList(new Column<>("comment", "hello"), new Column<>("age", 33)));
+    Record currentRecord =
+        new Record(
+            "ns",
+            "tbl",
+            pk,
+            ck,
+            1,
+            "tx1",
+            null,
+            false,
+            Sets.newHashSet(valueTx2, valueTx3),
+            Collections.emptySet(),
+            null,
+            null);
+
+    doReturn(Optional.of(currentRecord)).when(replRecordRepo).get(any());
+
+    doThrow(NoMutationException.class).doNothing().when(storage).put(any(Put.class));
+    Result result = mock(Result.class);
+    // The backup DB table and the replication DB are already updated. The fetched information is
+    // out of date.
+    doReturn("tx10").when(result).getText("tx_id");
+    doReturn(Optional.of(result)).when(storage).get(any(Get.class));
+
+    // Act Assert
+    assertThatThrownBy(() -> keyHandler.handleKey(key, true))
+        .isInstanceOf(NoMutationException.class);
+
+    // Assert
+    verify(replRecordRepo).get(key);
+    verify(replRecordRepo).updateWithPrepTxId(key, currentRecord, "tx3");
+    verify(replRecordRepo, never())
+        .updateWithValues(any(), any(), any(), anyBoolean(), any(), any());
+
+    ArgumentCaptor<Put> storagePutArgumentCaptor = ArgumentCaptor.forClass(Put.class);
+    verify(storage).put(storagePutArgumentCaptor.capture());
+    Put put = storagePutArgumentCaptor.getValue();
+    assertStoragePutOperationMetadata(put, "ns.tbl", pk, ck);
+    assertThat(put.getColumns().size()).isEqualTo(8);
+    assertThat(put.getColumns().get("tx_id").getTextValue()).isEqualTo("tx3");
+    assertThat(put.getColumns().get("tx_version").getIntValue()).isEqualTo(3);
+    assertThat(put.getColumns().get("tx_state").getIntValue())
+        .isEqualTo(TransactionState.COMMITTED.get());
+    assertThat(put.getColumns().get("tx_prepared_at").getBigIntValue())
+        .isEqualTo(preparedAtInMillisOfLastValue);
+    assertThat(put.getColumns().get("tx_committed_at").getBigIntValue())
+        .isEqualTo(committedAtInMillisOfLastValue);
+    assertThat(put.getColumns().get("name").getTextValue()).isEqualTo("user2");
+    assertThat(put.getColumns().get("comment").getTextValue()).isEqualTo("hello");
+    assertThat(put.getColumns().get("age").getIntValue()).isEqualTo(33);
+    assertThat(put.getCondition())
+        .isPresent()
+        .isEqualTo(
+            Optional.of(
+                ConditionBuilder.putIf(
+                        ConditionBuilder.buildConditionalExpression(
+                            TextColumn.of("tx_id", "tx1"), Operator.EQ))
+                    .build()));
+
+    ArgumentCaptor<Get> storageGetArgumentCaptor = ArgumentCaptor.forClass(Get.class);
+    verify(storage).get(storageGetArgumentCaptor.capture());
+    Get get = storageGetArgumentCaptor.getValue();
+    assertStorageGetOperationMetadata(get, "ns.tbl", pk, ck);
   }
 
   @Test
@@ -393,6 +597,7 @@ class RecordWriterThreadTest {
     verify(replRecordRepo)
         .updateWithValues(
             key, currentRecord, "tx2", false, Sets.newHashSet(valueTx3), Collections.emptySet());
+
     ArgumentCaptor<Put> storagePutArgumentCaptor = ArgumentCaptor.forClass(Put.class);
     verify(storage).put(storagePutArgumentCaptor.capture());
     Put put = storagePutArgumentCaptor.getValue();
@@ -468,6 +673,7 @@ class RecordWriterThreadTest {
     verify(replRecordRepo, never()).updateWithPrepTxId(any(), any(), any());
     verify(replRecordRepo, never())
         .updateWithValues(any(), any(), any(), anyBoolean(), any(), any());
+
     verify(storage, never()).put(any(Put.class));
   }
 
@@ -521,6 +727,7 @@ class RecordWriterThreadTest {
     verify(replRecordRepo)
         .updateWithValues(
             key, currentRecord, "tx3", true, Collections.emptySet(), Collections.emptySet());
+
     ArgumentCaptor<Put> storagePutArgumentCaptor = ArgumentCaptor.forClass(Put.class);
     verify(storage).put(storagePutArgumentCaptor.capture());
     Put put = storagePutArgumentCaptor.getValue();
@@ -595,6 +802,7 @@ class RecordWriterThreadTest {
     verify(replRecordRepo)
         .updateWithValues(
             key, currentRecord, "tx2", false, Sets.newHashSet(valueTx3), Collections.emptySet());
+
     ArgumentCaptor<Put> storagePutArgumentCaptor = ArgumentCaptor.forClass(Put.class);
     verify(storage).put(storagePutArgumentCaptor.capture());
     Put put = storagePutArgumentCaptor.getValue();
@@ -688,6 +896,7 @@ class RecordWriterThreadTest {
     verify(replRecordRepo)
         .updateWithValues(
             key, currentRecord, "tx4", false, Sets.newHashSet(valueTx5), Sets.newHashSet("tx4"));
+
     ArgumentCaptor<Put> storagePutArgumentCaptor = ArgumentCaptor.forClass(Put.class);
     verify(storage).put(storagePutArgumentCaptor.capture());
     Put put = storagePutArgumentCaptor.getValue();
@@ -767,6 +976,7 @@ class RecordWriterThreadTest {
             false,
             values.stream().filter(v -> !v.txId.equals(preparedTxId)).collect(Collectors.toSet()),
             Sets.newHashSet(preparedTxId));
+
     ArgumentCaptor<Put> storagePutArgumentCaptor = ArgumentCaptor.forClass(Put.class);
     verify(storage).put(storagePutArgumentCaptor.capture());
     Put put = storagePutArgumentCaptor.getValue();
