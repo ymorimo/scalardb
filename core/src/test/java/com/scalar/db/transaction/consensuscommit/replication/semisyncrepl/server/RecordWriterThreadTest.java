@@ -162,6 +162,11 @@ class RecordWriterThreadTest {
   void handleKey_GivenInsert_WithExistingRecord_WhenDuplicatedRecordExists_ShouldNotUpdateRecords()
       throws ExecutionException {
     // Arrange
+
+    // This emulates the following situation:
+    // - Attempt#A handles INSERT#1
+    // - The same INSERT#1 is added again due to retry or something
+    // - Attempt#B should skip INSERT#1
     Value valueTx1 =
         new Value(
             null,
@@ -207,6 +212,13 @@ class RecordWriterThreadTest {
       handleKey_GivenInsert_WithExistingRecord_WhenRecordIsDeletedAfterDuplicatedInsert_ShouldNotUpdateRecords()
           throws ExecutionException {
     // Arrange
+
+    // This emulates the following situation:
+    // - Attempt#A handles INSERT#1
+    // - DELETE#2 is added
+    // - Attempt#B handles DELETE#2
+    // - The same INSERT#1 is added again due to retry or something
+    // - Attempt#C should skip INSERT#1
     Value valueTx1 =
         new Value(
             null,
@@ -252,6 +264,10 @@ class RecordWriterThreadTest {
   void handleKey_GivenUpdate_WithNoExistingRecord_ShouldNotUpdateRecords()
       throws ExecutionException {
     // Arrange
+
+    // This emulates the following situation:
+    // - The UPDATE#2 is added before INSERT#1 is added
+    // - Attempt#A should skip UPDATE#2
     Value valueTx2 =
         new Value(
             "tx1",
@@ -374,6 +390,16 @@ class RecordWriterThreadTest {
       handleKey_GivenConnectedTwoUpdates_WithExistingRecord_WhenBackupDbTableIsAlreadyUpdated_ShouldUpdateRecordsProperly()
           throws ExecutionException {
     // Arrange
+
+    // This emulates the following situation:
+    // - Attempt#A handles INSERT#1
+    // - UPDATE#2 and UPDATE#3 are added
+    // - Attempt#B handles UPDATE#2 and UPDATE#3
+    //   - It sets `tx_prep_id` of the replication DB table to `tx3`
+    //   - It columns are written to the backup DB tables (current `tx_id`: `tx3`)
+    //   - But, it fails to update the replication DB table (current `tx_id`: `tx1`)
+    // - Attempt#C handles UPDATE#2 and UPDATE#3
+    //   - It only updates the replication DB table (current `tx_id`: `tx3`)
     Value valueTx2 =
         new Value(
             "tx1",
@@ -464,6 +490,21 @@ class RecordWriterThreadTest {
       handleKey_GivenConnectedTwoUpdates_WithExistingRecord_WhenBackupDbTableProceedsTooMuch_ShouldThrowException()
           throws ExecutionException {
     // Arrange
+
+    // This emulates the following situation:
+    // - Attempt#A handles INSERT#1
+    // - UPDATE#2 and UPDATE#3 are added
+    // - Attempt#B handles UPDATE#2 and UPDATE#3
+    //   - It sets `tx_prep_id` of the replication DB table to `tx3`
+    //   - It gets stuck for a while
+    // - Attempt#C handles the suspended UPDATE#2 and UPDATE#3
+    //   - It updates the backup DB table and replication DB table (current `tx_id`: `tx3`)
+    // - New operations from UPDATE#4 to UPDATE#10 are added
+    // - Attempt#D handles UPDATE#4 through UPDATE#10
+    //   - It updates the backup DB table and replication DB table (current `tx_id`: `tx10`)
+    // - Attempt#B resumes handling UPDATE#2 and UPDATE#3
+    //   - But, it detects the backup DB table has proceeded too much
+    //   - It fails
     Value valueTx2 =
         new Value(
             "tx1",
@@ -551,6 +592,11 @@ class RecordWriterThreadTest {
   void handleKey_GivenDiscreteTwoUpdates_WithExistingRecord_ShouldUpdateRecordsProperly()
       throws ExecutionException {
     // Arrange
+
+    // This emulates the following situation:
+    // - Attempt#A handles INSERT#1
+    // - UPDATE#2 and UPDATE#4 are added while UPDATE#3 isn't added yet
+    // - Attempt#B only handles UPDATE#2
     Value valueTx2 =
         new Value(
             "tx1",
@@ -560,15 +606,15 @@ class RecordWriterThreadTest {
             committedAtInMillisOfLastValue,
             "update",
             Arrays.asList(new Column<>("name", "user2"), new Column<>("age", 22)));
-    Value valueTx3 =
+    Value valueTx4 =
         new Value(
-            "tx20",
             "tx3",
-            3,
+            "tx4",
+            4,
             System.currentTimeMillis(),
             System.currentTimeMillis(),
             "update",
-            Arrays.asList(new Column<>("comment", "hello"), new Column<>("age", 33)));
+            Arrays.asList(new Column<>("comment", "hello"), new Column<>("age", 44)));
     Record currentRecord =
         new Record(
             "ns",
@@ -579,7 +625,7 @@ class RecordWriterThreadTest {
             "tx1",
             null,
             false,
-            Sets.newHashSet(valueTx2, valueTx3),
+            Sets.newHashSet(valueTx2, valueTx4),
             Sets.newHashSet("tx1"),
             null,
             null);
@@ -596,7 +642,7 @@ class RecordWriterThreadTest {
     verify(replRecordRepo).updateWithPrepTxId(key, currentRecord, "tx2");
     verify(replRecordRepo)
         .updateWithValues(
-            key, currentRecord, "tx2", false, Sets.newHashSet(valueTx3), Collections.emptySet());
+            key, currentRecord, "tx2", false, Sets.newHashSet(valueTx4), Collections.emptySet());
 
     ArgumentCaptor<Put> storagePutArgumentCaptor = ArgumentCaptor.forClass(Put.class);
     verify(storage).put(storagePutArgumentCaptor.capture());
@@ -624,19 +670,14 @@ class RecordWriterThreadTest {
   }
 
   @Test
-  void
-      handleKey_GivenUpdatesNotConnectedToPreviousTxId_WithExistingRecord_ShouldUpdateRecordsProperly()
-          throws ExecutionException {
+  void handleKey_GivenUpdatesNotConnectedToPreviousTxId_WithExistingRecord_ShouldNotUpdateRecords()
+      throws ExecutionException {
     // Arrange
-    Value valueTx2 =
-        new Value(
-            "tx100",
-            "tx2",
-            2,
-            System.currentTimeMillis(),
-            System.currentTimeMillis(),
-            "update",
-            Arrays.asList(new Column<>("name", "user2"), new Column<>("age", 22)));
+
+    // This emulates the following situation:
+    // - Attempt#A handles INSERT#1
+    // - UPDATE#3 and UPDATE#4 are added
+    // - Attempt#B skips UPDATE#3 and 4
     Value valueTx3 =
         new Value(
             "tx2",
@@ -645,7 +686,16 @@ class RecordWriterThreadTest {
             System.currentTimeMillis(),
             System.currentTimeMillis(),
             "update",
-            Arrays.asList(new Column<>("comment", "hello"), new Column<>("age", 33)));
+            Arrays.asList(new Column<>("name", "user3"), new Column<>("age", 33)));
+    Value valueTx4 =
+        new Value(
+            "tx3",
+            "tx4",
+            4,
+            System.currentTimeMillis(),
+            System.currentTimeMillis(),
+            "update",
+            Arrays.asList(new Column<>("comment", "hello"), new Column<>("age", 44)));
     Record currentRecord =
         new Record(
             "ns",
@@ -656,7 +706,7 @@ class RecordWriterThreadTest {
             "tx1",
             null,
             false,
-            Sets.newHashSet(valueTx2, valueTx3),
+            Sets.newHashSet(valueTx3, valueTx4),
             Sets.newHashSet("tx1"),
             null,
             null);
@@ -756,6 +806,15 @@ class RecordWriterThreadTest {
       handleKey_GivenConnectedTwoUpdates_WithExistingRecord_WithPrepareTxId_ShouldUpdateRecordsProperly()
           throws ExecutionException {
     // Arrange
+
+    // This emulates the following situation:
+    // - Attempt#A handles INSERT#1
+    // - UPDATE#2 and UPDATE#3 are added
+    // - Attempt#B handles UPDATE#2 and UPDATE#3
+    //   - It sets `tx_prep_id` of the replication DB table to `tx3`
+    //   - It fails
+    // - Attempt#C handles the suspended UPDATE#2 and UPDATE#3
+    //   - It updates the backup DB table and replication DB table (current `tx_id`: `tx3`)
     Value valueTx2 =
         new Value(
             "tx1",
@@ -832,6 +891,13 @@ class RecordWriterThreadTest {
   void handleKey_GivenConnectedAllTypeOperations_WithExistingRecord_ShouldUpdateRecordsProperly()
       throws ExecutionException {
     // Arrange
+
+    // This emulates the following situation:
+    // - Attempt#A handles INSERT#1
+    // - UPDATE#2, DELETE#3, INSERT#4 and UPDATE#5 are added
+    // - Attempt#B handles UPDATE#2, DELETE#3 and INSERT#4, but DELETE#5
+    //   - It stops merging operations at INSERT#4 since handling INSERT should be recorded
+    //     - It's necessary since which INSERT is chosen after DELETE is non-deterministic
     Value valueTx2 =
         new Value(
             "tx1",
@@ -926,6 +992,14 @@ class RecordWriterThreadTest {
   void handleKey_GivenManyInserts_WithPreparedTxId_ShouldUpdateRecordsProperlyWithPreparedId()
       throws ExecutionException {
     // Arrange
+
+    // This emulates the following situation:
+    // - Attempt#A handles INSERT#AAA and some other operations including DELETE#ZZZ
+    // - Many INSERT operations are added from INSERT#00000 to INSERT#00200
+    // - Attempt#B handles one onf the INSERT operations
+    //   - It sets `tx_prep_id` of the replication DB table to the INSERT's transaction ID
+    //   - It fails
+    // - Attempt#C handles the same suspended INSERT
     int n = 200;
     Set<Value> values = new HashSet<>();
     for (int i = 0; i < n; i++) {
