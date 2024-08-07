@@ -244,6 +244,7 @@ public class DistributorThread implements Closeable {
         for (Transaction transaction : bulkTransaction.transactions) {
           CoordinatorState coordinatorState = coordinatorStates.get(coordinatorStateIndex);
           copyWrittenTuplesToRecordsForBulkTransaction(transaction, coordinatorState);
+          coordinatorStateIndex++;
         }
         replicationTransactionRepository.delete(bulkTransaction);
       } else {
