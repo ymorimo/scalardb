@@ -148,7 +148,7 @@ variable
 
     repl_db_record = [
         tx_id |-> Null,
-        deleted |-> Null,
+        deleted |-> FALSE,
         prep_tx_id |-> Null,
         version |-> Null,
         \* Probably this can be removed
@@ -158,7 +158,7 @@ variable
 
     secondary_db_record = [
         tx_id |-> Null,
-        deleted |-> Null,
+        deleted |-> FALSE,
         applied_tx_ids |-> <<>>
     ],
 
@@ -358,7 +358,7 @@ begin
         if ops_to_be_moved /= <<>> then
             SetPrepTxIdOfReplDbRecord:
             \* There are operations to be replicated to the secondary DB.
-            if repl_db_record["version"] = fetched_cur_record["version"] /\ repl_db_record["prep_tx_id"] = fetched_cur_record["prep_tx_id"] then
+            if repl_db_record["tx_id"] = fetched_cur_record["tx_id"] /\ repl_db_record["prep_tx_id"] = fetched_cur_record["prep_tx_id"] then
                 (* Continue the replication only if no other thread has replicated the same record in conflict
                    by checking `record` table in Replication DB.
                 *)
@@ -588,7 +588,7 @@ begin
 end process;
 
 end algorithm *)
-\* BEGIN TRANSLATION (chksum(pcal) = "e912922a" /\ chksum(tla) = "b204a20f")
+\* BEGIN TRANSLATION (chksum(pcal) = "b24337a6" /\ chksum(tla) = "93251fac")
 VARIABLES stored_ops, expected_applied_tx_id_on_secondary_db, repl_db_record, 
           secondary_db_record, retry_of_enqueue, pc
 
@@ -665,7 +665,7 @@ Init == (* Global variables *)
                                                     >>[OperationTypeIndex]
         /\ repl_db_record =                  [
                                 tx_id |-> Null,
-                                deleted |-> Null,
+                                deleted |-> FALSE,
                                 prep_tx_id |-> Null,
                                 version |-> Null,
                             
@@ -674,7 +674,7 @@ Init == (* Global variables *)
                             ]
         /\ secondary_db_record =                       [
                                      tx_id |-> Null,
-                                     deleted |-> Null,
+                                     deleted |-> FALSE,
                                      applied_tx_ids |-> <<>>
                                  ]
         /\ retry_of_enqueue = 0
@@ -819,7 +819,7 @@ BuildNextOperationByMergingOperationChain(self) == /\ pc[self] = "BuildNextOpera
                                                                    failed_to_write_to_secondary_db >>
 
 SetPrepTxIdOfReplDbRecord(self) == /\ pc[self] = "SetPrepTxIdOfReplDbRecord"
-                                   /\ IF repl_db_record["version"] = fetched_cur_record[self]["version"] /\ repl_db_record["prep_tx_id"] = fetched_cur_record[self]["prep_tx_id"]
+                                   /\ IF repl_db_record["tx_id"] = fetched_cur_record[self]["tx_id"] /\ repl_db_record["prep_tx_id"] = fetched_cur_record[self]["prep_tx_id"]
                                          THEN /\ repl_db_record' = [repl_db_record EXCEPT !["prep_tx_id"] = new_cur_record_info[self]["tx_id"]]
                                               /\ pc' = [pc EXCEPT ![self] = "WriteOpsToSecondaryDbRecord"]
                                          ELSE /\ pc' = [pc EXCEPT ![self] = "Repeat"]
