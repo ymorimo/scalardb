@@ -50,8 +50,8 @@ class RecordWriterThreadTest {
           .add(TextColumn.of("pk", "pk1"))
           .add(TextColumn.of("ck", "ck1"))
           .build();
-  private final Key pk = new Key(new Column<>("pk", "pk1"));
-  private final Key ck = new Key(new Column<>("ck", "ck1"));
+  private final Key pk = new Key(Collections.singletonList(new Column<>("pk", "pk1")));
+  private final Key ck = new Key(Collections.singletonList(new Column<>("ck", "ck1")));
   @Mock private ReplicationRecordRepository replRecordRepo;
   @Mock private DistributedStorage storage;
   @LazyInit private MetricsLogger metricsLogger;

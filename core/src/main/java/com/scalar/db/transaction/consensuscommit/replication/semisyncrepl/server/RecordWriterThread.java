@@ -1,6 +1,8 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Streams;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.scalar.db.api.ConditionBuilder;
@@ -87,6 +89,23 @@ public class RecordWriterThread implements Closeable {
         this.updatedColumns = updatedColumns;
         this.insertTxIds = insertTxIds;
         this.shouldHandleTheSameKey = shouldHandleTheSameKey;
+      }
+
+      public String toStringOnlyWithMetadata() {
+        return MoreObjects.toStringHelper(this)
+            .add("nextValue", nextValue.toStringOnlyWithMetadata())
+            .add("deleted", deleted)
+            .add(
+                "restValues",
+                "["
+                    + restValues.stream()
+                        .map(Value::toStringOnlyWithMetadata)
+                        .collect(Collectors.joining(","))
+                    + "]")
+            // .add("updatedColumns", updatedColumns)
+            .add("insertTxIds", insertTxIds)
+            .add("shouldHandleTheSameKey", shouldHandleTheSameKey)
+            .toString();
       }
     }
 
@@ -305,8 +324,14 @@ public class RecordWriterThread implements Closeable {
         if (result.isPresent() && result.get().getText("tx_id").equals(lastValue.txId)) {
           // The backup DB table is already updated.
         } else {
-          // TODO: Revisit which exception is better.
-          throw e;
+          throw new RuntimeException(
+              String.format(
+                  "Failed to update the secondary DB table. Record: %s, Next value: %s, Put operator: %s, Result: %s",
+                  record.toStringOnlyWithMetadata(),
+                  nextValue.toStringOnlyWithMetadata(),
+                  convPutOperationMetadataToString(putBuilder.build()),
+                  convOptResultMetadataToString(result)),
+              e);
         }
       }
 
@@ -324,12 +349,52 @@ public class RecordWriterThread implements Closeable {
             });
         return nextValue.shouldHandleTheSameKey;
       } catch (Exception e) {
-        String message =
+        throw new RuntimeException(
             String.format(
-                "Failed to update the values. key:%s, txId:%s, lastValue:%s",
-                key, record.currentTxId, lastValue);
-        throw new RuntimeException(message, e);
+                "Failed to update the replication DB `records` table. Record: %s, Next value: %s, Put operator: %s",
+                record.toStringOnlyWithMetadata(),
+                nextValue.toStringOnlyWithMetadata(),
+                convPutOperationMetadataToString(putBuilder.build())),
+            e);
       }
+    }
+
+    private String convPutOperationMetadataToString(Put put) {
+      return MoreObjects.toStringHelper(put)
+          .add("namespace", put.forNamespace())
+          .add("table", put.forTable())
+          .add("partitionKey", put.getPartitionKey())
+          .add("clusteringKey", put.getClusteringKey())
+          .add(
+              "columns",
+              ImmutableMap.builder()
+                  .put("tx_id", put.getColumns().get("tx_id"))
+                  .put("tx_version", put.getColumns().get("tx_version"))
+                  .put("tx_state", put.getColumns().get("tx_state"))
+                  .put("tx_prepared_at", put.getColumns().get("tx_prepared_at"))
+                  .put("tx_committed_at", put.getColumns().get("tx_committed_at"))
+                  .build())
+          .add("consistency", put.getConsistency())
+          .add("condition", put.getCondition())
+          .toString();
+    }
+
+    private String convOptResultMetadataToString(Optional<Result> optResult) {
+      return optResult.map(this::convResultMetadataToString).orElse("None");
+    }
+
+    private String convResultMetadataToString(Result result) {
+      return MoreObjects.toStringHelper(result)
+          .add(
+              "columns",
+              ImmutableMap.builder()
+                  .put("tx_id", result.getColumns().get("tx_id"))
+                  .put("tx_version", result.getColumns().get("tx_version"))
+                  .put("tx_state", result.getColumns().get("tx_state"))
+                  .put("tx_prepared_at", result.getColumns().get("tx_prepared_at"))
+                  .put("tx_committed_at", result.getColumns().get("tx_committed_at"))
+                  .build())
+          .toString();
     }
   }
 
