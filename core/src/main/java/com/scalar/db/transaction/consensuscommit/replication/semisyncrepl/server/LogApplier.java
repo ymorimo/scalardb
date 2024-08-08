@@ -5,9 +5,9 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.scalar.db.io.Key;
 import com.scalar.db.service.StorageFactory;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.CoordinatorStateRepository;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationRecordRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationTransactionRepository;
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server.DistributorThread.Configuration;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -31,8 +31,6 @@ public class LogApplier {
       "LOG_APPLIER_TRANSACTION_WAIT_MILLIS_PER_PARTITION";
   private static final String ENV_VAR_THRESHOLD_MILLIS_FOR_OLD_TRANSACTION =
       "LOG_APPLIER_THRESHOLD_MILLIS_FOR_OLD_TRANSACTION";
-  private static final String ENV_VAR_EXTRA_WAIT_MILLIS_FOR_OLD_TRANSACTION =
-      "LOG_APPLIER_EXTRA_WAIT_MILLIS_FOR_OLD_TRANSACTION";
 
   private static final int REPLICATION_DB_PARTITION_SIZE = 256;
 
@@ -85,17 +83,18 @@ public class LogApplier {
           Integer.parseInt(System.getenv(ENV_VAR_THRESHOLD_MILLIS_FOR_OLD_TRANSACTION));
     }
 
-    int extraWaitMillisForOldTransaction = 2000;
-    if (System.getenv(ENV_VAR_EXTRA_WAIT_MILLIS_FOR_OLD_TRANSACTION) != null) {
-      extraWaitMillisForOldTransaction =
-          Integer.parseInt(System.getenv(ENV_VAR_EXTRA_WAIT_MILLIS_FOR_OLD_TRANSACTION));
-    }
-
     ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     CoordinatorStateRepository coordinatorStateRepository =
         new CoordinatorStateRepository(
             StorageFactory.create(coordinatorStateConfigPath).getStorage(), "coordinator", "state");
+
+    ReplicationRecordRepository replicationRecordRepository =
+        new ReplicationRecordRepository(
+            StorageFactory.create(replicationDbConfigPath).getStorage(),
+            objectMapper,
+            "replication",
+            "records");
 
     ReplicationTransactionRepository replicationTransactionRepository =
         new ReplicationTransactionRepository(
@@ -104,12 +103,12 @@ public class LogApplier {
             "replication",
             "transactions");
 
-    ReplicationRecordRepository replicationRecordRepository =
-        new ReplicationRecordRepository(
+    ReplicationBulkTransactionRepository replicationBulkTransactionRepository =
+        new ReplicationBulkTransactionRepository(
             StorageFactory.create(replicationDbConfigPath).getStorage(),
             objectMapper,
             "replication",
-            "records");
+            "bulk_transactions");
 
     BlockingQueue<Key> recordWriterQueue = new LinkedBlockingQueue<>();
     MetricsLogger metricsLogger = new MetricsLogger(recordWriterQueue);
@@ -121,34 +120,45 @@ public class LogApplier {
     }
     RecordWriterThread recordWriter =
         new RecordWriterThread(
-                numOfRecordWriterThreads,
-                replicationRecordRepository,
-                StorageFactory.create(backupScalarDbProps).getStorage(),
-                recordWriterQueue,
-                metricsLogger)
-            .run();
+            numOfRecordWriterThreads,
+            replicationRecordRepository,
+            StorageFactory.create(backupScalarDbProps).getStorage(),
+            recordWriterQueue,
+            metricsLogger);
+    recordWriter.run();
 
-    DistributorThread distributorThread =
-        new DistributorThread(
-                new Configuration(
-                    REPLICATION_DB_PARTITION_SIZE,
-                    numOfDistributorThreads,
-                    transactionFetchSize,
-                    waitMillisPerPartition,
-                    thresholdMillisForOldTransaction,
-                    extraWaitMillisForOldTransaction),
-                coordinatorStateRepository,
-                replicationTransactionRepository,
-                replicationRecordRepository,
-                recordWriterQueue,
-                metricsLogger)
-            .run();
+    BulkTransactionHandlerWorker bulkTransactionHandlerWorker =
+        new BulkTransactionHandlerWorker(
+            new BulkTransactionHandlerWorker.Configuration(
+                REPLICATION_DB_PARTITION_SIZE,
+                numOfDistributorThreads,
+                waitMillisPerPartition,
+                transactionFetchSize),
+            replicationBulkTransactionRepository,
+            replicationTransactionRepository,
+            metricsLogger);
+    bulkTransactionHandlerWorker.run();
+
+    TransactionHandlerWorker transactionHandlerWorker =
+        new TransactionHandlerWorker(
+            new TransactionHandlerWorker.Configuration(
+                REPLICATION_DB_PARTITION_SIZE,
+                numOfDistributorThreads,
+                waitMillisPerPartition,
+                transactionFetchSize,
+                thresholdMillisForOldTransaction),
+            coordinatorStateRepository,
+            replicationTransactionRepository,
+            replicationRecordRepository,
+            recordWriterQueue,
+            metricsLogger);
+    transactionHandlerWorker.run();
 
     Runtime.getRuntime()
         .addShutdownHook(
             new Thread(
                 () -> {
-                  distributorThread.close();
+                  bulkTransactionHandlerWorker.close();
                   recordWriter.close();
                 }));
   }

@@ -24,6 +24,7 @@ import com.scalar.db.transaction.consensuscommit.ParallelExecutor.ParallelExecut
 import com.scalar.db.transaction.consensuscommit.replication.WriteSetHandler;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.client.DefaultWriteSetHandler;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.client.PrepareMutationComposerForReplication;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationTransactionRepository;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.IOException;
@@ -53,6 +54,7 @@ public class CommitHandler {
       return Optional.empty();
     }
     ReplicationTransactionRepository replicationTransactionRepository;
+    ReplicationBulkTransactionRepository replicationBulkTransactionRepository;
     try {
       replicationTransactionRepository =
           new ReplicationTransactionRepository(
@@ -60,12 +62,21 @@ public class CommitHandler {
               objectMapper,
               "replication",
               "transactions");
+      replicationBulkTransactionRepository =
+          new ReplicationBulkTransactionRepository(
+              StorageFactory.create(replicationDbConfigPath).getStorage(),
+              objectMapper,
+              "replication",
+              "bulk_transactions");
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
 
     return Optional.of(
-        new DefaultWriteSetHandler(tableMetadataManager, replicationTransactionRepository));
+        new DefaultWriteSetHandler(
+            tableMetadataManager,
+            replicationTransactionRepository,
+            replicationBulkTransactionRepository));
   }
 
   @SuppressFBWarnings("EI_EXPOSE_REP2")

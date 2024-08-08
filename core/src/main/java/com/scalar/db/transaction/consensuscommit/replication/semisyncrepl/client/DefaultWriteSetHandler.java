@@ -17,6 +17,7 @@ import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Transaction;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.UpdatedTuple;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.WrittenTuple;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationTransactionRepository;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -61,7 +62,8 @@ public class DefaultWriteSetHandler implements WriteSetHandler {
 
   public DefaultWriteSetHandler(
       TransactionTableMetadataManager tableMetadataManager,
-      ReplicationTransactionRepository replicationTransactionRepository) {
+      ReplicationTransactionRepository replicationTransactionRepository,
+      ReplicationBulkTransactionRepository replicationBulkTransactionRepository) {
     this.tableMetadataManager = tableMetadataManager;
     this.replicationTransactionRepository = replicationTransactionRepository;
 
@@ -98,7 +100,7 @@ public class DefaultWriteSetHandler implements WriteSetHandler {
       Consumer<List<Transaction>> emitter =
           transactions -> {
             try {
-              replicationTransactionRepository.bulkAdd(transactions);
+              replicationBulkTransactionRepository.add(transactions);
             } catch (ExecutionException e) {
               // TODO: Revisit what information is needed in this log message
               throw new RuntimeException("Failed to send transactions", e);
