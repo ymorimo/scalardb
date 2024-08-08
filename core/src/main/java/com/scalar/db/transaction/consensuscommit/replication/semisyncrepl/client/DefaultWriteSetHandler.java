@@ -52,7 +52,7 @@ public class DefaultWriteSetHandler implements WriteSetHandler {
       Executors.newCachedThreadPool(
           new ThreadFactoryBuilder().setNameFormat("log-recorder-%d").setDaemon(true).build());
   private final ReplicationTransactionRepository replicationTransactionRepository;
-  @Nullable private final ReplicationGroupCommitter<Integer, Transaction> groupCommitter;
+  @Nullable private final ReplicationGroupCommitter<Transaction> groupCommitter;
 
   private String defaultNamespace;
 
@@ -219,16 +219,13 @@ public class DefaultWriteSetHandler implements WriteSetHandler {
       }
     }
 
-    int candidatePartitionId =
-        Math.abs(composer.transactionId().hashCode()) % REPLICATION_DB_PARTITION_SIZE;
+    int partitionId = Math.abs(composer.transactionId().hashCode()) % REPLICATION_DB_PARTITION_SIZE;
     Instant now = Instant.now();
 
     if (groupCommitter != null) {
       try {
         groupCommitter.addValue(
-            candidatePartitionId,
-            partitionId ->
-                new Transaction(partitionId, now, now, composer.transactionId(), writtenTuples));
+            new Transaction(partitionId, now, now, composer.transactionId(), writtenTuples));
       } catch (ReplicationGroupCommitException e) {
         throw new RuntimeException(
             "Group commit failed. transactionId:" + composer.transactionId(), e);
@@ -236,7 +233,7 @@ public class DefaultWriteSetHandler implements WriteSetHandler {
     } else {
       logger.info("Add start(thread_id:{})", Thread.currentThread().getId());
       replicationTransactionRepository.add(
-          new Transaction(candidatePartitionId, now, now, composer.transactionId(), writtenTuples));
+          new Transaction(partitionId, now, now, composer.transactionId(), writtenTuples));
       logger.info(
           "Add end(thread_id:{}): {} ms",
           Thread.currentThread().getId(),

@@ -1,6 +1,5 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.client;
 
-import com.google.common.base.MoreObjects;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.util.ArrayList;
 import java.util.List;
@@ -14,15 +13,15 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ReplicationGroupCommitter<K, V> {
+public class ReplicationGroupCommitter<V> {
   private static final Logger logger = LoggerFactory.getLogger(ReplicationGroupCommitter.class);
-  private final BlockingQueue<Itemable<K, V>> queue = new LinkedBlockingQueue<>();
-  private final AtomicReference<FetchedValues<K, V>> currentFetchedItems = new AtomicReference<>();
+  private final BlockingQueue<Itemable<V>> queue = new LinkedBlockingQueue<>();
+  private final AtomicReference<BufferedValueItems<V>> currentFetchedItems =
+      new AtomicReference<>();
   private final long retentionTimeInMillis;
   private final int numberOfRetentionValues;
   private final long expirationCheckIntervalInMillis;
@@ -31,45 +30,26 @@ public class ReplicationGroupCommitter<K, V> {
   private final ScheduledExecutorService expirationCheckExecutorService;
   private final Consumer<List<V>> emitter;
 
-  private interface Itemable<K, V> {}
+  private interface Itemable<V> {}
 
-  static class Item<K, V> implements Itemable<K, V> {
-    public final K keyCandidate;
-    public final Function<K, V> valueGenerator;
-    public final CompletableFuture<Void> future;
-
-    public Item(K keyCandidate, Function<K, V> valueGenerator, CompletableFuture<Void> future) {
-      this.keyCandidate = keyCandidate;
-      this.valueGenerator = valueGenerator;
-      this.future = future;
-    }
-  }
-
-  static class WakeupItem<K, V> implements Itemable<K, V> {}
-
-  static class ValueAndFuture<V> {
+  static class ValueItem<V> implements Itemable<V> {
     public final V value;
     public final CompletableFuture<Void> future;
 
-    public ValueAndFuture(V value, CompletableFuture<Void> future) {
+    public ValueItem(V value, CompletableFuture<Void> future) {
       this.value = value;
       this.future = future;
     }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this).add("value", value).add("future", future).toString();
-    }
   }
 
+  static class WakeupItem<V> implements Itemable<V> {}
+
   // TODO: Rename to BufferedValues?
-  static class FetchedValues<K, V> {
-    public final K key;
-    public final List<ValueAndFuture<V>> values = new ArrayList<>();
+  static class BufferedValueItems<V> {
+    public final List<ValueItem<V>> values = new ArrayList<>();
     public final Long createdAtInMilli;
 
-    public FetchedValues(K key, Long createdAtInMilli) {
-      this.key = key;
+    public BufferedValueItems(Long createdAtInMilli) {
       this.createdAtInMilli = createdAtInMilli;
     }
   }
@@ -113,9 +93,10 @@ public class ReplicationGroupCommitter<K, V> {
     startExpirationCheckExecutorService();
   }
 
-  private void emitFetchedItemsIfNeeded(FetchedValues<K, V> fetchedValues) {
-    if (fetchedValues.values.size() >= numberOfRetentionValues
-        || fetchedValues.createdAtInMilli + retentionTimeInMillis < System.currentTimeMillis()) {
+  private void emitFetchedItemsIfNeeded(BufferedValueItems<V> bufferedValueItems) {
+    if (bufferedValueItems.values.size() >= numberOfRetentionValues
+        || bufferedValueItems.createdAtInMilli + retentionTimeInMillis
+            < System.currentTimeMillis()) {
       currentFetchedItems.set(null);
       emitExecutorService.submit(
           () -> {
@@ -123,60 +104,46 @@ public class ReplicationGroupCommitter<K, V> {
               logger.info(
                   "Emitting (thread_id:{}, num_of_values:{})",
                   Thread.currentThread().getId(),
-                  fetchedValues.values.size());
+                  bufferedValueItems.values.size());
               emitter.accept(
-                  fetchedValues.values.stream().map(vf -> vf.value).collect(Collectors.toList()));
+                  bufferedValueItems.values.stream()
+                      .map(vf -> vf.value)
+                      .collect(Collectors.toList()));
               logger.info(
                   "Emitted (thread_id:{}, num_of_values:{})",
                   Thread.currentThread().getId(),
-                  fetchedValues.values.size());
-              fetchedValues.values.forEach(vf -> vf.future.complete(null));
+                  bufferedValueItems.values.size());
+              bufferedValueItems.values.forEach(vf -> vf.future.complete(null));
               logger.info(
                   "Notified (thread_id:{}, num_of_values:{})",
                   Thread.currentThread().getId(),
-                  fetchedValues.values.size());
+                  bufferedValueItems.values.size());
             } catch (Throwable e) {
-              fetchedValues.values.forEach(vf -> vf.future.completeExceptionally(e));
+              bufferedValueItems.values.forEach(vf -> vf.future.completeExceptionally(e));
             }
           });
     }
   }
 
-  private void handleItem(Itemable<K, V> itemable) {
-    if (itemable instanceof Item) {
-      Item<K, V> item = (Item<K, V>) itemable;
-      FetchedValues<K, V> fetchedValues =
+  private void handleItem(Itemable<V> itemable) {
+    if (itemable instanceof ValueItem) {
+      ValueItem<V> item = (ValueItem<V>) itemable;
+      BufferedValueItems<V> bufferedValueItems =
           currentFetchedItems.updateAndGet(
               current -> {
                 if (current == null) {
-                  return new FetchedValues<>(item.keyCandidate, System.currentTimeMillis());
+                  return new BufferedValueItems<>(System.currentTimeMillis());
                 }
                 return current;
               });
       // All values in a queue need to use the same unique key for partition key.
-      V value;
-      try {
-        value = item.valueGenerator.apply(fetchedValues.key);
-      } catch (Throwable e) {
-        logger.error("Failed to prepare an item for group commit. item: {}", item, e);
-        item.future.completeExceptionally(e);
-        List<ValueAndFuture<V>> values = currentFetchedItems.getAndSet(null).values;
-        if (!values.isEmpty()) {
-          ReplicationGroupCommitCascadeException gcce =
-              new ReplicationGroupCommitCascadeException(
-                  "One of the fetched items failed in group commit. The other items have the same key associated with the failure. All the items will fail",
-                  e);
-          fetchedValues.values.forEach(vf -> vf.future.completeExceptionally(gcce));
-        }
-        return;
-      }
-      fetchedValues.values.add(new ValueAndFuture<>(value, item.future));
-      emitFetchedItemsIfNeeded(fetchedValues);
+      bufferedValueItems.values.add(item);
+      emitFetchedItemsIfNeeded(bufferedValueItems);
     } else if (itemable instanceof WakeupItem) {
-      FetchedValues<K, V> fetchedValues = currentFetchedItems.get();
-      if (fetchedValues != null) {
+      BufferedValueItems<V> bufferedValueItems = currentFetchedItems.get();
+      if (bufferedValueItems != null) {
         // FIXME: Wrap an exception
-        emitFetchedItemsIfNeeded(fetchedValues);
+        emitFetchedItemsIfNeeded(bufferedValueItems);
       }
     } else {
       logger.error("Fetched an unexpected item. Skipping " + itemable);
@@ -206,10 +173,9 @@ public class ReplicationGroupCommitter<K, V> {
         TimeUnit.MILLISECONDS);
   }
 
-  public void addValue(K keyCandidate, Function<K, V> valueGeneratorFromUniqueKey)
-      throws ReplicationGroupCommitException, ReplicationGroupCommitCascadeException {
+  public void addValue(V value) throws ReplicationGroupCommitException {
     CompletableFuture<Void> future = new CompletableFuture<>();
-    queue.add(new Item<>(keyCandidate, valueGeneratorFromUniqueKey, future));
+    queue.add(new ValueItem<>(value, future));
     try {
       long start = System.currentTimeMillis();
       logger.info("Wait start(thread_id:{})", Thread.currentThread().getId());
@@ -232,10 +198,11 @@ public class ReplicationGroupCommitter<K, V> {
   }
 
   void emitIfExpired() {
-    FetchedValues<K, V> fetchedValues = currentFetchedItems.get();
-    if (fetchedValues != null
-        && !fetchedValues.values.isEmpty()
-        && fetchedValues.createdAtInMilli + retentionTimeInMillis < System.currentTimeMillis()) {
+    BufferedValueItems<V> bufferedValueItems = currentFetchedItems.get();
+    if (bufferedValueItems != null
+        && !bufferedValueItems.values.isEmpty()
+        && bufferedValueItems.createdAtInMilli + retentionTimeInMillis
+            < System.currentTimeMillis()) {
       queue.add(new WakeupItem<>());
     }
   }
