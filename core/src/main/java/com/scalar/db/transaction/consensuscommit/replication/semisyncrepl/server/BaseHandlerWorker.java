@@ -1,7 +1,6 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.scalar.db.exception.storage.ExecutionException;
 import java.io.Closeable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -51,7 +50,7 @@ public abstract class BaseHandlerWorker implements Closeable {
     this.metricsLogger = metricsLogger;
   }
 
-  protected abstract boolean handle(int partitionId) throws ExecutionException;
+  protected abstract boolean handle(int partitionId) throws Exception;
 
   public void run() {
     for (int i = 0; i < conf.threadSize; i++) {

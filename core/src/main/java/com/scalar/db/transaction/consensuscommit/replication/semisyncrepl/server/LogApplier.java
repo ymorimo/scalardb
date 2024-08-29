@@ -2,7 +2,7 @@ package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.serve
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.scalar.db.io.Key;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.scalar.db.service.StorageFactory;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.CoordinatorStateRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository;
@@ -14,10 +14,14 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.Properties;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class LogApplier {
+  private static final Logger logger = LoggerFactory.getLogger(LogApplier.class);
+
   private static final String ENV_VAR_BACKUP_SCALARDB_CONFIG = "LOG_APPLIER_BACKUP_SCALARDB_CONFIG";
   private static final String ENV_VAR_REPLICATION_CONFIG = "LOG_APPLIER_REPLICATION_CONFIG";
   private static final String ENV_VAR_COORDINATOR_STATE_CONFIG =
@@ -110,22 +114,29 @@ public class LogApplier {
             "replication",
             "bulk_transactions");
 
-    BlockingQueue<Key> recordWriterQueue = new LinkedBlockingQueue<>();
-    MetricsLogger metricsLogger = new MetricsLogger(recordWriterQueue);
-
     Properties backupScalarDbProps = new Properties();
     try (InputStream in =
         Files.newInputStream(Paths.get(backupScalarDbConfigPath), StandardOpenOption.READ)) {
       backupScalarDbProps.load(in);
     }
-    RecordWriterThread recordWriter =
-        new RecordWriterThread(
+
+    ExecutorService executorServiceForRecordHandlers =
+        Executors.newFixedThreadPool(
             numOfRecordWriterThreads,
+            new ThreadFactoryBuilder()
+                .setDaemon(true)
+                .setNameFormat("record-handler-%d")
+                .setUncaughtExceptionHandler(
+                    (thread, e) -> logger.error("Got an uncaught exception. thread:{}", thread, e))
+                .build());
+
+    MetricsLogger metricsLogger = new MetricsLogger(executorServiceForRecordHandlers);
+
+    RecordHandler recordHandler =
+        new RecordHandler(
             replicationRecordRepository,
             StorageFactory.create(backupScalarDbProps).getStorage(),
-            recordWriterQueue,
             metricsLogger);
-    recordWriter.run();
 
     BulkTransactionHandlerWorker bulkTransactionHandlerWorker =
         new BulkTransactionHandlerWorker(
@@ -150,7 +161,8 @@ public class LogApplier {
             coordinatorStateRepository,
             replicationTransactionRepository,
             replicationRecordRepository,
-            recordWriterQueue,
+            recordHandler,
+            executorServiceForRecordHandlers,
             metricsLogger);
     transactionHandlerWorker.run();
 
@@ -159,7 +171,6 @@ public class LogApplier {
             new Thread(
                 () -> {
                   bulkTransactionHandlerWorker.close();
-                  recordWriter.close();
                 }));
   }
 }

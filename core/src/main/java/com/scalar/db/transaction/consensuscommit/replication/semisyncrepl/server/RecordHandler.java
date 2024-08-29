@@ -98,19 +98,6 @@ class RecordHandler {
     }
   }
 
-  static class ResultOfKeyHandling {
-    final Long currentRecordVersion;
-    final boolean remainingValueExists;
-    final boolean nextConnectedValueExists;
-
-    ResultOfKeyHandling(
-        Long currentRecordVersion, boolean remainingValueExists, boolean nextConnectedValueExists) {
-      this.currentRecordVersion = currentRecordVersion;
-      this.remainingValueExists = remainingValueExists;
-      this.nextConnectedValueExists = nextConnectedValueExists;
-    }
-  }
-
   @VisibleForTesting
   @Nullable
   NextValue findNextValue(Key key, Record record) {
@@ -347,18 +334,23 @@ class RecordHandler {
     }
 
     try {
-      long newVersion =
-          metricsLogger.execUpdateRecord(
-              () ->
-                  replicationRecordRepository.updateWithValues(
-                      key,
-                      record,
-                      lastValue.txId,
-                      nextValue.deleted,
-                      nextValue.restValues,
-                      nextValue.insertTxIds));
+      //      long newVersion =
+      metricsLogger.execUpdateRecord(
+          () -> {
+            replicationRecordRepository.updateWithValues(
+                key,
+                record,
+                lastValue.txId,
+                nextValue.deleted,
+                nextValue.restValues,
+                nextValue.insertTxIds);
+            return null;
+          });
       return new ResultOfKeyHandling(
-          newVersion, !nextValue.restValues.isEmpty(), nextValue.shouldHandleTheSameKey);
+          // TODO
+          //          newVersion, !nextValue.restValues.isEmpty(),
+          // nextValue.shouldHandleTheSameKey);
+          0L, !nextValue.restValues.isEmpty(), nextValue.shouldHandleTheSameKey);
     } catch (Exception e) {
       throw new RuntimeException(
           String.format(
@@ -370,21 +362,16 @@ class RecordHandler {
     }
   }
 
-  /** @return true if handling the key has finished, false otherwise. */
-  boolean handleKey(Key key) throws ExecutionException {
-    ResultOfKeyHandling result = handleKey(key, true);
+  static class ResultOfKeyHandling {
+    //    final Long currentRecordVersion;
+    final boolean remainingValueExists;
+    final boolean nextConnectedValueExists;
 
-    if (result.currentRecordVersion == null) {
-      // The record doesn't exist yet. It's possible that only the notification was handled before
-      // writing the record. Therefore, a retry is needed. The notification should be reused and
-      // kept.
-      return false;
-    } else if (result.nextConnectedValueExists) {
-      // There are connected values to be handled immediately. The notification should be reused and
-      // kept.
-      return false;
+    ResultOfKeyHandling(
+        Long currentRecordVersion, boolean remainingValueExists, boolean nextConnectedValueExists) {
+      //      this.currentRecordVersion = currentRecordVersion;
+      this.remainingValueExists = remainingValueExists;
+      this.nextConnectedValueExists = nextConnectedValueExists;
     }
-
-    return true;
   }
 }
