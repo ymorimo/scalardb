@@ -72,7 +72,8 @@ public class RecordWriterThread implements Closeable {
       public final Value nextValue;
       public final boolean deleted;
       public final Set<Value> restValues;
-      public final Collection<Column<?>> updatedColumns;
+      //      public final Collection<Column<?>> updatedColumns;
+      public final Map<String, Column<?>> updatedColumns;
       public final Collection<String> insertTxIds;
       public final boolean shouldHandleTheSameKey;
 
@@ -80,7 +81,8 @@ public class RecordWriterThread implements Closeable {
           Value nextValue,
           boolean deleted,
           Set<Value> restValues,
-          Collection<Column<?>> updatedColumns,
+          //          Collection<Column<?>> updatedColumns,
+          Map<String, Column<?>> updatedColumns,
           Collection<String> insertTxIds,
           boolean shouldHandleTheSameKey) {
         this.nextValue = nextValue;
@@ -140,7 +142,9 @@ public class RecordWriterThread implements Closeable {
       boolean suspendFollowingOperation = false;
       Value lastValue = null;
       boolean deleted = record.deleted;
-      Set<Column<?>> updatedColumns = new HashSet<>();
+      // Set<Column<?>> can not be used since it uses `value` in `equals()` and `hashcode()`.
+      //      Set<Column<?>> updatedColumns = new HashSet<>();
+      Map<String, Column<?>> updatedColumns = new HashMap<>();
       Set<String> insertTxIds = new HashSet<>();
       @Nullable String currentTxId = record.currentTxId;
       while (!suspendFollowingOperation) {
@@ -186,14 +190,17 @@ public class RecordWriterThread implements Closeable {
                 key);
             continue;
           }
-          updatedColumns.addAll(value.columns);
+          for (Column<?> column : value.columns) {
+            updatedColumns.put(column.name, column);
+          }
           insertTxIds.add(value.txId);
           // TODO: [Optimization] Should check the rest of the values.
           suspendFollowingOperation = true;
           deleted = false;
         } else if (value.type.equals("update")) {
-          updatedColumns.removeAll(value.columns);
-          updatedColumns.addAll(value.columns);
+          for (Column<?> column : value.columns) {
+            updatedColumns.put(column.name, column);
+          }
           deleted = false;
         } else if (value.type.equals("delete")) {
           updatedColumns.clear();
@@ -300,7 +307,7 @@ public class RecordWriterThread implements Closeable {
         }
       } else {
         putBuilder.intValue("tx_state", TransactionState.COMMITTED.get());
-        for (Column<?> column : nextValue.updatedColumns) {
+        for (Column<?> column : nextValue.updatedColumns.values()) {
           putBuilder.value(Column.toScalarDbColumn(column));
         }
       }
