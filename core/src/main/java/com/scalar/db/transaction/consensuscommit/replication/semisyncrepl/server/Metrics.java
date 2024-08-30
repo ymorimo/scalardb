@@ -2,6 +2,8 @@ package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.serve
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Transaction;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -24,9 +26,12 @@ class Metrics {
   public final AtomicInteger totalCountToUpdateRecord = new AtomicInteger();
   public final AtomicInteger exceptionCountInDistributor = new AtomicInteger();
 
+  private final BlockingQueue<Transaction> transactionQueue;
   private final ExecutorService recordHandlerExecutorService;
 
-  public Metrics(ExecutorService recordHandlerExecutorService) {
+  public Metrics(
+      BlockingQueue<Transaction> transactionQueue, ExecutorService recordHandlerExecutorService) {
+    this.transactionQueue = transactionQueue;
     this.recordHandlerExecutorService = recordHandlerExecutorService;
   }
 
@@ -95,6 +100,7 @@ class Metrics {
         totalDurationInMillisToUpdateRecord.get());
 
     return stringHelper
+        .add("transactionQueue.size", transactionQueue.size())
         .add("recordWriterExecutorService", recordHandlerExecutorService)
         .add("exceptionsInDistributor", exceptionCountInDistributor)
         .toString();

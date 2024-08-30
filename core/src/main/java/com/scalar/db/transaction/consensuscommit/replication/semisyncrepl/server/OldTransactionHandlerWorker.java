@@ -28,10 +28,10 @@ import org.apache.commons.lang3.function.FailableRunnable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class TransactionHandlerWorker extends BaseHandlerWorker {
-  private static final Logger logger = LoggerFactory.getLogger(TransactionHandlerWorker.class);
+public class OldTransactionHandlerWorker extends BaseHandlerWorker {
+  private static final Logger logger = LoggerFactory.getLogger(OldTransactionHandlerWorker.class);
 
-  private final TransactionHandlerWorker.Configuration conf;
+  private final OldTransactionHandlerWorker.Configuration conf;
   private final ReplicationRecordRepository replicationRecordRepository;
   private final ReplicationTransactionRepository replicationTransactionRepository;
   private final CoordinatorStateRepository coordinatorStateRepository;
@@ -56,7 +56,7 @@ public class TransactionHandlerWorker extends BaseHandlerWorker {
     }
   }
 
-  public TransactionHandlerWorker(
+  public OldTransactionHandlerWorker(
       Configuration conf,
       CoordinatorStateRepository coordinatorStateRepository,
       ReplicationTransactionRepository replicationTransactionRepository,

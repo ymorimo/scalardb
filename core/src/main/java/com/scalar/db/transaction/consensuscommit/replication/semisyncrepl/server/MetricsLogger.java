@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
@@ -17,11 +18,14 @@ public class MetricsLogger {
   private final Map<Instant, Metrics> metricsMap = new ConcurrentHashMap<>();
   private final AtomicReference<Instant> keyHolder = new AtomicReference<>();
   private final ExecutorService recordHandlerExecutorService;
+  private final BlockingQueue transactionQueue;
 
-  public MetricsLogger(ExecutorService recordHandlerExecutorService) {
+  public MetricsLogger(
+      BlockingQueue<Transaction> transactionQueue, ExecutorService recordHandlerExecutorService) {
     String metricsEnabled = System.getenv("LOG_APPLIER_METRICS_ENABLED");
     this.isEnabled = metricsEnabled != null && metricsEnabled.equalsIgnoreCase("true");
     this.recordHandlerExecutorService = recordHandlerExecutorService;
+    this.transactionQueue = transactionQueue;
   }
 
   private Instant currentTimestampRoundedInSeconds() {
@@ -32,7 +36,8 @@ public class MetricsLogger {
     Instant currentKey = currentTimestampRoundedInSeconds();
     Instant oldKey = keyHolder.getAndSet(currentKey);
     Metrics metrics =
-        metricsMap.computeIfAbsent(currentKey, k -> new Metrics(recordHandlerExecutorService));
+        metricsMap.computeIfAbsent(
+            currentKey, k -> new Metrics(transactionQueue, recordHandlerExecutorService));
     consumer.accept(metrics);
     if (oldKey == null) {
       return;

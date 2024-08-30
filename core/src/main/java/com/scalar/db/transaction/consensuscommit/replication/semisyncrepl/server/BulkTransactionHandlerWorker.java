@@ -6,6 +6,7 @@ import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationTransactionRepository;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
 import javax.annotation.concurrent.Immutable;
 
 public class BulkTransactionHandlerWorker extends BaseHandlerWorker {
@@ -13,6 +14,7 @@ public class BulkTransactionHandlerWorker extends BaseHandlerWorker {
   private final ReplicationBulkTransactionRepository replicationBulkTransactionRepository;
   private final ReplicationTransactionRepository replicationTransactionRepository;
   private final MetricsLogger metricsLogger;
+  private final BlockingQueue<Transaction> transactionQueue;
 
   @Immutable
   public static class Configuration extends BaseHandlerWorker.Configuration {
@@ -29,17 +31,20 @@ public class BulkTransactionHandlerWorker extends BaseHandlerWorker {
       Configuration conf,
       ReplicationBulkTransactionRepository replicationBulkTransactionRepository,
       ReplicationTransactionRepository replicationTransactionRepository,
+      BlockingQueue<Transaction> transactionQueue,
       MetricsLogger metricsLogger) {
     super(conf, "bulk-tx", metricsLogger);
     this.conf = conf;
     this.replicationBulkTransactionRepository = replicationBulkTransactionRepository;
     this.replicationTransactionRepository = replicationTransactionRepository;
+    this.transactionQueue = transactionQueue;
     this.metricsLogger = metricsLogger;
   }
 
   private void moveTransaction(Transaction transaction) throws ExecutionException {
     metricsLogger.incrementScannedTransactions();
     replicationTransactionRepository.add(transaction);
+    transactionQueue.add(transaction);
     metricsLogger.incrementHandledCommittedTransactions();
   }
 

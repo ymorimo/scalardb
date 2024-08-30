@@ -4,18 +4,22 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.scalar.db.service.StorageFactory;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Transaction;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.CoordinatorStateRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationRecordRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationTransactionRepository;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server.TransactionQueueConsumer.Configuration;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.Properties;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -130,12 +134,26 @@ public class LogApplier {
                     (thread, e) -> logger.error("Got an uncaught exception. thread:{}", thread, e))
                 .build());
 
-    MetricsLogger metricsLogger = new MetricsLogger(executorServiceForRecordHandlers);
+    BlockingQueue<Transaction> transactionQueue = new LinkedBlockingQueue<>();
+
+    MetricsLogger metricsLogger =
+        new MetricsLogger(transactionQueue, executorServiceForRecordHandlers);
 
     RecordHandler recordHandler =
         new RecordHandler(
             replicationRecordRepository,
             StorageFactory.create(backupScalarDbProps).getStorage(),
+            metricsLogger);
+
+    TransactionHandler transactionHandler =
+        new TransactionHandler(
+            REPLICATION_DB_PARTITION_SIZE,
+            thresholdMillisForOldTransaction,
+            replicationTransactionRepository,
+            replicationRecordRepository,
+            coordinatorStateRepository,
+            recordHandler,
+            executorServiceForRecordHandlers,
             metricsLogger);
 
     BulkTransactionHandlerWorker bulkTransactionHandlerWorker =
@@ -147,12 +165,14 @@ public class LogApplier {
                 transactionFetchSize),
             replicationBulkTransactionRepository,
             replicationTransactionRepository,
+            transactionQueue,
             metricsLogger);
     bulkTransactionHandlerWorker.run();
 
-    TransactionHandlerWorker transactionHandlerWorker =
-        new TransactionHandlerWorker(
-            new TransactionHandlerWorker.Configuration(
+    /*
+    OldTransactionHandlerWorker transactionHandlerWorker =
+        new OldTransactionHandlerWorker(
+            new OldTransactionHandlerWorker.Configuration(
                 REPLICATION_DB_PARTITION_SIZE,
                 numOfDistributorThreads,
                 waitMillisPerPartition,
@@ -165,6 +185,13 @@ public class LogApplier {
             executorServiceForRecordHandlers,
             metricsLogger);
     transactionHandlerWorker.run();
+     */
+    new TransactionQueueConsumer(
+            new Configuration(numOfRecordWriterThreads, waitMillisPerPartition),
+            transactionHandler,
+            transactionQueue,
+            metricsLogger)
+        .run();
 
     Runtime.getRuntime()
         .addShutdownHook(
