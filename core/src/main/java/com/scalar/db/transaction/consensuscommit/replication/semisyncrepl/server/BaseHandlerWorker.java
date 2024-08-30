@@ -1,7 +1,6 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import java.io.Closeable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -9,7 +8,7 @@ import javax.annotation.concurrent.Immutable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public abstract class BaseHandlerWorker implements Closeable {
+public abstract class BaseHandlerWorker {
   private static final Logger logger = LoggerFactory.getLogger(BaseHandlerWorker.class);
 
   private final ExecutorService executorService;
@@ -43,6 +42,7 @@ public abstract class BaseHandlerWorker implements Closeable {
         Executors.newFixedThreadPool(
             conf.threadSize,
             new ThreadFactoryBuilder()
+                .setDaemon(true)
                 .setNameFormat(String.format("log-distributor-%s", label) + "-%d")
                 .setUncaughtExceptionHandler(
                     (thread, e) -> logger.error("Got an uncaught exception. thread:{}", thread, e))
@@ -118,21 +118,6 @@ public abstract class BaseHandlerWorker implements Closeable {
               }
             }
           });
-    }
-  }
-
-  @Override
-  public void close() {
-    executorService.shutdown();
-
-    // TODO: Make this configurable
-    try {
-      if (!executorService.awaitTermination(10, TimeUnit.SECONDS)) {
-        executorService.shutdownNow();
-      }
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      logger.warn("Interrupted", e);
     }
   }
 }

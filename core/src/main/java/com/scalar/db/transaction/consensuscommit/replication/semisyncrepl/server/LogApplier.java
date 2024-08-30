@@ -3,6 +3,7 @@ package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.serve
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.google.common.util.concurrent.Uninterruptibles;
 import com.scalar.db.service.StorageFactory;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Transaction;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.CoordinatorStateRepository;
@@ -15,6 +16,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.time.Duration;
 import java.util.Properties;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -30,10 +32,16 @@ public class LogApplier {
   private static final String ENV_VAR_REPLICATION_CONFIG = "LOG_APPLIER_REPLICATION_CONFIG";
   private static final String ENV_VAR_COORDINATOR_STATE_CONFIG =
       "LOG_APPLIER_COORDINATOR_STATE_CONFIG";
-  private static final String ENV_VAR_NUM_OF_DISTRIBUTOR_THREADS =
-      "LOG_APPLIER_NUM_OF_DISTRIBUTOR_THREADS";
-  private static final String ENV_VAR_NUM_OF_RECORD_WRITER_THREADS =
-      "LOG_APPLIER_NUM_OF_RECORD_WRITER_THREADS";
+  private static final String ENV_VAR_NUM_OF_BULK_TRANSACTION_HANDLER_THREADS =
+      "LOG_APPLIER_NUM_OF_BULK_TRANSACTION_HANDLER_THREADS";
+  private static final String ENV_VAR_NUM_OF_TRANSACTION_HANDLER_THREADS =
+      "LOG_APPLIER_NUM_OF_TRANSACTION_HANDLER_THREADS";
+  private static final String ENV_VAR_NUM_OF_TRANSACTION_QUEUE_CONSUMER_THREADS =
+      "LOG_APPLIER_NUM_OF_TRANSACTION_QUEUE_CONSUMER_THREADS";
+  private static final String ENV_VAR_NUM_OF_RECORD_HANDLER_THREADS =
+      "LOG_APPLIER_NUM_OF_RECORD_HANDLER_THREADS";
+  private static final String ENV_VAR_NUM_OF_RECORD_QUEUE_CONSUMER_THREADS =
+      "LOG_APPLIER_NUM_OF_RECORD_QUEUE_CONSUMER_THREADS";
   private static final String ENV_VAR_TRANSACTION_FETCH_SIZE = "LOG_APPLIER_TRANSACTION_FETCH_SIZE";
   private static final String ENV_VAR_TRANSACTION_WAIT_MILLIS_PER_PARTITION =
       "LOG_APPLIER_TRANSACTION_WAIT_MILLIS_PER_PARTITION";
@@ -63,15 +71,34 @@ public class LogApplier {
               + ENV_VAR_COORDINATOR_STATE_CONFIG);
     }
 
-    int numOfDistributorThreads = 16;
-    if (System.getenv(ENV_VAR_NUM_OF_DISTRIBUTOR_THREADS) != null) {
-      numOfDistributorThreads = Integer.parseInt(System.getenv(ENV_VAR_NUM_OF_DISTRIBUTOR_THREADS));
+    int numOfBulkTransactionHandlerThreads = 16;
+    if (System.getenv(ENV_VAR_NUM_OF_BULK_TRANSACTION_HANDLER_THREADS) != null) {
+      numOfBulkTransactionHandlerThreads =
+          Integer.parseInt(System.getenv(ENV_VAR_NUM_OF_BULK_TRANSACTION_HANDLER_THREADS));
     }
 
-    int numOfRecordWriterThreads = 16;
-    if (System.getenv(ENV_VAR_NUM_OF_RECORD_WRITER_THREADS) != null) {
-      numOfRecordWriterThreads =
-          Integer.parseInt(System.getenv(ENV_VAR_NUM_OF_RECORD_WRITER_THREADS));
+    int numOfTransactionHandlerThreads = 16;
+    if (System.getenv(ENV_VAR_NUM_OF_TRANSACTION_HANDLER_THREADS) != null) {
+      numOfTransactionHandlerThreads =
+          Integer.parseInt(System.getenv(ENV_VAR_NUM_OF_TRANSACTION_HANDLER_THREADS));
+    }
+
+    int numOfTransactionQueueConsumerThreads = 16;
+    if (System.getenv(ENV_VAR_NUM_OF_TRANSACTION_QUEUE_CONSUMER_THREADS) != null) {
+      numOfTransactionQueueConsumerThreads =
+          Integer.parseInt(System.getenv(ENV_VAR_NUM_OF_TRANSACTION_QUEUE_CONSUMER_THREADS));
+    }
+
+    int numOfRecordHandlerThreads = 16;
+    if (System.getenv(ENV_VAR_NUM_OF_RECORD_HANDLER_THREADS) != null) {
+      numOfRecordHandlerThreads =
+          Integer.parseInt(System.getenv(ENV_VAR_NUM_OF_RECORD_HANDLER_THREADS));
+    }
+
+    int numOfRecordQueueConsumerThreads = 16;
+    if (System.getenv(ENV_VAR_NUM_OF_RECORD_QUEUE_CONSUMER_THREADS) != null) {
+      numOfRecordQueueConsumerThreads =
+          Integer.parseInt(System.getenv(ENV_VAR_NUM_OF_RECORD_QUEUE_CONSUMER_THREADS));
     }
 
     int transactionFetchSize = 16;
@@ -126,7 +153,7 @@ public class LogApplier {
 
     ExecutorService executorServiceForRecordHandlers =
         Executors.newFixedThreadPool(
-            numOfRecordWriterThreads,
+            numOfRecordHandlerThreads,
             new ThreadFactoryBuilder()
                 .setDaemon(true)
                 .setNameFormat("record-handler-%d")
@@ -147,7 +174,6 @@ public class LogApplier {
 
     TransactionHandler transactionHandler =
         new TransactionHandler(
-            REPLICATION_DB_PARTITION_SIZE,
             thresholdMillisForOldTransaction,
             replicationTransactionRepository,
             replicationRecordRepository,
@@ -160,7 +186,7 @@ public class LogApplier {
         new BulkTransactionHandlerWorker(
             new BulkTransactionHandlerWorker.Configuration(
                 REPLICATION_DB_PARTITION_SIZE,
-                numOfDistributorThreads,
+                numOfBulkTransactionHandlerThreads,
                 waitMillisPerPartition,
                 transactionFetchSize),
             replicationBulkTransactionRepository,
@@ -169,35 +195,17 @@ public class LogApplier {
             metricsLogger);
     bulkTransactionHandlerWorker.run();
 
-    /*
-    OldTransactionHandlerWorker transactionHandlerWorker =
-        new OldTransactionHandlerWorker(
-            new OldTransactionHandlerWorker.Configuration(
-                REPLICATION_DB_PARTITION_SIZE,
-                numOfDistributorThreads,
-                waitMillisPerPartition,
-                transactionFetchSize,
-                thresholdMillisForOldTransaction),
-            coordinatorStateRepository,
-            replicationTransactionRepository,
-            replicationRecordRepository,
-            recordHandler,
-            executorServiceForRecordHandlers,
-            metricsLogger);
-    transactionHandlerWorker.run();
-     */
     new TransactionQueueConsumer(
-            new Configuration(numOfRecordWriterThreads, waitMillisPerPartition),
+            new Configuration(numOfTransactionHandlerThreads, waitMillisPerPartition),
             transactionHandler,
             transactionQueue,
             metricsLogger)
         .run();
 
-    Runtime.getRuntime()
-        .addShutdownHook(
-            new Thread(
-                () -> {
-                  bulkTransactionHandlerWorker.close();
-                }));
+    // TODO: Add TransactionScanner.
+
+    while (true) {
+      Uninterruptibles.sleepUninterruptibly(Duration.ofMinutes(1));
+    }
   }
 }

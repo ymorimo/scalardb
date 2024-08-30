@@ -39,15 +39,6 @@ public class TransactionQueueConsumer {
       BlockingQueue<Transaction> queue,
       MetricsLogger metricsLogger) {
 
-    /*
-    if (queue.size() != conf.threadSize) {
-      throw new IllegalArgumentException(
-          String.format(
-              "The size of the queues (%d) should be same as the size of threads (%d)",
-              queue.size(), conf.threadSize));
-    }
-     */
-
     this.conf = conf;
     this.transactionHandler = transactionHandler;
     this.executorService =
@@ -71,14 +62,12 @@ public class TransactionQueueConsumer {
             while (true) {
               Transaction transaction = null;
               try {
-                //                metricsLogger.incrementDequeueFromTransactionQueue();
+                metricsLogger.incrementDequeueFromTransactionQueue();
                 transaction = queue.take();
                 Optional<Transaction> updatedTransaction =
                     transactionHandler.handleTransaction(transaction);
                 if (updatedTransaction.isPresent()) {
-                  // FIXME
-                  //                  metricsLogger.incrementReEnqueueFromTransactionQueue();
-                  //                  queue.enqueue(threadId, updatedTransaction.get());
+                  metricsLogger.incrementReEnqueueFromTransactionQueue();
                   queue.add(transaction);
                 }
               } catch (InterruptedException e) {
@@ -88,9 +77,7 @@ public class TransactionQueueConsumer {
               } catch (Exception e) {
                 logger.error("Failed to handle a dequeued Transaction: {}", transaction, e);
                 if (transaction != null) {
-                  // FIXME
-                  //                  metricsLogger.incrementReEnqueueFromTransactionQueue();
-                  //                  queue.enqueue(threadId, transaction);
+                  metricsLogger.incrementReEnqueueFromTransactionQueue();
                   queue.add(transaction);
                 }
                 Uninterruptibles.sleepUninterruptibly(Duration.ofMillis(200));

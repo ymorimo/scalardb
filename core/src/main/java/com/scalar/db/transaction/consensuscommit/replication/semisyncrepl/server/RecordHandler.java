@@ -20,6 +20,7 @@ import com.scalar.db.exception.storage.ExecutionException;
 import com.scalar.db.exception.storage.NoMutationException;
 import com.scalar.db.io.Key;
 import com.scalar.db.io.TextColumn;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.Utils;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Column;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record.Value;
@@ -84,14 +85,7 @@ class RecordHandler {
       return MoreObjects.toStringHelper(this)
           .add("nextValue", nextValue.toStringOnlyWithMetadata())
           .add("deleted", deleted)
-          .add(
-              "restValues",
-              "["
-                  + restValues.stream()
-                      .map(Value::toStringOnlyWithMetadata)
-                      .collect(Collectors.joining(","))
-                  + "]")
-          // .add("updatedColumns", updatedColumns)
+          .add("restValues", Utils.convValuesToString(restValues))
           .add("insertTxIds", insertTxIds)
           .add("shouldHandleTheSameKey", shouldHandleTheSameKey)
           .toString();
@@ -129,6 +123,7 @@ class RecordHandler {
     boolean suspendFollowingOperation = false;
     Value lastValue = null;
     boolean deleted = record.deleted;
+    // TODO: Revisit this since it affects the performance.
     // Set<Column<?>> can not be used since it uses `value` in `equals()` and `hashcode()`.
     Map<String, Column<?>> updatedColumns = new HashMap<>();
     Set<String> insertTxIds = new HashSet<>();
@@ -227,7 +222,7 @@ class RecordHandler {
         metricsLogger.execGetRecord(() -> replicationRecordRepository.get(key));
     if (!recordOpt.isPresent()) {
       logger.warn("Key:{} is not found", key);
-      return new ResultOfKeyHandling(null, false, false);
+      return new ResultOfKeyHandling(false, false);
     }
 
     Record record = recordOpt.get();
@@ -238,7 +233,7 @@ class RecordHandler {
     if (nextValue == null) {
       logger.debug(
           "A next value is not found. Key:{}, Record:{}", key, record.toStringOnlyWithMetadata());
-      return new ResultOfKeyHandling(record.version, !record.values.isEmpty(), false);
+      return new ResultOfKeyHandling(!record.values.isEmpty(), false);
     }
     logger.debug(
         "[handleKey]\n  Key:{}\n  NextValue:{}\n", key, nextValue.toStringOnlyWithMetadata());
@@ -334,7 +329,6 @@ class RecordHandler {
     }
 
     try {
-      //      long newVersion =
       metricsLogger.execUpdateRecord(
           () -> {
             replicationRecordRepository.updateWithValues(
@@ -347,10 +341,7 @@ class RecordHandler {
             return null;
           });
       return new ResultOfKeyHandling(
-          // TODO
-          //          newVersion, !nextValue.restValues.isEmpty(),
-          // nextValue.shouldHandleTheSameKey);
-          0L, !nextValue.restValues.isEmpty(), nextValue.shouldHandleTheSameKey);
+          !nextValue.restValues.isEmpty(), nextValue.shouldHandleTheSameKey);
     } catch (Exception e) {
       throw new RuntimeException(
           String.format(
@@ -363,13 +354,10 @@ class RecordHandler {
   }
 
   static class ResultOfKeyHandling {
-    //    final Long currentRecordVersion;
     final boolean remainingValueExists;
     final boolean nextConnectedValueExists;
 
-    ResultOfKeyHandling(
-        Long currentRecordVersion, boolean remainingValueExists, boolean nextConnectedValueExists) {
-      //      this.currentRecordVersion = currentRecordVersion;
+    ResultOfKeyHandling(boolean remainingValueExists, boolean nextConnectedValueExists) {
       this.remainingValueExists = remainingValueExists;
       this.nextConnectedValueExists = nextConnectedValueExists;
     }

@@ -11,11 +11,14 @@ import java.util.concurrent.atomic.AtomicLong;
 class Metrics {
   public final AtomicInteger scannedTransactions = new AtomicInteger();
   public final AtomicInteger uncommittedTransactions = new AtomicInteger();
+  public final AtomicInteger abortedTransactions = new AtomicInteger();
   public final AtomicInteger handledCommittedTransactions = new AtomicInteger();
   public final AtomicLong totalDurationInMillisToFetchTransaction = new AtomicLong();
   public final AtomicInteger totalCountToFetchTransaction = new AtomicInteger();
   public final AtomicLong totalDurationInMillisToFetchBulkTransaction = new AtomicLong();
   public final AtomicInteger totalCountToFetchBulkTransaction = new AtomicInteger();
+  public final AtomicLong totalDurationInMillisToFetchUpdatedRecords = new AtomicLong();
+  public final AtomicInteger totalCountToFetchUpdatedRecords = new AtomicInteger();
   public final AtomicLong totalDurationInMillisToAppendValueToRecord = new AtomicLong();
   public final AtomicInteger totalCountToAppendValueToRecord = new AtomicInteger();
   public final AtomicLong totalDurationInMillisToSetPrepTxIdInRecord = new AtomicLong();
@@ -24,6 +27,10 @@ class Metrics {
   public final AtomicInteger totalCountToSetPrepTxIdInRecord = new AtomicInteger();
   public final AtomicLong totalDurationInMillisToUpdateRecord = new AtomicLong();
   public final AtomicInteger totalCountToUpdateRecord = new AtomicInteger();
+  public final AtomicInteger totalCountToDequeueFromTransactionQueue = new AtomicInteger();
+  public final AtomicInteger totalCountToReEnqueueFromTransactionQueue = new AtomicInteger();
+  public final AtomicInteger totalCountToDequeueFromUpdateRecordQueue = new AtomicInteger();
+  public final AtomicInteger totalCountToReEnqueueFromUpdateRecordQueue = new AtomicInteger();
   public final AtomicInteger exceptionCountInDistributor = new AtomicInteger();
 
   private final BlockingQueue<Transaction> transactionQueue;
@@ -54,8 +61,13 @@ class Metrics {
     ToStringHelper stringHelper =
         MoreObjects.toStringHelper(this)
             .add("scannedTxns", scannedTransactions)
+            .add("abortedTxns", abortedTransactions)
             .add("uncommittedTxns", uncommittedTransactions)
-            .add("handledTxns", handledCommittedTransactions);
+            .add("handledTxns", handledCommittedTransactions)
+            .add("countOfDequeueTransaction", totalCountToDequeueFromTransactionQueue)
+            .add("countOfReEnqueueTransaction", totalCountToReEnqueueFromTransactionQueue)
+            .add("countOfDequeueUpdatedRecord", totalCountToDequeueFromUpdateRecordQueue)
+            .add("countOfReEnqueueUpdatedRecord", totalCountToReEnqueueFromUpdateRecordQueue);
 
     addDuration(
         stringHelper,
@@ -100,8 +112,8 @@ class Metrics {
         totalDurationInMillisToUpdateRecord.get());
 
     return stringHelper
-        .add("transactionQueue.size", transactionQueue.size())
-        .add("recordWriterExecutorService", recordHandlerExecutorService)
+        .add("transactionQueueSize", transactionQueue.size())
+        .add("recordHandlerExecutorService", recordHandlerExecutorService)
         .add("exceptionsInDistributor", exceptionCountInDistributor)
         .toString();
   }

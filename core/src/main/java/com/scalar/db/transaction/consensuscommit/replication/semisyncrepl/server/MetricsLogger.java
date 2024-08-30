@@ -3,6 +3,7 @@ package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.serve
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.BulkTransaction;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Transaction;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.UpdatedRecord;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -17,15 +18,15 @@ public class MetricsLogger {
   private final boolean isEnabled;
   private final Map<Instant, Metrics> metricsMap = new ConcurrentHashMap<>();
   private final AtomicReference<Instant> keyHolder = new AtomicReference<>();
+  private final BlockingQueue<Transaction> transactionQueue;
   private final ExecutorService recordHandlerExecutorService;
-  private final BlockingQueue transactionQueue;
 
   public MetricsLogger(
       BlockingQueue<Transaction> transactionQueue, ExecutorService recordHandlerExecutorService) {
     String metricsEnabled = System.getenv("LOG_APPLIER_METRICS_ENABLED");
     this.isEnabled = metricsEnabled != null && metricsEnabled.equalsIgnoreCase("true");
-    this.recordHandlerExecutorService = recordHandlerExecutorService;
     this.transactionQueue = transactionQueue;
+    this.recordHandlerExecutorService = recordHandlerExecutorService;
   }
 
   private Instant currentTimestampRoundedInSeconds() {
@@ -67,6 +68,45 @@ public class MetricsLogger {
       return;
     }
     withPrintAndCleanup(metrics -> metrics.uncommittedTransactions.incrementAndGet());
+  }
+
+  public void incrementAbortedTransactions() {
+    if (!isEnabled) {
+      return;
+    }
+    withPrintAndCleanup(metrics -> metrics.abortedTransactions.incrementAndGet());
+  }
+
+  public void incrementDequeueFromTransactionQueue() {
+    if (!isEnabled) {
+      return;
+    }
+    withPrintAndCleanup(
+        metrics -> metrics.totalCountToDequeueFromTransactionQueue.incrementAndGet());
+  }
+
+  public void incrementReEnqueueFromTransactionQueue() {
+    if (!isEnabled) {
+      return;
+    }
+    withPrintAndCleanup(
+        metrics -> metrics.totalCountToReEnqueueFromTransactionQueue.incrementAndGet());
+  }
+
+  public void incrementDequeueFromUpdatedRecordQueue() {
+    if (!isEnabled) {
+      return;
+    }
+    withPrintAndCleanup(
+        metrics -> metrics.totalCountToDequeueFromUpdateRecordQueue.incrementAndGet());
+  }
+
+  public void incrementReEnqueueFromUpdatedRecordQueue() {
+    if (!isEnabled) {
+      return;
+    }
+    withPrintAndCleanup(
+        metrics -> metrics.totalCountToReEnqueueFromUpdateRecordQueue.incrementAndGet());
   }
 
   public void incrementExceptionCount() {
@@ -127,6 +167,20 @@ public class MetricsLogger {
         metrics -> {
           metrics.totalCountToFetchBulkTransaction.incrementAndGet();
           metrics.totalDurationInMillisToFetchBulkTransaction.addAndGet(
+              resultWithDuration.durationInMillis);
+        });
+    return resultWithDuration.result;
+  }
+
+  public List<UpdatedRecord> execFetchUpdatedRecords(Task<List<UpdatedRecord>> task) {
+    ResultWithDuration<List<UpdatedRecord>> resultWithDuration = captureDuration(task);
+    if (!isEnabled) {
+      return resultWithDuration.result;
+    }
+    withPrintAndCleanup(
+        metrics -> {
+          metrics.totalCountToFetchUpdatedRecords.incrementAndGet();
+          metrics.totalDurationInMillisToFetchUpdatedRecords.addAndGet(
               resultWithDuration.durationInMillis);
         });
     return resultWithDuration.result;

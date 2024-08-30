@@ -23,8 +23,6 @@ public class ReplicationTransactionRepository {
 
   private final TypeReference<List<WrittenTuple>> typeReferenceForWrittenTuples =
       new TypeReference<List<WrittenTuple>>() {};
-  private final TypeReference<List<Transaction>> typeReferenceForTransactions =
-      new TypeReference<List<Transaction>>() {};
 
   private final DistributedStorage replicationDbStorage;
   private final ObjectMapper objectMapper;
@@ -110,18 +108,21 @@ public class ReplicationTransactionRepository {
     replicationDbStorage.put(createPutFromTransaction(transaction));
   }
 
-  public void updateUpdatedAt(Transaction transaction) throws ExecutionException {
-    Transaction newTxn =
+  public Transaction updateUpdatedAt(Transaction transaction) throws ExecutionException {
+    Instant now = Instant.now();
+    Transaction updatedTransaction =
         new Transaction(
             transaction.partitionId,
             transaction.createdAt,
-            Instant.now(),
+            now,
             transaction.transactionId,
             transaction.writtenTuples);
 
-    add(newTxn);
+    add(updatedTransaction);
     // It's okay if deleting the old record remains
     delete(transaction);
+
+    return updatedTransaction;
   }
 
   public void delete(Transaction transaction) throws ExecutionException {

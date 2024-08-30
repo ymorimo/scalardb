@@ -38,7 +38,6 @@ class TransactionHandler {
   private final MetricsLogger metricsLogger;
 
   public TransactionHandler(
-      int recordTablePartitionSize,
       long oldTransactionThresholdMillis,
       ReplicationTransactionRepository replicationTransactionRepository,
       ReplicationRecordRepository replicationRecordRepository,
@@ -103,14 +102,14 @@ class TransactionHandler {
       throw new AssertionError();
     }
 
+    // These operations are retried separately since appending value doesn't need to be retried
+    // once it finished successfully.
     retryOnConflictException(
         "copy a written tuple to the record",
         key,
         () ->
             metricsLogger.execAppendValueToRecord(
                 () -> {
-                  //                  Optional<Record> recordOpt =
-                  // replicationRecordRepository.get(key);
                   // Add the new values to the record.
                   replicationRecordRepository.upsertWithNewValue(key, newValue);
                   return null;
@@ -154,7 +153,7 @@ class TransactionHandler {
       } catch (Exception e) {
         if (isConflictException(e)) {
           logger.warn("Failed to {} due to conflict. Retrying... Key:{}", taskDesc, key, e);
-          Uninterruptibles.sleepUninterruptibly(100, TimeUnit.MILLISECONDS);
+          Uninterruptibles.sleepUninterruptibly(50, TimeUnit.MILLISECONDS);
         } else {
           throw e;
         }
@@ -167,8 +166,8 @@ class TransactionHandler {
    * Handle a transaction
    *
    * @param transaction A transaction
-   * @return a transaction with updated `updated_at` if the transaction hasn't finished, empty
-   *     otherwise.
+   * @return a transaction with potentially updated `updated_at` if the transaction hasn't finished,
+   *     empty otherwise.
    */
   Optional<Transaction> handleTransaction(Transaction transaction) throws Exception {
     metricsLogger.incrementScannedTransactions();
@@ -182,19 +181,15 @@ class TransactionHandler {
         logger.info(
             "Updating an ongoing transaction to be handled later. txId:{}",
             transaction.transactionId);
-        // FIXME
-        //        Transaction updatedTransaction =
-        //            replicationTransactionRepository.updateUpdatedAt(transaction);
-        //        return Optional.of(updatedTransaction);
-        //            replicationTransactionRepository.updateUpdatedAt(transaction);
-        return Optional.of(transaction);
+        Transaction updatedTransaction =
+            replicationTransactionRepository.updateUpdatedAt(transaction);
+        return Optional.of(updatedTransaction);
       } else {
         return Optional.of(transaction);
       }
     }
     if (coordinatorState.get().txState != TransactionState.COMMITTED) {
-      // FIXME
-      //      metricsLogger.incrementAbortedTransactions();
+      metricsLogger.incrementAbortedTransactions();
       replicationTransactionRepository.delete(transaction);
       return Optional.empty();
     }
