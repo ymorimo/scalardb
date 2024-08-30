@@ -8,9 +8,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
@@ -18,15 +16,16 @@ public class MetricsLogger {
   private final boolean isEnabled;
   private final Map<Instant, Metrics> metricsMap = new ConcurrentHashMap<>();
   private final AtomicReference<Instant> keyHolder = new AtomicReference<>();
-  private final BlockingQueue<Transaction> transactionQueue;
-  private final ExecutorService recordHandlerExecutorService;
+  private final AtomicReference<TransactionHandleWorker> transactionHandleWorker =
+      new AtomicReference<>();
 
-  public MetricsLogger(
-      BlockingQueue<Transaction> transactionQueue, ExecutorService recordHandlerExecutorService) {
+  public MetricsLogger() {
     String metricsEnabled = System.getenv("LOG_APPLIER_METRICS_ENABLED");
     this.isEnabled = metricsEnabled != null && metricsEnabled.equalsIgnoreCase("true");
-    this.transactionQueue = transactionQueue;
-    this.recordHandlerExecutorService = recordHandlerExecutorService;
+  }
+
+  public void setTransactionHandleWorker(TransactionHandleWorker transactionHandleWorker) {
+    this.transactionHandleWorker.set(transactionHandleWorker);
   }
 
   private Instant currentTimestampRoundedInSeconds() {
@@ -37,15 +36,13 @@ public class MetricsLogger {
     Instant currentKey = currentTimestampRoundedInSeconds();
     Instant oldKey = keyHolder.getAndSet(currentKey);
     Metrics metrics =
-        metricsMap.computeIfAbsent(
-            currentKey, k -> new Metrics(transactionQueue, recordHandlerExecutorService));
+        metricsMap.computeIfAbsent(currentKey, k -> new Metrics(transactionHandleWorker.get()));
     consumer.accept(metrics);
     if (oldKey == null) {
       return;
     }
     if (!oldKey.equals(currentKey)) {
-      // logger.info("[{}] {}", currentKey, metricsMap.get(oldKey));
-      System.out.printf("[%s] %s\n", currentKey, metricsMap.get(oldKey));
+      System.out.printf("[%s] %s\n\n", currentKey, metricsMap.get(oldKey));
     }
   }
 
@@ -77,36 +74,18 @@ public class MetricsLogger {
     withPrintAndCleanup(metrics -> metrics.abortedTransactions.incrementAndGet());
   }
 
-  public void incrementDequeueFromTransactionQueue() {
+  public void incrementHandleTransaction() {
     if (!isEnabled) {
       return;
     }
-    withPrintAndCleanup(
-        metrics -> metrics.totalCountToDequeueFromTransactionQueue.incrementAndGet());
+    withPrintAndCleanup(metrics -> metrics.totalCountToHandleTransaction.incrementAndGet());
   }
 
-  public void incrementReEnqueueFromTransactionQueue() {
+  public void incrementRetryTransaction() {
     if (!isEnabled) {
       return;
     }
-    withPrintAndCleanup(
-        metrics -> metrics.totalCountToReEnqueueFromTransactionQueue.incrementAndGet());
-  }
-
-  public void incrementDequeueFromUpdatedRecordQueue() {
-    if (!isEnabled) {
-      return;
-    }
-    withPrintAndCleanup(
-        metrics -> metrics.totalCountToDequeueFromUpdateRecordQueue.incrementAndGet());
-  }
-
-  public void incrementReEnqueueFromUpdatedRecordQueue() {
-    if (!isEnabled) {
-      return;
-    }
-    withPrintAndCleanup(
-        metrics -> metrics.totalCountToReEnqueueFromUpdateRecordQueue.incrementAndGet());
+    withPrintAndCleanup(metrics -> metrics.totalCountToRetryTransaction.incrementAndGet());
   }
 
   public void incrementExceptionCount() {

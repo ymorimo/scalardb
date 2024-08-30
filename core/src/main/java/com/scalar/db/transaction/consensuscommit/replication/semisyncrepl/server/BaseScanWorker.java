@@ -8,8 +8,8 @@ import javax.annotation.concurrent.Immutable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public abstract class BaseHandlerWorker {
-  private static final Logger logger = LoggerFactory.getLogger(BaseHandlerWorker.class);
+public abstract class BaseScanWorker {
+  private static final Logger logger = LoggerFactory.getLogger(BaseScanWorker.class);
 
   private final ExecutorService executorService;
   private final Configuration conf;
@@ -29,7 +29,7 @@ public abstract class BaseHandlerWorker {
     }
   }
 
-  public BaseHandlerWorker(Configuration conf, String label, MetricsLogger metricsLogger) {
+  public BaseScanWorker(Configuration conf, String label, MetricsLogger metricsLogger) {
     if (conf.replicationDbPartitionSize % conf.threadSize != 0) {
       throw new IllegalArgumentException(
           String.format(

@@ -34,7 +34,6 @@ class TransactionHandler {
   private final ReplicationRecordRepository replicationRecordRepository;
   private final CoordinatorStateRepository coordinatorStateRepository;
   private final RecordHandler recordHandler;
-  private final ExecutorService recordHandlerExecutorService;
   private final MetricsLogger metricsLogger;
 
   public TransactionHandler(
@@ -43,14 +42,12 @@ class TransactionHandler {
       ReplicationRecordRepository replicationRecordRepository,
       CoordinatorStateRepository coordinatorStateRepository,
       RecordHandler recordHandler,
-      ExecutorService recordHandlerExecutorService,
       MetricsLogger metricsLogger) {
     this.oldTransactionThresholdMillis = oldTransactionThresholdMillis;
     this.replicationTransactionRepository = replicationTransactionRepository;
     this.replicationRecordRepository = replicationRecordRepository;
     this.coordinatorStateRepository = coordinatorStateRepository;
     this.recordHandler = recordHandler;
-    this.recordHandlerExecutorService = recordHandlerExecutorService;
     this.metricsLogger = metricsLogger;
   }
 
@@ -119,11 +116,10 @@ class TransactionHandler {
         "handle the written tuple",
         key,
         () -> {
-          // Handle the new value.
           while (true) {
             ResultOfKeyHandling resultOfKeyHandling = recordHandler.handleKey(key, true);
             if (resultOfKeyHandling.nextConnectedValueExists) {
-              // Need to handle the connected value immediately.
+              // There is a connected value in the record. Need to retry immediately.
             } else {
               break;
             }
@@ -131,6 +127,7 @@ class TransactionHandler {
         });
   }
 
+  // TODO: Avoid the duplication.
   private boolean isConflictException(Throwable exception) {
     Throwable e = exception;
     while (e != null) {
@@ -161,21 +158,21 @@ class TransactionHandler {
     }
   }
 
-  // FIXME: Return value comment.
   /**
    * Handle a transaction
    *
    * @param transaction A transaction
-   * @return a transaction with potentially updated `updated_at` if the transaction hasn't finished,
-   *     empty otherwise.
+   * @return true if handling the transaction is done, false otherwise.
    */
-  Optional<Transaction> handleTransaction(Transaction transaction) throws Exception {
+  boolean handleTransaction(ExecutorService executorService, Transaction transaction)
+      throws Exception {
     metricsLogger.incrementScannedTransactions();
     Optional<CoordinatorState> coordinatorState =
         coordinatorStateRepository.get(transaction.transactionId);
     if (!coordinatorState.isPresent()) {
       metricsLogger.incrementUncommittedTransactions();
-      // TODO: Maybe always updating `updated_at` works better.
+      // This logic might be needed in TransactionScanner.
+      /*
       if (transaction.updatedAt.isBefore(
           Instant.now().minusMillis(oldTransactionThresholdMillis))) {
         logger.info(
@@ -187,11 +184,13 @@ class TransactionHandler {
       } else {
         return Optional.of(transaction);
       }
+       */
+      return false;
     }
     if (coordinatorState.get().txState != TransactionState.COMMITTED) {
       metricsLogger.incrementAbortedTransactions();
       replicationTransactionRepository.delete(transaction);
-      return Optional.empty();
+      return true;
     }
 
     // Handle the written tuples.
@@ -200,8 +199,9 @@ class TransactionHandler {
       logger.debug(
           "[handleTransaction]\n  transaction:{}\n  writtenTuple:{}\n", transaction, writtenTuple);
 
+      // TODO: Handle the last item with its own thread.
       futures.add(
-          recordHandlerExecutorService.submit(
+          executorService.submit(
               () -> {
                 try {
                   handleWrittenTuple(
@@ -227,6 +227,7 @@ class TransactionHandler {
 
     metricsLogger.incrementHandledCommittedTransactions();
     replicationTransactionRepository.delete(transaction);
-    return Optional.empty();
+
+    return true;
   }
 }

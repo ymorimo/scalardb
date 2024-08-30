@@ -6,18 +6,17 @@ import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationTransactionRepository;
 import java.util.List;
-import java.util.concurrent.BlockingQueue;
 import javax.annotation.concurrent.Immutable;
 
-public class BulkTransactionHandlerWorker extends BaseHandlerWorker {
+public class BulkTransactionScanWorker extends BaseScanWorker {
   private final Configuration conf;
   private final ReplicationBulkTransactionRepository replicationBulkTransactionRepository;
   private final ReplicationTransactionRepository replicationTransactionRepository;
   private final MetricsLogger metricsLogger;
-  private final BlockingQueue<Transaction> transactionQueue;
+  private final TransactionHandleWorker transactionHandleWorker;
 
   @Immutable
-  public static class Configuration extends BaseHandlerWorker.Configuration {
+  public static class Configuration extends BaseScanWorker.Configuration {
     private final int fetchSize;
 
     public Configuration(
@@ -27,24 +26,24 @@ public class BulkTransactionHandlerWorker extends BaseHandlerWorker {
     }
   }
 
-  public BulkTransactionHandlerWorker(
+  public BulkTransactionScanWorker(
       Configuration conf,
       ReplicationBulkTransactionRepository replicationBulkTransactionRepository,
       ReplicationTransactionRepository replicationTransactionRepository,
-      BlockingQueue<Transaction> transactionQueue,
+      TransactionHandleWorker transactionHandleWorker,
       MetricsLogger metricsLogger) {
     super(conf, "bulk-tx", metricsLogger);
     this.conf = conf;
     this.replicationBulkTransactionRepository = replicationBulkTransactionRepository;
     this.replicationTransactionRepository = replicationTransactionRepository;
-    this.transactionQueue = transactionQueue;
+    this.transactionHandleWorker = transactionHandleWorker;
     this.metricsLogger = metricsLogger;
   }
 
   private void moveTransaction(Transaction transaction) throws ExecutionException {
     metricsLogger.incrementScannedTransactions();
     replicationTransactionRepository.add(transaction);
-    transactionQueue.add(transaction);
+    transactionHandleWorker.enqueue(transaction);
     metricsLogger.incrementHandledCommittedTransactions();
   }
 

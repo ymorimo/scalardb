@@ -2,11 +2,9 @@ package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.serve
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Transaction;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.annotation.Nullable;
 
 class Metrics {
   public final AtomicInteger scannedTransactions = new AtomicInteger();
@@ -27,19 +25,16 @@ class Metrics {
   public final AtomicInteger totalCountToSetPrepTxIdInRecord = new AtomicInteger();
   public final AtomicLong totalDurationInMillisToUpdateRecord = new AtomicLong();
   public final AtomicInteger totalCountToUpdateRecord = new AtomicInteger();
-  public final AtomicInteger totalCountToDequeueFromTransactionQueue = new AtomicInteger();
-  public final AtomicInteger totalCountToReEnqueueFromTransactionQueue = new AtomicInteger();
+  public final AtomicInteger totalCountToHandleTransaction = new AtomicInteger();
+  public final AtomicInteger totalCountToRetryTransaction = new AtomicInteger();
   public final AtomicInteger totalCountToDequeueFromUpdateRecordQueue = new AtomicInteger();
   public final AtomicInteger totalCountToReEnqueueFromUpdateRecordQueue = new AtomicInteger();
   public final AtomicInteger exceptionCountInDistributor = new AtomicInteger();
 
-  private final BlockingQueue<Transaction> transactionQueue;
-  private final ExecutorService recordHandlerExecutorService;
+  @Nullable private final TransactionHandleWorker transactionHandleWorker;
 
-  public Metrics(
-      BlockingQueue<Transaction> transactionQueue, ExecutorService recordHandlerExecutorService) {
-    this.transactionQueue = transactionQueue;
-    this.recordHandlerExecutorService = recordHandlerExecutorService;
+  public Metrics(@Nullable TransactionHandleWorker transactionHandleWorker) {
+    this.transactionHandleWorker = transactionHandleWorker;
   }
 
   private void addDuration(
@@ -64,10 +59,10 @@ class Metrics {
             .add("abortedTxns", abortedTransactions)
             .add("uncommittedTxns", uncommittedTransactions)
             .add("handledTxns", handledCommittedTransactions)
-            .add("countOfDequeueTransaction", totalCountToDequeueFromTransactionQueue)
-            .add("countOfReEnqueueTransaction", totalCountToReEnqueueFromTransactionQueue)
-            .add("countOfDequeueUpdatedRecord", totalCountToDequeueFromUpdateRecordQueue)
-            .add("countOfReEnqueueUpdatedRecord", totalCountToReEnqueueFromUpdateRecordQueue);
+            .add("countOfHandleTransaction", totalCountToHandleTransaction)
+            .add("countOfRetryTransaction", totalCountToRetryTransaction);
+    //            .add("countOfDequeueUpdatedRecord", totalCountToDequeueFromUpdateRecordQueue)
+    //            .add("countOfReEnqueueUpdatedRecord", totalCountToReEnqueueFromUpdateRecordQueue);
 
     addDuration(
         stringHelper,
@@ -112,8 +107,7 @@ class Metrics {
         totalDurationInMillisToUpdateRecord.get());
 
     return stringHelper
-        .add("transactionQueueSize", transactionQueue.size())
-        .add("recordHandlerExecutorService", recordHandlerExecutorService)
+        .add("transactionHandleWorker", transactionHandleWorker)
         .add("exceptionsInDistributor", exceptionCountInDistributor)
         .toString();
   }
