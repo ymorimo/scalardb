@@ -27,7 +27,7 @@ public class TransactionHandleWorker {
     final int waitMillisPerPartition;
 
     public Configuration(
-        int recordHandlerThreadSize, int transactionHandlerThreadSize, int waitMillisPerPartition) {
+        int transactionHandlerThreadSize, int recordHandlerThreadSize, int waitMillisPerPartition) {
       this.recordHandlerThreadSize = recordHandlerThreadSize;
       this.transactionHandlerThreadSize = transactionHandlerThreadSize;
       this.waitMillisPerPartition = waitMillisPerPartition;
