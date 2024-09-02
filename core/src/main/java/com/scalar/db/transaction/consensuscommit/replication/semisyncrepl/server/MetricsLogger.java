@@ -3,7 +3,6 @@ package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.serve
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.BulkTransaction;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Transaction;
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.UpdatedRecord;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -42,57 +41,57 @@ public class MetricsLogger {
       return;
     }
     if (!oldKey.equals(currentKey)) {
-      System.out.printf("[%s] %s\n\n", currentKey, metricsMap.get(oldKey));
+      System.out.printf("[%s] Metrics:\n%s\n\n", currentKey, metricsMap.get(oldKey).toJson());
     }
   }
 
-  public void incrementScannedTransactions() {
+  public void incrBlkTxnsScannedTxns() {
     if (!isEnabled) {
       return;
     }
-    withPrintAndCleanup(metrics -> metrics.scannedTransactions.incrementAndGet());
+    withPrintAndCleanup(metrics -> metrics.blkTxnScannedTxns.incrementAndGet());
   }
 
-  public void incrementHandledCommittedTransactions() {
+  public void incrCommittedTxns() {
     if (!isEnabled) {
       return;
     }
-    withPrintAndCleanup(metrics -> metrics.handledCommittedTransactions.incrementAndGet());
+    withPrintAndCleanup(metrics -> metrics.txnCommittedTxns.incrementAndGet());
   }
 
   public void incrementUncommittedTransactions() {
     if (!isEnabled) {
       return;
     }
-    withPrintAndCleanup(metrics -> metrics.uncommittedTransactions.incrementAndGet());
+    withPrintAndCleanup(metrics -> metrics.txnUncommittedTxns.incrementAndGet());
   }
 
   public void incrementAbortedTransactions() {
     if (!isEnabled) {
       return;
     }
-    withPrintAndCleanup(metrics -> metrics.abortedTransactions.incrementAndGet());
+    withPrintAndCleanup(metrics -> metrics.txnAbortedTxns.incrementAndGet());
   }
 
   public void incrementHandleTransaction() {
     if (!isEnabled) {
       return;
     }
-    withPrintAndCleanup(metrics -> metrics.totalCountToHandleTransaction.incrementAndGet());
+    withPrintAndCleanup(metrics -> metrics.recordHandleTxns.incrementAndGet());
   }
 
   public void incrementRetryTransaction() {
     if (!isEnabled) {
       return;
     }
-    withPrintAndCleanup(metrics -> metrics.totalCountToRetryTransaction.incrementAndGet());
+    withPrintAndCleanup(metrics -> metrics.recordRetryTxns.incrementAndGet());
   }
 
   public void incrementExceptionCount() {
     if (!isEnabled) {
       return;
     }
-    withPrintAndCleanup(metrics -> metrics.exceptionCountInDistributor.incrementAndGet());
+    withPrintAndCleanup(metrics -> metrics.exceptions.incrementAndGet());
   }
 
   public static class ResultWithDuration<T> {
@@ -130,36 +129,21 @@ public class MetricsLogger {
     }
     withPrintAndCleanup(
         metrics -> {
-          metrics.totalCountToFetchTransaction.incrementAndGet();
-          metrics.totalDurationInMillisToFetchTransaction.addAndGet(
-              resultWithDuration.durationInMillis);
+          metrics.txnOpCountToScanTxns.incrementAndGet();
+          metrics.txnOpDurationMillisToScanTxns.addAndGet(resultWithDuration.durationInMillis);
         });
     return resultWithDuration.result;
   }
 
-  public List<BulkTransaction> execFetchBulkTransactions(Task<List<BulkTransaction>> task) {
+  public List<BulkTransaction> execScanBulkTransactions(Task<List<BulkTransaction>> task) {
     ResultWithDuration<List<BulkTransaction>> resultWithDuration = captureDuration(task);
     if (!isEnabled) {
       return resultWithDuration.result;
     }
     withPrintAndCleanup(
         metrics -> {
-          metrics.totalCountToFetchBulkTransaction.incrementAndGet();
-          metrics.totalDurationInMillisToFetchBulkTransaction.addAndGet(
-              resultWithDuration.durationInMillis);
-        });
-    return resultWithDuration.result;
-  }
-
-  public List<UpdatedRecord> execFetchUpdatedRecords(Task<List<UpdatedRecord>> task) {
-    ResultWithDuration<List<UpdatedRecord>> resultWithDuration = captureDuration(task);
-    if (!isEnabled) {
-      return resultWithDuration.result;
-    }
-    withPrintAndCleanup(
-        metrics -> {
-          metrics.totalCountToFetchUpdatedRecords.incrementAndGet();
-          metrics.totalDurationInMillisToFetchUpdatedRecords.addAndGet(
+          metrics.blkTxnOpCountToScanBlkTxns.incrementAndGet();
+          metrics.blkTxnOpDurationMillisToScanBlkTxns.addAndGet(
               resultWithDuration.durationInMillis);
         });
     return resultWithDuration.result;
@@ -172,8 +156,8 @@ public class MetricsLogger {
     }
     withPrintAndCleanup(
         metrics -> {
-          metrics.totalCountToAppendValueToRecord.incrementAndGet();
-          metrics.totalDurationInMillisToAppendValueToRecord.addAndGet(
+          metrics.txnOpCountToAppendValueToRecord.incrementAndGet();
+          metrics.txnOpDurationMillisToAppendValueToRecord.addAndGet(
               resultWithDuration.durationInMillis);
         });
   }
@@ -185,8 +169,8 @@ public class MetricsLogger {
     }
     withPrintAndCleanup(
         metrics -> {
-          metrics.totalCountToGetRecord.incrementAndGet();
-          metrics.totalDurationInMillisToGetRecord.addAndGet(resultWithDuration.durationInMillis);
+          metrics.recordOpCountToGetRecord.incrementAndGet();
+          metrics.recordOpDurationMillisToGetRecord.addAndGet(resultWithDuration.durationInMillis);
         });
     return resultWithDuration.result;
   }
@@ -198,8 +182,8 @@ public class MetricsLogger {
     }
     withPrintAndCleanup(
         metrics -> {
-          metrics.totalCountToSetPrepTxIdInRecord.incrementAndGet();
-          metrics.totalDurationInMillisToSetPrepTxIdInRecord.addAndGet(
+          metrics.recordOpCountToSetPrepTxIdInRecord.incrementAndGet();
+          metrics.recordOpDurationMillisToSetPrepTxIdInRecord.addAndGet(
               resultWithDuration.durationInMillis);
         });
   }
@@ -211,8 +195,8 @@ public class MetricsLogger {
     }
     withPrintAndCleanup(
         metrics -> {
-          metrics.totalCountToUpdateRecord.incrementAndGet();
-          metrics.totalDurationInMillisToUpdateRecord.addAndGet(
+          metrics.recordOpCountToUpdateRecord.incrementAndGet();
+          metrics.recordOpDurationMillisToUpdateRecord.addAndGet(
               resultWithDuration.durationInMillis);
         });
   }

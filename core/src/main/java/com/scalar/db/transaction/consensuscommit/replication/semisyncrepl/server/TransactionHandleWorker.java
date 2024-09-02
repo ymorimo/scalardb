@@ -7,6 +7,7 @@ import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.
 import java.time.Duration;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 import javax.annotation.concurrent.Immutable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,15 +66,17 @@ public class TransactionHandleWorker {
   private void handleTransactionWithRetry(Transaction transaction) {
     while (true) {
       try {
-        metricsLogger.incrementHandleTransaction();
         if (transactionHandler.handleTransaction(recordHandlerExecutorService, transaction)) {
+          metricsLogger.incrementHandleTransaction();
           return;
         }
       } catch (InterruptedException e) {
         // TODO: Error handling.
         Thread.currentThread().interrupt();
+        metricsLogger.incrementExceptionCount();
         throw new RuntimeException(e);
       } catch (Exception e) {
+        metricsLogger.incrementExceptionCount();
         logger.error("Failed to handle a dequeued Transaction: {}", transaction, e);
       }
       metricsLogger.incrementRetryTransaction();
@@ -91,5 +94,14 @@ public class TransactionHandleWorker {
         .add("transactionHandlerExecutorService", transactionHandlerExecutorService)
         .add("recordHandlerExecutorService", recordHandlerExecutorService)
         .toString();
+  }
+
+  public String toJson() {
+    return String.format(
+        "{\"Thread\":{\"Txn\":{\"Total\":%d, \"Active\":%d}, \"Record\":{\"Total\":%d, \"Active\":%d}}}",
+        ((ThreadPoolExecutor) transactionHandlerExecutorService).getPoolSize(),
+        ((ThreadPoolExecutor) transactionHandlerExecutorService).getActiveCount(),
+        ((ThreadPoolExecutor) recordHandlerExecutorService).getPoolSize(),
+        ((ThreadPoolExecutor) recordHandlerExecutorService).getActiveCount());
   }
 }

@@ -41,16 +41,15 @@ public class BulkTransactionScanWorker extends BaseScanWorker {
   }
 
   private void moveTransaction(Transaction transaction) throws ExecutionException {
-    metricsLogger.incrementScannedTransactions();
+    metricsLogger.incrBlkTxnsScannedTxns();
     replicationTransactionRepository.add(transaction);
     transactionHandleWorker.enqueue(transaction);
-    metricsLogger.incrementHandledCommittedTransactions();
   }
 
   @Override
   protected boolean handle(int partitionId) throws ExecutionException {
     List<BulkTransaction> scannedBulkTxns =
-        metricsLogger.execFetchBulkTransactions(
+        metricsLogger.execScanBulkTransactions(
             () -> replicationBulkTransactionRepository.scan(partitionId, conf.fetchSize));
     for (BulkTransaction bulkTransaction : scannedBulkTxns) {
       for (Transaction transaction : bulkTransaction.transactions) {

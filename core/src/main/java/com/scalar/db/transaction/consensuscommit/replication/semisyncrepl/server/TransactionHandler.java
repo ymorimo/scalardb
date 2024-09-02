@@ -166,7 +166,6 @@ class TransactionHandler {
    */
   boolean handleTransaction(ExecutorService executorService, Transaction transaction)
       throws Exception {
-    metricsLogger.incrementScannedTransactions();
     Optional<CoordinatorState> coordinatorState =
         coordinatorStateRepository.get(transaction.transactionId);
     if (!coordinatorState.isPresent()) {
@@ -225,7 +224,7 @@ class TransactionHandler {
       Uninterruptibles.getUninterruptibly(future, 60, TimeUnit.SECONDS);
     }
 
-    metricsLogger.incrementHandledCommittedTransactions();
+    metricsLogger.incrCommittedTxns();
     replicationTransactionRepository.delete(transaction);
 
     return true;

@@ -1,35 +1,29 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server;
 
-import com.google.common.base.MoreObjects;
-import com.google.common.base.MoreObjects.ToStringHelper;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
 class Metrics {
-  public final AtomicInteger scannedTransactions = new AtomicInteger();
-  public final AtomicInteger uncommittedTransactions = new AtomicInteger();
-  public final AtomicInteger abortedTransactions = new AtomicInteger();
-  public final AtomicInteger handledCommittedTransactions = new AtomicInteger();
-  public final AtomicLong totalDurationInMillisToFetchTransaction = new AtomicLong();
-  public final AtomicInteger totalCountToFetchTransaction = new AtomicInteger();
-  public final AtomicLong totalDurationInMillisToFetchBulkTransaction = new AtomicLong();
-  public final AtomicInteger totalCountToFetchBulkTransaction = new AtomicInteger();
-  public final AtomicLong totalDurationInMillisToFetchUpdatedRecords = new AtomicLong();
-  public final AtomicInteger totalCountToFetchUpdatedRecords = new AtomicInteger();
-  public final AtomicLong totalDurationInMillisToAppendValueToRecord = new AtomicLong();
-  public final AtomicInteger totalCountToAppendValueToRecord = new AtomicInteger();
-  public final AtomicLong totalDurationInMillisToSetPrepTxIdInRecord = new AtomicLong();
-  public final AtomicInteger totalCountToGetRecord = new AtomicInteger();
-  public final AtomicLong totalDurationInMillisToGetRecord = new AtomicLong();
-  public final AtomicInteger totalCountToSetPrepTxIdInRecord = new AtomicInteger();
-  public final AtomicLong totalDurationInMillisToUpdateRecord = new AtomicLong();
-  public final AtomicInteger totalCountToUpdateRecord = new AtomicInteger();
-  public final AtomicInteger totalCountToHandleTransaction = new AtomicInteger();
-  public final AtomicInteger totalCountToRetryTransaction = new AtomicInteger();
-  public final AtomicInteger totalCountToDequeueFromUpdateRecordQueue = new AtomicInteger();
-  public final AtomicInteger totalCountToReEnqueueFromUpdateRecordQueue = new AtomicInteger();
-  public final AtomicInteger exceptionCountInDistributor = new AtomicInteger();
+  public final AtomicInteger blkTxnScannedTxns = new AtomicInteger();
+  public final AtomicInteger txnUncommittedTxns = new AtomicInteger();
+  public final AtomicInteger txnAbortedTxns = new AtomicInteger();
+  public final AtomicInteger txnCommittedTxns = new AtomicInteger();
+  public final AtomicLong txnOpDurationMillisToScanTxns = new AtomicLong();
+  public final AtomicInteger txnOpCountToScanTxns = new AtomicInteger();
+  public final AtomicLong blkTxnOpDurationMillisToScanBlkTxns = new AtomicLong();
+  public final AtomicInteger blkTxnOpCountToScanBlkTxns = new AtomicInteger();
+  public final AtomicLong txnOpDurationMillisToAppendValueToRecord = new AtomicLong();
+  public final AtomicInteger txnOpCountToAppendValueToRecord = new AtomicInteger();
+  public final AtomicLong recordOpDurationMillisToSetPrepTxIdInRecord = new AtomicLong();
+  public final AtomicInteger recordOpCountToGetRecord = new AtomicInteger();
+  public final AtomicLong recordOpDurationMillisToGetRecord = new AtomicLong();
+  public final AtomicInteger recordOpCountToSetPrepTxIdInRecord = new AtomicInteger();
+  public final AtomicLong recordOpDurationMillisToUpdateRecord = new AtomicLong();
+  public final AtomicInteger recordOpCountToUpdateRecord = new AtomicInteger();
+  public final AtomicInteger recordHandleTxns = new AtomicInteger();
+  public final AtomicInteger recordRetryTxns = new AtomicInteger();
+  public final AtomicInteger exceptions = new AtomicInteger();
 
   @Nullable private final TransactionHandleWorker transactionHandleWorker;
 
@@ -37,78 +31,78 @@ class Metrics {
     this.transactionHandleWorker = transactionHandleWorker;
   }
 
-  private void addDuration(
-      ToStringHelper stringHelper,
-      String keyForCount,
-      String keyForDuration,
-      int count,
-      long durationInMillis) {
-    stringHelper.add(keyForCount, count);
+  private double meanDuration(int count, long durationInMillis) {
     if (count == 0) {
-      stringHelper.add(keyForDuration, "----");
+      return 0.0;
     } else {
-      stringHelper.add(keyForDuration, durationInMillis / count);
+      return (double) durationInMillis / count;
     }
   }
 
-  @Override
-  public String toString() {
-    ToStringHelper stringHelper =
-        MoreObjects.toStringHelper(this)
-            .add("scannedTxns", scannedTransactions)
-            .add("abortedTxns", abortedTransactions)
-            .add("uncommittedTxns", uncommittedTransactions)
-            .add("handledTxns", handledCommittedTransactions)
-            .add("countOfHandleTransaction", totalCountToHandleTransaction)
-            .add("countOfRetryTransaction", totalCountToRetryTransaction);
-    //            .add("countOfDequeueUpdatedRecord", totalCountToDequeueFromUpdateRecordQueue)
-    //            .add("countOfReEnqueueUpdatedRecord", totalCountToReEnqueueFromUpdateRecordQueue);
+  public String toJson() {
+    String transactionHandleWorkerJson;
+    {
+      TransactionHandleWorker worker = transactionHandleWorker;
+      if (worker == null) {
+        transactionHandleWorkerJson = "{}";
+      } else {
+        transactionHandleWorkerJson = worker.toJson();
+      }
+    }
 
-    addDuration(
-        stringHelper,
-        "countOfFetchTxns",
-        "meanDurationInMillisToFetchTxns",
-        totalCountToFetchTransaction.get(),
-        totalDurationInMillisToFetchTransaction.get());
-
-    addDuration(
-        stringHelper,
-        "countOfFetchBulkTxns",
-        "meanDurationInMillisToFetchBulkTxns",
-        totalCountToFetchBulkTransaction.get(),
-        totalDurationInMillisToFetchBulkTransaction.get());
-
-    addDuration(
-        stringHelper,
-        "countOfAppendValueToRecord",
-        "meanDurationInMillisToAppendValueToRecord",
-        totalCountToAppendValueToRecord.get(),
-        totalDurationInMillisToAppendValueToRecord.get());
-
-    addDuration(
-        stringHelper,
-        "countOfSetPrepTxIdInRecord",
-        "meanDurationInMillisToSetPrepTxIdInRecord",
-        totalCountToSetPrepTxIdInRecord.get(),
-        totalDurationInMillisToSetPrepTxIdInRecord.get());
-
-    addDuration(
-        stringHelper,
-        "countOfGetRecord",
-        "meanDurationInMillisToGetRecord",
-        totalCountToGetRecord.get(),
-        totalDurationInMillisToGetRecord.get());
-
-    addDuration(
-        stringHelper,
-        "countOfUpdateRecord",
-        "meanDurationInMillisToUpdateRecord",
-        totalCountToUpdateRecord.get(),
-        totalDurationInMillisToUpdateRecord.get());
-
-    return stringHelper
-        .add("transactionHandleWorker", transactionHandleWorker)
-        .add("exceptionsInDistributor", exceptionCountInDistributor)
-        .toString();
+    return String.format(
+        "{\n"
+            + "  \"Common\":{\"Exceptions\":%d},\n"
+            + "  \"BulkTxn\":{\n"
+            + "    \"ScannedTxns\":%d,\n"
+            + "    \"Ops\":{\n"
+            + "      \"ScanBlkTxns\":{\"Count\":%d, \"DurationMs\":%f}\n"
+            + "    }\n"
+            + "  },\n"
+            + "  \"Txn\":{\n"
+            + "    \"TxnState\":{\n"
+            + "      \"CommittedTxns\":%d,\n"
+            + "      \"UncommittedTxns\":%d,\n"
+            + "      \"AbortedTxns\":%d\n"
+            + "    },\n"
+            + "    \"Ops\":{\n"
+            + "      \"ScanTxns\":{\"Count\":%d, \"DurationMs\":%f},\n"
+            + "      \"AppendValueToRecord\":{\"Count\":%d, \"DurationMs\":%f}\n"
+            + "    }\n"
+            + "  },\n"
+            + "  \"Record\":{\n"
+            + "    \"HandleTxns\":%d,\n"
+            + "    \"RetryTxns\":%d,\n"
+            + "    \"Ops\":{\n"
+            + "      \"GetRecord\":{\"Count\":%d, \"DurationMs\":%f},\n"
+            + "      \"SetPrepTxIdInRecord\":{\"Count\":%d, \"DurationMs\":%f},\n"
+            + "      \"UpdateRecord\":{\"Count\":%d, \"DurationMs\":%f}\n"
+            + "    }\n"
+            + "  },\n"
+            + "  \"TxnHandleWorker\":%s\n"
+            + "}",
+        exceptions.get(),
+        blkTxnScannedTxns.get(),
+        blkTxnOpCountToScanBlkTxns.get(),
+        meanDuration(blkTxnOpCountToScanBlkTxns.get(), blkTxnOpDurationMillisToScanBlkTxns.get()),
+        txnCommittedTxns.get(),
+        txnUncommittedTxns.get(),
+        txnAbortedTxns.get(),
+        txnOpCountToScanTxns.get(),
+        meanDuration(txnOpCountToScanTxns.get(), txnOpDurationMillisToScanTxns.get()),
+        txnOpCountToAppendValueToRecord.get(),
+        meanDuration(
+            txnOpCountToAppendValueToRecord.get(), txnOpDurationMillisToAppendValueToRecord.get()),
+        recordHandleTxns.get(),
+        recordRetryTxns.get(),
+        recordOpCountToGetRecord.get(),
+        meanDuration(recordOpCountToGetRecord.get(), recordOpDurationMillisToGetRecord.get()),
+        recordOpCountToSetPrepTxIdInRecord.get(),
+        meanDuration(
+            recordOpCountToSetPrepTxIdInRecord.get(),
+            recordOpDurationMillisToSetPrepTxIdInRecord.get()),
+        recordOpCountToUpdateRecord.get(),
+        meanDuration(recordOpCountToUpdateRecord.get(), recordOpDurationMillisToUpdateRecord.get()),
+        transactionHandleWorkerJson);
   }
 }
