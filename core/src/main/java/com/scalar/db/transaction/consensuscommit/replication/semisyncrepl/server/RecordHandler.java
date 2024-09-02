@@ -18,11 +18,11 @@ import com.scalar.db.api.Result;
 import com.scalar.db.api.TransactionState;
 import com.scalar.db.exception.storage.ExecutionException;
 import com.scalar.db.exception.storage.NoMutationException;
-import com.scalar.db.io.Key;
 import com.scalar.db.io.TextColumn;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.Utils;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Column;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record.RecordKey;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record.Value;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationRecordRepository;
 import java.util.ArrayDeque;
@@ -94,7 +94,7 @@ class RecordHandler {
 
   @VisibleForTesting
   @Nullable
-  NextValue findNextValue(Key key, Record record) {
+  NextValue findNextValue(RecordKey key, Record record) {
     Queue<Value> valuesForInsert = new ArrayDeque<>();
     Map<String, Value> valuesForNonInsert = new HashMap<>();
     for (Value value : record.values) {
@@ -217,7 +217,7 @@ class RecordHandler {
   }
 
   @VisibleForTesting
-  ResultOfKeyHandling handleKey(Key key, boolean logicalDelete) throws ExecutionException {
+  ResultOfKeyHandling handleKey(RecordKey key, boolean logicalDelete) throws ExecutionException {
     Optional<Record> recordOpt =
         metricsLogger.execGetRecord(() -> replicationRecordRepository.get(key));
     if (!recordOpt.isPresent()) {
@@ -251,15 +251,15 @@ class RecordHandler {
 
     Buildable putBuilder =
         Put.newBuilder()
-            .namespace(record.namespace)
-            .table(record.table)
+            .namespace(record.key.namespace)
+            .table(record.key.table)
             .partitionKey(
                 com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
-                    .toScalarDbKey(record.pk));
-    if (!record.ck.columns.isEmpty()) {
+                    .toScalarDbKey(record.key.pk));
+    if (!record.key.ck.columns.isEmpty()) {
       putBuilder.clusteringKey(
           com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
-              .toScalarDbKey(record.ck));
+              .toScalarDbKey(record.key.ck));
     }
     putBuilder.textValue("tx_id", lastValue.txId);
     putBuilder.intValue("tx_version", lastValue.txVersion);
@@ -302,15 +302,15 @@ class RecordHandler {
     } catch (NoMutationException e) {
       BuildableGet getBuilder =
           Get.newBuilder()
-              .namespace(record.namespace)
-              .table(record.table)
+              .namespace(record.key.namespace)
+              .table(record.key.table)
               .partitionKey(
                   com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
-                      .toScalarDbKey(record.pk));
-      if (!record.ck.columns.isEmpty()) {
+                      .toScalarDbKey(record.key.pk));
+      if (!record.key.ck.columns.isEmpty()) {
         getBuilder.clusteringKey(
             com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
-                .toScalarDbKey(record.ck));
+                .toScalarDbKey(record.key.ck));
       }
       Optional<Result> result = backupScalarDbStorage.get(getBuilder.build());
       if (result.isPresent() && result.get().getText("tx_id").equals(lastValue.txId)) {

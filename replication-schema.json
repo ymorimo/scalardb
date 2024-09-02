@@ -35,16 +35,10 @@
   "replication.records": {
     "transaction": false,
     "partition-key": [
-      "namespace",
-      "table",
-      "pk",
-      "ck"
+      "key"
     ],
     "columns": {
-      "namespace": "TEXT",
-      "table": "TEXT",
-      "pk": "TEXT",
-      "ck": "TEXT",
+      "key": "TEXT",
       "version": "BIGINT",
       "current_tx_id": "TEXT",
       "prep_tx_id": "TEXT",

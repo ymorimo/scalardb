@@ -16,13 +16,13 @@ import com.scalar.db.io.Key;
 import com.scalar.db.io.TextColumn;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.Utils;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record.RecordKey;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record.Value;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import javax.annotation.Nullable;
@@ -58,34 +58,22 @@ public class ReplicationRecordRepository {
     }
   }
 
-  public Key createKey(
-      String namespace,
-      String table,
-      com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key partitionKey,
-      com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key clusteringKey) {
+  public String serializeRecordKey(RecordKey key) {
     try {
-      return Key.newBuilder()
-          .addText("namespace", namespace)
-          .addText("table", table)
-          .addText("pk", objectMapper.writeValueAsString(partitionKey))
-          .addText("ck", objectMapper.writeValueAsString(clusteringKey))
-          .build();
+      return objectMapper.writeValueAsString(key);
     } catch (JsonProcessingException e) {
-      throw new RuntimeException(
-          String.format(
-              "Failed to create a key for record. namespace:%s, table:%s, pk:%s, ck:%s",
-              namespace, table, partitionKey, clusteringKey));
+      throw new RuntimeException("Failed to serialize a key. Key:%s", e);
     }
   }
 
-  public Optional<Record> get(Key key) throws ExecutionException {
+  public Optional<Record> get(RecordKey key) throws ExecutionException {
     Optional<Result> result =
         replicationDbStorage.get(
             Get.newBuilder()
                 .namespace(replicationDbNamespace)
                 .table(replicationDbRecordsTable)
                 // TODO: Provision for performance
-                .partitionKey(key)
+                .partitionKey(Key.ofText("key", serializeRecordKey(key)))
                 .build());
 
     return result.flatMap(
@@ -93,16 +81,10 @@ public class ReplicationRecordRepository {
           try {
             Record record =
                 new Record(
-                    Objects.requireNonNull(r.getText("namespace")),
-                    Objects.requireNonNull(r.getText("table")),
                     objectMapper.readValue(
-                        r.getText("pk"),
-                        com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
-                            .class),
-                    objectMapper.readValue(
-                        r.getText("ck"),
-                        com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
-                            .class),
+                        r.getText("key"),
+                        com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model
+                            .Record.RecordKey.class),
                     r.getBigInt("version"),
                     r.getText("current_tx_id"),
                     r.getText("prep_tx_id"),
@@ -137,14 +119,14 @@ public class ReplicationRecordRepository {
     }
   }
 
-  public void upsertWithNewValue(Key key, Value newValue) throws ExecutionException {
+  public void upsertWithNewValue(RecordKey key, Value newValue) throws ExecutionException {
     Optional<Record> recordOpt = get(key);
 
     Buildable putBuilder =
         Put.newBuilder()
             .namespace(replicationDbNamespace)
             .table(replicationDbRecordsTable)
-            .partitionKey(key);
+            .partitionKey(Key.ofText("key", serializeRecordKey(key)));
     setCasCondition(putBuilder, recordOpt);
 
     Set<Value> values = new HashSet<>();
@@ -169,7 +151,7 @@ public class ReplicationRecordRepository {
   }
 
   public void updateWithValues(
-      Key key,
+      RecordKey key,
       Record record,
       @Nullable String newTxId,
       boolean deleted,
@@ -180,7 +162,7 @@ public class ReplicationRecordRepository {
         Put.newBuilder()
             .namespace(replicationDbNamespace)
             .table(replicationDbRecordsTable)
-            .partitionKey(key);
+            .partitionKey(Key.ofText("key", serializeRecordKey(key)));
     setCasCondition(putBuilder, Optional.of(record));
 
     if (newTxId != null && newTxId.equals(record.currentTxId)) {
@@ -220,14 +202,14 @@ public class ReplicationRecordRepository {
     }
   }
 
-  public void updateWithPrepTxId(Key key, Record record, String prepTxId)
+  public void updateWithPrepTxId(RecordKey key, Record record, String prepTxId)
       throws ExecutionException {
     long currentVersion = record.version;
     Buildable putBuilder =
         Put.newBuilder()
             .namespace(replicationDbNamespace)
             .table(replicationDbRecordsTable)
-            .partitionKey(key);
+            .partitionKey(Key.ofText("key", serializeRecordKey(key)));
     putBuilder.condition(
         ConditionBuilder.putIf(
             Arrays.asList(

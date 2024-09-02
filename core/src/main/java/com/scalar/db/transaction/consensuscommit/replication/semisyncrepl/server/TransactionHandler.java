@@ -4,10 +4,10 @@ import com.google.common.util.concurrent.Uninterruptibles;
 import com.scalar.db.api.TransactionState;
 import com.scalar.db.exception.storage.ExecutionException;
 import com.scalar.db.exception.storage.NoMutationException;
-import com.scalar.db.io.Key;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.CoordinatorState;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.DeletedTuple;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.InsertedTuple;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record.RecordKey;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record.Value;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Transaction;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.UpdatedTuple;
@@ -54,8 +54,8 @@ class TransactionHandler {
   private void handleWrittenTuple(
       String transactionId, WrittenTuple writtenTuple, Instant committedAt)
       throws ExecutionException {
-    Key key =
-        replicationRecordRepository.createKey(
+    RecordKey key =
+        new RecordKey(
             writtenTuple.namespace,
             writtenTuple.table,
             writtenTuple.partitionKey,
@@ -141,7 +141,7 @@ class TransactionHandler {
   }
 
   private void retryOnConflictException(
-      String taskDesc, Key key, FailableRunnable<ExecutionException> task)
+      String taskDesc, RecordKey key, FailableRunnable<ExecutionException> task)
       throws ExecutionException {
     while (true) {
       try {
