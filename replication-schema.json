@@ -24,9 +24,6 @@
       "updated_at",
       "transaction_id"
     ],
-    "secondary-index": [
-      "transaction_id"
-    ],
     "columns": {
       "partition_id": "INT",
       "transaction_id": "TEXT",

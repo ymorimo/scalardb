@@ -91,15 +91,6 @@ public class ReplicationTransactionRepository {
                 .addBigInt("updated_at", transaction.updatedAt.toEpochMilli())
                 .addText("transaction_id", transaction.transactionId)
                 .build())
-        // TODO: Revisit here
-        /*
-        .condition(
-            ConditionBuilder.putIf(
-                    ConditionBuilder.column("transaction_id")
-                        .isNotEqualToText(extractor.txId()))
-                .build())
-         */
-        // TODO: Revisit here as this would be slow. Schemaful serialization should be better
         .value(TextColumn.of("write_set", writeSet))
         .build();
   }
