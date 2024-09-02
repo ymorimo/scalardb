@@ -1,8 +1,7 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.TypeReference;
 import com.scalar.db.api.Delete;
 import com.scalar.db.api.DistributedStorage;
 import com.scalar.db.api.Put;
@@ -25,17 +24,14 @@ public class ReplicationTransactionRepository {
       new TypeReference<List<WrittenTuple>>() {};
 
   private final DistributedStorage replicationDbStorage;
-  private final ObjectMapper objectMapper;
   private final String replicationDbNamespace;
   private final String replicationDbTransactionTable;
 
   public ReplicationTransactionRepository(
       DistributedStorage replicationDbStorage,
-      ObjectMapper objectMapper,
       String replicationDbNamespace,
       String replicationDbTransactionTable) {
     this.replicationDbStorage = replicationDbStorage;
-    this.objectMapper = objectMapper;
     this.replicationDbNamespace = replicationDbNamespace;
     this.replicationDbTransactionTable = replicationDbTransactionTable;
   }
@@ -59,11 +55,7 @@ public class ReplicationTransactionRepository {
                 Instant updatedAt = Instant.ofEpochMilli(result.getBigInt("updated_at"));
                 List<WrittenTuple> writtenTuples;
                 String writeSet = result.getText("write_set");
-                try {
-                  writtenTuples = objectMapper.readValue(writeSet, typeReferenceForWrittenTuples);
-                } catch (JsonProcessingException e) {
-                  throw new RuntimeException("Failed to deserialize JSON into write tuples", e);
-                }
+                writtenTuples = JSON.parseObject(writeSet, typeReferenceForWrittenTuples);
                 return new Transaction(
                     partitionId, createdAt, updatedAt, transactionId, writtenTuples);
               })
@@ -72,15 +64,7 @@ public class ReplicationTransactionRepository {
   }
 
   private Put createPutFromTransaction(Transaction transaction) {
-    String writeSet;
-    try {
-      writeSet =
-          objectMapper
-              .writerFor(typeReferenceForWrittenTuples)
-              .writeValueAsString(transaction.writtenTuples);
-    } catch (JsonProcessingException e) {
-      throw new RuntimeException("Failed to serialize write tuples into JSON string", e);
-    }
+    String writeSet = JSON.toJSONString(transaction.writtenTuples);
 
     return Put.newBuilder()
         .namespace(replicationDbNamespace)
