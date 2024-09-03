@@ -104,22 +104,28 @@ public class ReplicationRecordRepository {
         });
   }
 
-  private void setCasCondition(Buildable buildable, Optional<Record> existingRecord) {
+  private long setCasCondition(Buildable buildable, Optional<Record> existingRecord) {
+    long nextVersion;
+
     if (existingRecord.isPresent()) {
       long currentVersion = existingRecord.get().version;
-      buildable.value(BigIntColumn.of("version", currentVersion + 1));
+      nextVersion = currentVersion + 1;
+      buildable.value(BigIntColumn.of("version", nextVersion));
       buildable.condition(
           ConditionBuilder.putIf(
                   ConditionBuilder.buildConditionalExpression(
                       BigIntColumn.of("version", currentVersion), Operator.EQ))
               .build());
     } else {
-      buildable.value(BigIntColumn.of("version", 1));
+      nextVersion = 1;
+      buildable.value(BigIntColumn.of("version", nextVersion));
       buildable.condition(ConditionBuilder.putIfNotExists());
     }
+
+    return nextVersion;
   }
 
-  public void upsertWithNewValue(RecordKey key, Value newValue) throws ExecutionException {
+  public Record upsertWithNewValue(RecordKey key, Value newValue) throws ExecutionException {
     Optional<Record> recordOpt = get(key);
 
     Buildable putBuilder =
@@ -127,11 +133,12 @@ public class ReplicationRecordRepository {
             .namespace(replicationDbNamespace)
             .table(replicationDbRecordsTable)
             .partitionKey(Key.ofText("key", serializeRecordKey(key)));
-    setCasCondition(putBuilder, recordOpt);
+    long nextVersion = setCasCondition(putBuilder, recordOpt);
 
     Set<Value> values = new HashSet<>();
     recordOpt.ifPresent(record -> values.addAll(record.values));
     if (!values.add(newValue)) {
+      // TODO: In this case, updating the record isn't needed?
       logger.warn("The new value is already stored. key:{}, txId:{}", key, newValue.txId);
     }
 
@@ -139,19 +146,53 @@ public class ReplicationRecordRepository {
       putBuilder.textValue("insert_tx_ids", emptySet);
     }
 
+    long appendedAtMillis = System.currentTimeMillis();
     try {
       logger.debug(
           "[upsertWithNewValue]\n  key:{}\n  values={}\n", key, Utils.convValuesToString(values));
 
       replicationDbStorage.put(
-          putBuilder.textValue("values", objectMapper.writeValueAsString(values)).build());
+          putBuilder
+              .textValue("values", objectMapper.writeValueAsString(values))
+              .bigIntValue("appended_at", appendedAtMillis)
+              .build());
     } catch (JsonProcessingException e) {
       throw new RuntimeException("Failed to serialize `values` for key:" + key, e);
     }
+
+    String curTxId;
+    String prepTxId;
+    boolean deleted;
+    Set<String> insertTxIds;
+    Instant shrinkedAt;
+    if (recordOpt.isPresent()) {
+      Record record = recordOpt.get();
+      curTxId = record.currentTxId;
+      prepTxId = record.prepTxId;
+      deleted = record.deleted;
+      insertTxIds = record.insertTxIds;
+      shrinkedAt = record.shrinkedAt;
+    } else {
+      curTxId = null;
+      prepTxId = null;
+      deleted = false;
+      insertTxIds = Collections.emptySet();
+      shrinkedAt = null;
+    }
+
+    return new Record(
+        key,
+        nextVersion,
+        curTxId,
+        prepTxId,
+        deleted,
+        values,
+        insertTxIds,
+        Instant.ofEpochMilli(appendedAtMillis),
+        shrinkedAt);
   }
 
   public void updateWithValues(
-      RecordKey key,
       Record record,
       @Nullable String newTxId,
       boolean deleted,
@@ -162,7 +203,7 @@ public class ReplicationRecordRepository {
         Put.newBuilder()
             .namespace(replicationDbNamespace)
             .table(replicationDbRecordsTable)
-            .partitionKey(Key.ofText("key", serializeRecordKey(key)));
+            .partitionKey(Key.ofText("key", serializeRecordKey(record.key)));
     setCasCondition(putBuilder, Optional.of(record));
 
     if (newTxId != null && newTxId.equals(record.currentTxId)) {
@@ -176,14 +217,14 @@ public class ReplicationRecordRepository {
       try {
         putBuilder.textValue("insert_tx_ids", objectMapper.writeValueAsString(insertedTxIds));
       } catch (JsonProcessingException e) {
-        throw new RuntimeException("Failed to serialize `insert_tx_ids` for key:" + key, e);
+        throw new RuntimeException("Failed to serialize `insert_tx_ids` for key:" + record.key, e);
       }
     }
 
     try {
       logger.debug(
           "[updateWithValues]\n  key:{}\n  curVer:{}\n  newTxId:{}\n  prepTxId:{}\n  values={}\n",
-          key,
+          record.key,
           record.version,
           newTxId,
           record.prepTxId,
@@ -198,18 +239,17 @@ public class ReplicationRecordRepository {
               .booleanValue("deleted", deleted)
               .build());
     } catch (JsonProcessingException e) {
-      throw new RuntimeException("Failed to serialize `values` for key:" + key, e);
+      throw new RuntimeException("Failed to serialize `values` for key:" + record.key, e);
     }
   }
 
-  public void updateWithPrepTxId(RecordKey key, Record record, String prepTxId)
-      throws ExecutionException {
+  public void updateWithPrepTxId(Record record, String prepTxId) throws ExecutionException {
     long currentVersion = record.version;
     Buildable putBuilder =
         Put.newBuilder()
             .namespace(replicationDbNamespace)
             .table(replicationDbRecordsTable)
-            .partitionKey(Key.ofText("key", serializeRecordKey(key)));
+            .partitionKey(Key.ofText("key", serializeRecordKey(record.key)));
     putBuilder.condition(
         ConditionBuilder.putIf(
             Arrays.asList(
@@ -219,7 +259,9 @@ public class ReplicationRecordRepository {
                     TextColumn.of("prep_tx_id", null), Operator.IS_NULL))));
 
     logger.debug(
-        "[updatePrepTxId]\n  key:{}\n  curVer:{}\n  prepTxId:{}\n", key, record.version, prepTxId);
+        "[updatePrepTxId]\n  record:{}\n  prepTxId:{}\n",
+        record.toStringOnlyWithMetadata(),
+        prepTxId);
 
     replicationDbStorage.put(putBuilder.textValue("prep_tx_id", prepTxId).build());
   }

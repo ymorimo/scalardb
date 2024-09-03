@@ -149,10 +149,10 @@ public class MetricsLogger {
     return resultWithDuration.result;
   }
 
-  public void execAppendValueToRecord(Task<Void> task) {
-    ResultWithDuration<Void> resultWithDuration = captureDuration(task);
+  public Record execAppendValueToRecord(Task<Record> task) {
+    ResultWithDuration<Record> resultWithDuration = captureDuration(task);
     if (!isEnabled) {
-      return;
+      return resultWithDuration.result;
     }
     withPrintAndCleanup(
         metrics -> {
@@ -160,6 +160,7 @@ public class MetricsLogger {
           metrics.txnOpDurationMillisToAppendValueToRecord.addAndGet(
               resultWithDuration.durationInMillis);
         });
+    return resultWithDuration.result;
   }
 
   public Optional<Record> execGetRecord(Task<Optional<Record>> task) {

@@ -217,7 +217,8 @@ class RecordHandler {
   }
 
   @VisibleForTesting
-  ResultOfKeyHandling handleKey(RecordKey key, boolean logicalDelete) throws ExecutionException {
+  ResultOfKeyHandling handleRecord(Record record, boolean logicalDelete) throws ExecutionException {
+    /*
     Optional<Record> recordOpt =
         metricsLogger.execGetRecord(() -> replicationRecordRepository.get(key));
     if (!recordOpt.isPresent()) {
@@ -226,17 +227,19 @@ class RecordHandler {
     }
 
     Record record = recordOpt.get();
+    */
 
     // TODO: Garbage collect too old values.
-    NextValue nextValue = findNextValue(key, record);
+    NextValue nextValue = findNextValue(record.key, record);
 
     if (nextValue == null) {
-      logger.debug(
-          "A next value is not found. Key:{}, Record:{}", key, record.toStringOnlyWithMetadata());
+      logger.debug("A next value is not found. Record:{}", record.toStringOnlyWithMetadata());
       return new ResultOfKeyHandling(!record.values.isEmpty(), false);
     }
     logger.debug(
-        "[handleKey]\n  Key:{}\n  NextValue:{}\n", key, nextValue.toStringOnlyWithMetadata());
+        "[handleRecord]\n  Record:{}\n  NextValue:{}\n",
+        record.toStringOnlyWithMetadata(),
+        nextValue.toStringOnlyWithMetadata());
 
     Value lastValue = nextValue.nextValue;
 
@@ -244,7 +247,7 @@ class RecordHandler {
       // Write down the target transaction ID to let conflict transactions on the same page.
       metricsLogger.execSetPrepTxIdInRecord(
           () -> {
-            replicationRecordRepository.updateWithPrepTxId(key, record, lastValue.txId);
+            replicationRecordRepository.updateWithPrepTxId(record, lastValue.txId);
             return null;
           });
     }
@@ -332,7 +335,6 @@ class RecordHandler {
       metricsLogger.execUpdateRecord(
           () -> {
             replicationRecordRepository.updateWithValues(
-                key,
                 record,
                 lastValue.txId,
                 nextValue.deleted,

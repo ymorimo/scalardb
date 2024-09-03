@@ -7,6 +7,7 @@ import com.scalar.db.exception.storage.NoMutationException;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.CoordinatorState;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.DeletedTuple;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.InsertedTuple;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record.RecordKey;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record.Value;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Transaction;
@@ -23,7 +24,8 @@ import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import org.apache.commons.lang3.function.FailableRunnable;
+import java.util.concurrent.atomic.AtomicReference;
+import org.apache.commons.lang3.function.FailableCallable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -101,27 +103,40 @@ class TransactionHandler {
 
     // These operations are retried separately since appending value doesn't need to be retried
     // once it finished successfully.
-    retryOnConflictException(
-        "copy a written tuple to the record",
-        key,
-        () ->
-            metricsLogger.execAppendValueToRecord(
-                () -> {
-                  // Add the new values to the record.
-                  replicationRecordRepository.upsertWithNewValue(key, newValue);
-                  return null;
-                }));
+    AtomicReference<Record> updatedRecord = new AtomicReference<>();
+    updatedRecord.set(
+        retryOnConflictException(
+            "copy a written tuple to the record",
+            key,
+            () -> {},
+            () ->
+                metricsLogger.execAppendValueToRecord(
+                    () -> {
+                      // Add the new values to the record.
+                      return replicationRecordRepository.upsertWithNewValue(key, newValue);
+                    })));
 
     retryOnConflictException(
         "handle the written tuple",
         key,
+        // Clear the updated record to get the latest record from the table.
+        () -> updatedRecord.set(null),
         () -> {
           while (true) {
-            ResultOfKeyHandling resultOfKeyHandling = recordHandler.handleKey(key, true);
+            Record record = updatedRecord.get();
+            if (record == null) {
+              // If null, it means the record prepared above was too old.
+              Optional<Record> recordOpt = replicationRecordRepository.get(key);
+              if (!recordOpt.isPresent()) {
+                throw new AssertionError("The record must exist. Key: " + key);
+              }
+              record = recordOpt.get();
+            }
+            ResultOfKeyHandling resultOfKeyHandling = recordHandler.handleRecord(record, true);
             if (resultOfKeyHandling.nextConnectedValueExists) {
               // There is a connected value in the record. Need to retry immediately.
             } else {
-              break;
+              return null;
             }
           }
         });
@@ -140,16 +155,19 @@ class TransactionHandler {
     return false;
   }
 
-  private void retryOnConflictException(
-      String taskDesc, RecordKey key, FailableRunnable<ExecutionException> task)
+  private <T> T retryOnConflictException(
+      String taskDesc,
+      RecordKey key,
+      Runnable callbackOnConflict,
+      FailableCallable<T, ExecutionException> task)
       throws ExecutionException {
     while (true) {
       try {
-        task.run();
-        return;
+        return task.call();
       } catch (Exception e) {
         if (isConflictException(e)) {
           logger.warn("Failed to {} due to conflict. Retrying... Key:{}", taskDesc, key, e);
+          callbackOnConflict.run();
           Uninterruptibles.sleepUninterruptibly(50, TimeUnit.MILLISECONDS);
         } else {
           throw e;
