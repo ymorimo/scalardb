@@ -194,30 +194,36 @@ class TransactionHandler {
 
     // Handle the written tuples.
     List<Future<?>> futures = new ArrayList<>(transaction.writtenTuples.size());
+    int writtenTupleIndex = 0;
     for (WrittenTuple writtenTuple : transaction.writtenTuples) {
       logger.debug(
           "[handleTransaction]\n  transaction:{}\n  writtenTuple:{}\n", transaction, writtenTuple);
 
-      // TODO: Handle the last item with its own thread.
-      futures.add(
-          executorService.submit(
-              () -> {
-                try {
-                  handleWrittenTuple(
-                      transaction.transactionId,
-                      writtenTuple,
-                      coordinatorState.get().txCommittedAt);
-                } catch (Exception e) {
-                  throw new RuntimeException(
-                      String.format(
-                          "Failed to handle written tuples unexpectedly. Namespace:%s, Table:%s, Partition key:%s, Clustering key:%s",
-                          writtenTuple.namespace,
-                          writtenTuple.table,
-                          writtenTuple.partitionKey,
-                          writtenTuple.clusteringKey),
-                      e);
-                }
-              }));
+      Runnable task =
+          () -> {
+            try {
+              handleWrittenTuple(
+                  transaction.transactionId, writtenTuple, coordinatorState.get().txCommittedAt);
+            } catch (Exception e) {
+              throw new RuntimeException(
+                  String.format(
+                      "Failed to handle written tuples unexpectedly. Namespace:%s, Table:%s, Partition key:%s, Clustering key:%s",
+                      writtenTuple.namespace,
+                      writtenTuple.table,
+                      writtenTuple.partitionKey,
+                      writtenTuple.clusteringKey),
+                  e);
+            }
+          };
+
+      // Handle the last written tuple with its own thread.
+      if (writtenTupleIndex < transaction.writtenTuples.size() - 1) {
+        futures.add(executorService.submit(task));
+      } else {
+        task.run();
+      }
+
+      writtenTupleIndex++;
     }
     for (Future<?> future : futures) {
       // If a timeout occurs unexpectedly, all the written tuples will be retries.
