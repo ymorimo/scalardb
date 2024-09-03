@@ -41,7 +41,6 @@ public class TransactionHandleWorker {
     this.conf = conf;
     this.transactionHandler = transactionHandler;
     this.transactionHandlerExecutorService =
-        // TODO: Avoid to use this fixed one if there is no performance concern.
         Executors.newFixedThreadPool(
             conf.transactionHandlerThreadSize,
             new ThreadFactoryBuilder()
@@ -51,9 +50,7 @@ public class TransactionHandleWorker {
                     (thread, e) -> logger.error("Got an uncaught exception. thread:{}", thread, e))
                 .build());
     this.recordHandlerExecutorService =
-        // TODO: Avoid to use this fixed one if there is no performance concern.
-        Executors.newFixedThreadPool(
-            conf.recordHandlerThreadSize,
+        Executors.newCachedThreadPool(
             new ThreadFactoryBuilder()
                 .setDaemon(true)
                 .setNameFormat("record-handler-%d")
