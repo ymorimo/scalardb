@@ -2,8 +2,6 @@ package com.scalar.db.transaction.consensuscommit;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.google.common.collect.ImmutableList;
 import com.scalar.db.api.DistributedStorage;
 import com.scalar.db.api.TransactionState;
@@ -46,7 +44,6 @@ public class CommitHandler {
 
   // FIXME
   private final WriteSetHandler writeSetHandler;
-  private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
   private Optional<WriteSetHandler> prepareLogRecorder() {
     String replicationDbConfigPath = System.getenv("LOG_RECORDER_REPLICATION_CONFIG");
@@ -59,13 +56,11 @@ public class CommitHandler {
       replicationTransactionRepository =
           new ReplicationTransactionRepository(
               StorageFactory.create(replicationDbConfigPath).getStorage(),
-              objectMapper,
               "replication",
               "transactions");
       replicationBulkTransactionRepository =
           new ReplicationBulkTransactionRepository(
               StorageFactory.create(replicationDbConfigPath).getStorage(),
-              objectMapper,
               "replication",
               "bulk_transactions");
     } catch (IOException e) {

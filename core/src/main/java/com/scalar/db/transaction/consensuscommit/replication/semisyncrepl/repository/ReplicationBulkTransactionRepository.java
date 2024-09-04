@@ -1,8 +1,7 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
+import com.alibaba.fastjson2.JSON;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scalar.db.api.Delete;
 import com.scalar.db.api.DistributedStorage;
 import com.scalar.db.api.Put;
@@ -27,17 +26,14 @@ public class ReplicationBulkTransactionRepository {
       new TypeReference<List<Transaction>>() {};
 
   private final DistributedStorage replicationDbStorage;
-  private final ObjectMapper objectMapper;
   private final String replicationDbNamespace;
   private final String replicationDbBulkTransactionTable;
 
   public ReplicationBulkTransactionRepository(
       DistributedStorage replicationDbStorage,
-      ObjectMapper objectMapper,
       String replicationDbNamespace,
       String replicationDbBulkTransactionTable) {
     this.replicationDbStorage = replicationDbStorage;
-    this.objectMapper = objectMapper;
     this.replicationDbNamespace = replicationDbNamespace;
     this.replicationDbBulkTransactionTable = replicationDbBulkTransactionTable;
   }
@@ -60,12 +56,7 @@ public class ReplicationBulkTransactionRepository {
                 Instant updatedAt = Instant.ofEpochMilli(result.getBigInt("updated_at"));
                 String serializedTransactions = result.getText("transactions");
                 List<Transaction> transactions;
-                try {
-                  transactions =
-                      objectMapper.readValue(serializedTransactions, typeReferenceForTransactions);
-                } catch (JsonProcessingException e) {
-                  throw new RuntimeException("Failed to deserialize JSON into transactions", e);
-                }
+                transactions = JSON.parseArray(serializedTransactions, Transaction.class);
                 return new BulkTransaction(partitionId, updatedAt, uniqueId, transactions);
               })
           .collect(Collectors.toList());
@@ -74,13 +65,7 @@ public class ReplicationBulkTransactionRepository {
 
   private Put createBulkPutFromTransaction(int partitionId, Collection<Transaction> transactions) {
     // TODO: This can be compressed
-    String serializedTransactions;
-    try {
-      serializedTransactions =
-          objectMapper.writerFor(typeReferenceForTransactions).writeValueAsString(transactions);
-    } catch (JsonProcessingException e) {
-      throw new RuntimeException("Failed to serialize transactions into JSON string", e);
-    }
+    String serializedTransactions = JSON.toJSONString(transactions);
 
     return Put.newBuilder()
         .namespace(replicationDbNamespace)

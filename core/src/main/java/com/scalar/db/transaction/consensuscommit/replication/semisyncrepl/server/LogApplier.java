@@ -1,7 +1,5 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.scalar.db.service.StorageFactory;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.CoordinatorStateRepository;
@@ -100,30 +98,23 @@ public class LogApplier {
           Integer.parseInt(System.getenv(ENV_VAR_THRESHOLD_MILLIS_FOR_OLD_TRANSACTION));
     }
 
-    ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
-
     CoordinatorStateRepository coordinatorStateRepository =
         new CoordinatorStateRepository(
             StorageFactory.create(coordinatorStateConfigPath).getStorage(), "coordinator", "state");
 
     ReplicationRecordRepository replicationRecordRepository =
         new ReplicationRecordRepository(
-            StorageFactory.create(replicationDbConfigPath).getStorage(),
-            objectMapper,
-            "replication",
-            "records");
+            StorageFactory.create(replicationDbConfigPath).getStorage(), "replication", "records");
 
     ReplicationTransactionRepository replicationTransactionRepository =
         new ReplicationTransactionRepository(
             StorageFactory.create(replicationDbConfigPath).getStorage(),
-            objectMapper,
             "replication",
             "transactions");
 
     ReplicationBulkTransactionRepository replicationBulkTransactionRepository =
         new ReplicationBulkTransactionRepository(
             StorageFactory.create(replicationDbConfigPath).getStorage(),
-            objectMapper,
             "replication",
             "bulk_transactions");
 

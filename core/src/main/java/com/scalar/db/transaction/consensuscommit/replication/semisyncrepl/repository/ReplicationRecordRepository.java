@@ -1,8 +1,7 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.TypeReference;
 import com.scalar.db.api.ConditionBuilder;
 import com.scalar.db.api.ConditionalExpression.Operator;
 import com.scalar.db.api.DistributedStorage;
@@ -37,33 +36,21 @@ public class ReplicationRecordRepository {
       new TypeReference<Set<String>>() {};
 
   private final DistributedStorage replicationDbStorage;
-  private final ObjectMapper objectMapper;
   private final String replicationDbNamespace;
   private final String replicationDbRecordsTable;
-  private final String emptySet;
+  private final String emptySet = JSON.toJSONString(Collections.emptySet());
 
   public ReplicationRecordRepository(
       DistributedStorage replicationDbStorage,
-      ObjectMapper objectMapper,
       String replicationDbNamespace,
       String replicationDbRecordsTable) {
     this.replicationDbStorage = replicationDbStorage;
-    this.objectMapper = objectMapper;
     this.replicationDbNamespace = replicationDbNamespace;
     this.replicationDbRecordsTable = replicationDbRecordsTable;
-    try {
-      emptySet = objectMapper.writeValueAsString(Collections.EMPTY_SET);
-    } catch (JsonProcessingException e) {
-      throw new RuntimeException("Failed to serialize an empty set");
-    }
   }
 
   public String serializeRecordKey(RecordKey key) {
-    try {
-      return objectMapper.writeValueAsString(key);
-    } catch (JsonProcessingException e) {
-      throw new RuntimeException("Failed to serialize a key. Key:%s", e);
-    }
+    return JSON.toJSONString(key);
   }
 
   public Optional<Record> get(RecordKey key) throws ExecutionException {
@@ -78,29 +65,24 @@ public class ReplicationRecordRepository {
 
     return result.flatMap(
         r -> {
-          try {
-            Record record =
-                new Record(
-                    objectMapper.readValue(
-                        r.getText("key"),
-                        com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model
-                            .Record.RecordKey.class),
-                    r.getBigInt("version"),
-                    r.getText("current_tx_id"),
-                    r.getText("prep_tx_id"),
-                    r.getBoolean("deleted"),
-                    objectMapper.readValue(r.getText("values"), typeRefForValueInRecords),
-                    objectMapper.readValue(
-                        r.getText("insert_tx_ids"), typeRefForInsertTxIdsInRecords),
-                    Instant.ofEpochMilli(r.getBigInt("appended_at")),
-                    Instant.ofEpochMilli(r.getBigInt("shrinked_at")));
+          Record record =
+              new Record(
+                  JSON.parseObject(
+                      r.getText("key"),
+                      com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model
+                          .Record.RecordKey.class),
+                  r.getBigInt("version"),
+                  r.getText("current_tx_id"),
+                  r.getText("prep_tx_id"),
+                  r.getBoolean("deleted"),
+                  JSON.parseObject(r.getText("values"), typeRefForValueInRecords),
+                  JSON.parseObject(r.getText("insert_tx_ids"), typeRefForInsertTxIdsInRecords),
+                  Instant.ofEpochMilli(r.getBigInt("appended_at")),
+                  Instant.ofEpochMilli(r.getBigInt("shrinked_at")));
 
-            logger.debug("[get]\n  key:{}\n  record:{}\n", key, record.toStringOnlyWithMetadata());
+          logger.debug("[get]\n  key:{}\n  record:{}\n", key, record.toStringOnlyWithMetadata());
 
-            return Optional.of(record);
-          } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to deserialize `values` for key:" + key, e);
-          }
+          return Optional.of(record);
         });
   }
 
@@ -147,18 +129,14 @@ public class ReplicationRecordRepository {
     }
 
     long appendedAtMillis = System.currentTimeMillis();
-    try {
-      logger.debug(
-          "[upsertWithNewValue]\n  key:{}\n  values={}\n", key, Utils.convValuesToString(values));
+    logger.debug(
+        "[upsertWithNewValue]\n  key:{}\n  values={}\n", key, Utils.convValuesToString(values));
 
-      replicationDbStorage.put(
-          putBuilder
-              .textValue("values", objectMapper.writeValueAsString(values))
-              .bigIntValue("appended_at", appendedAtMillis)
-              .build());
-    } catch (JsonProcessingException e) {
-      throw new RuntimeException("Failed to serialize `values` for key:" + key, e);
-    }
+    replicationDbStorage.put(
+        putBuilder
+            .textValue("values", JSON.toJSONString(values))
+            .bigIntValue("appended_at", appendedAtMillis)
+            .build());
 
     String curTxId;
     String prepTxId;
@@ -214,33 +192,25 @@ public class ReplicationRecordRepository {
       Set<String> insertedTxIds = new HashSet<>();
       insertedTxIds.addAll(record.insertTxIds);
       insertedTxIds.addAll(newInsertions);
-      try {
-        putBuilder.textValue("insert_tx_ids", objectMapper.writeValueAsString(insertedTxIds));
-      } catch (JsonProcessingException e) {
-        throw new RuntimeException("Failed to serialize `insert_tx_ids` for key:" + record.key, e);
-      }
+      putBuilder.textValue("insert_tx_ids", JSON.toJSONString(insertedTxIds));
     }
 
-    try {
-      logger.debug(
-          "[updateWithValues]\n  key:{}\n  curVer:{}\n  newTxId:{}\n  prepTxId:{}\n  values={}\n",
-          record.key,
-          record.version,
-          newTxId,
-          record.prepTxId,
-          Utils.convValuesToString(values));
+    logger.debug(
+        "[updateWithValues]\n  key:{}\n  curVer:{}\n  newTxId:{}\n  prepTxId:{}\n  values={}\n",
+        record.key,
+        record.version,
+        newTxId,
+        record.prepTxId,
+        Utils.convValuesToString(values));
 
-      replicationDbStorage.put(
-          putBuilder
-              .textValue("values", objectMapper.writeValueAsString(values))
-              .textValue("current_tx_id", newTxId)
-              // Clear `prep_tx_id` for subsequent transactions
-              .textValue("prep_tx_id", null)
-              .booleanValue("deleted", deleted)
-              .build());
-    } catch (JsonProcessingException e) {
-      throw new RuntimeException("Failed to serialize `values` for key:" + record.key, e);
-    }
+    replicationDbStorage.put(
+        putBuilder
+            .textValue("values", JSON.toJSONString(values))
+            .textValue("current_tx_id", newTxId)
+            // Clear `prep_tx_id` for subsequent transactions
+            .textValue("prep_tx_id", null)
+            .booleanValue("deleted", deleted)
+            .build());
   }
 
   public void updateWithPrepTxId(Record record, String prepTxId) throws ExecutionException {
