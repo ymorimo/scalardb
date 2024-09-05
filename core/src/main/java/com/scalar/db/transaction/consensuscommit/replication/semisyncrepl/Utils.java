@@ -71,7 +71,6 @@ public final class Utils {
                 .put("ck", result.getColumns().get("ck"))
                 .put("version", result.getColumns().get("version"))
                 .put("current_tx_id", result.getColumns().get("current_tx_id"))
-                .put("prep_tx_id", result.getColumns().get("prep_tx_id"))
                 .put("deleted", result.getColumns().get("deleted"))
                 .put("insert_tx_ids", result.getColumns().get("insert_tx_ids"))
                 .build())

@@ -14,8 +14,6 @@ public class Record {
   public final RecordKey key;
   public final long version;
   @Nullable public final String currentTxId;
-  // TODO: Rename this to `reservedTxId`?
-  @Nullable public final String prepTxId;
   public final Set<Value> values;
   public final boolean deleted;
   // TODO: `deleted` is added, so we can remove this field?
@@ -98,7 +96,6 @@ public class Record {
       RecordKey key,
       long version,
       @Nullable String currentTxId,
-      @Nullable String prepTxId,
       boolean deleted,
       Set<Value> values,
       Set<String> insertTxIds,
@@ -107,12 +104,15 @@ public class Record {
     this.key = key;
     this.version = version;
     this.currentTxId = currentTxId;
-    this.prepTxId = prepTxId;
     this.deleted = deleted;
     this.values = values;
     this.insertTxIds = insertTxIds;
     this.appendedAt = appendedAt;
     this.shrinkedAt = shrinkedAt;
+  }
+
+  public long nextVersion() {
+    return version + 1;
   }
 
   @Override
@@ -121,7 +121,6 @@ public class Record {
         .add("key", key)
         .add("version", version)
         .add("currentTxId", currentTxId)
-        .add("prepTxId", prepTxId)
         .add("deleted", deleted)
         .add("values", values)
         .add("insertTxIds", insertTxIds)
@@ -135,7 +134,6 @@ public class Record {
         .add("key", key)
         .add("version", version)
         .add("currentTxId", currentTxId)
-        .add("prepTxId", prepTxId)
         .add("deleted", deleted)
         .add("values", Utils.convValuesToString(values))
         .add("insertTxIds", insertTxIds)

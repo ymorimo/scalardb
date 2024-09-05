@@ -12,13 +12,11 @@ import com.scalar.db.api.Result;
 import com.scalar.db.exception.storage.ExecutionException;
 import com.scalar.db.io.BigIntColumn;
 import com.scalar.db.io.Key;
-import com.scalar.db.io.TextColumn;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.Utils;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record.RecordKey;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record.Value;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -73,7 +71,6 @@ public class ReplicationRecordRepository {
                           .Record.RecordKey.class),
                   r.getBigInt("version"),
                   r.getText("current_tx_id"),
-                  r.getText("prep_tx_id"),
                   r.getBoolean("deleted"),
                   JSON.parseObject(r.getText("values"), typeRefForValueInRecords),
                   JSON.parseObject(r.getText("insert_tx_ids"), typeRefForInsertTxIdsInRecords),
@@ -90,8 +87,9 @@ public class ReplicationRecordRepository {
     long nextVersion;
 
     if (existingRecord.isPresent()) {
-      long currentVersion = existingRecord.get().version;
-      nextVersion = currentVersion + 1;
+      Record record = existingRecord.get();
+      long currentVersion = record.version;
+      nextVersion = record.nextVersion();
       buildable.value(BigIntColumn.of("version", nextVersion));
       buildable.condition(
           ConditionBuilder.putIf(
@@ -139,20 +137,17 @@ public class ReplicationRecordRepository {
             .build());
 
     String curTxId;
-    String prepTxId;
     boolean deleted;
     Set<String> insertTxIds;
     Instant shrinkedAt;
     if (recordOpt.isPresent()) {
       Record record = recordOpt.get();
       curTxId = record.currentTxId;
-      prepTxId = record.prepTxId;
       deleted = record.deleted;
       insertTxIds = record.insertTxIds;
       shrinkedAt = record.shrinkedAt;
     } else {
       curTxId = null;
-      prepTxId = null;
       deleted = false;
       insertTxIds = Collections.emptySet();
       shrinkedAt = null;
@@ -162,7 +157,6 @@ public class ReplicationRecordRepository {
         key,
         nextVersion,
         curTxId,
-        prepTxId,
         deleted,
         values,
         insertTxIds,
@@ -196,43 +190,17 @@ public class ReplicationRecordRepository {
     }
 
     logger.debug(
-        "[updateWithValues]\n  key:{}\n  curVer:{}\n  newTxId:{}\n  prepTxId:{}\n  values={}\n",
+        "[updateWithValues]\n  key:{}\n  curVer:{}\n  newTxId:{}\n  values={}\n",
         record.key,
         record.version,
         newTxId,
-        record.prepTxId,
         Utils.convValuesToString(values));
 
     replicationDbStorage.put(
         putBuilder
             .textValue("values", JSON.toJSONString(values))
             .textValue("current_tx_id", newTxId)
-            // Clear `prep_tx_id` for subsequent transactions
-            .textValue("prep_tx_id", null)
             .booleanValue("deleted", deleted)
             .build());
-  }
-
-  public void updateWithPrepTxId(Record record, String prepTxId) throws ExecutionException {
-    long currentVersion = record.version;
-    Buildable putBuilder =
-        Put.newBuilder()
-            .namespace(replicationDbNamespace)
-            .table(replicationDbRecordsTable)
-            .partitionKey(Key.ofText("key", serializeRecordKey(record.key)));
-    putBuilder.condition(
-        ConditionBuilder.putIf(
-            Arrays.asList(
-                ConditionBuilder.buildConditionalExpression(
-                    BigIntColumn.of("version", currentVersion), Operator.EQ),
-                ConditionBuilder.buildConditionalExpression(
-                    TextColumn.of("prep_tx_id", null), Operator.IS_NULL))));
-
-    logger.debug(
-        "[updatePrepTxId]\n  record:{}\n  prepTxId:{}\n",
-        record.toStringOnlyWithMetadata(),
-        prepTxId);
-
-    replicationDbStorage.put(putBuilder.textValue("prep_tx_id", prepTxId).build());
   }
 }

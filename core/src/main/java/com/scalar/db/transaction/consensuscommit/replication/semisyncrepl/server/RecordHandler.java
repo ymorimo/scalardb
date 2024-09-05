@@ -1,6 +1,5 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server;
 
-import static com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.Utils.convOptBackupDbTableResultMetadataToString;
 import static com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.Utils.convPutOperationMetadataToString;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -9,16 +8,13 @@ import com.google.common.collect.Streams;
 import com.scalar.db.api.ConditionBuilder;
 import com.scalar.db.api.ConditionalExpression.Operator;
 import com.scalar.db.api.DistributedStorage;
-import com.scalar.db.api.Get;
-import com.scalar.db.api.GetBuilder.BuildableGet;
 import com.scalar.db.api.MutationCondition;
 import com.scalar.db.api.Put;
 import com.scalar.db.api.PutBuilder.Buildable;
-import com.scalar.db.api.Result;
 import com.scalar.db.api.TransactionState;
 import com.scalar.db.exception.storage.ExecutionException;
 import com.scalar.db.exception.storage.NoMutationException;
-import com.scalar.db.io.TextColumn;
+import com.scalar.db.io.BigIntColumn;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.Utils;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Column;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record;
@@ -29,9 +25,7 @@ import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -118,8 +112,7 @@ class RecordHandler {
     // - t4: INSERT(X: prev_tx_id=null, tx_id=v4, value=40)
     // `cur_tx_id` is null and merged t1 and t2 are written to the secondary database.
     // At this point, `prep_tx_id` is set to t2. But a next thread doesn't know which insert out
-    // of
-    // t1 and t3 should be handled to reach t2.
+    // of t1 and t3 should be handled to reach t2.
     boolean suspendFollowingOperation = false;
     Value lastValue = null;
     boolean deleted = record.deleted;
@@ -129,27 +122,9 @@ class RecordHandler {
     Set<String> insertTxIds = new HashSet<>();
     @Nullable String currentTxId = record.currentTxId;
     while (!suspendFollowingOperation) {
-      Value value = null;
+      Value value;
       if (currentTxId == null || deleted) {
-        if (record.prepTxId == null) {
-          value = valuesForInsert.poll();
-        } else {
-          Iterator<Value> iterator = valuesForInsert.iterator();
-          while (iterator.hasNext()) {
-            Value v = iterator.next();
-            if (v.txId.equals(record.prepTxId)) {
-              // The previous attempt used this transaction ID. It must be used this time, too.
-              value = v;
-              iterator.remove();
-            }
-          }
-          if (value == null) {
-            throw new AssertionError(
-                String.format(
-                    "`tx_prep_id` is set, but it doesn't exist in INSERT operations. Prepared Tx ID: %s",
-                    record.prepTxId));
-          }
-        }
+        value = valuesForInsert.poll();
       } else {
         value = valuesForNonInsert.remove(currentTxId);
       }
@@ -192,14 +167,6 @@ class RecordHandler {
       currentTxId = value.txId;
 
       lastValue = value;
-
-      if (lastValue.txId.equals(record.prepTxId)) {
-        logger.debug(
-            "The version chains reach prepTxId:{}. The number of remaining versions is {}",
-            record.prepTxId,
-            valuesForInsert.size() + valuesForNonInsert.size());
-        suspendFollowingOperation = true;
-      }
     }
 
     if (lastValue == null) {
@@ -218,17 +185,6 @@ class RecordHandler {
 
   @VisibleForTesting
   ResultOfKeyHandling handleRecord(Record record, boolean logicalDelete) throws ExecutionException {
-    /*
-    Optional<Record> recordOpt =
-        metricsLogger.execGetRecord(() -> replicationRecordRepository.get(key));
-    if (!recordOpt.isPresent()) {
-      logger.warn("Key:{} is not found", key);
-      return new ResultOfKeyHandling(false, false);
-    }
-
-    Record record = recordOpt.get();
-    */
-
     // TODO: Garbage collect too old values.
     NextValue nextValue = findNextValue(record.key, record);
 
@@ -243,15 +199,6 @@ class RecordHandler {
 
     Value lastValue = nextValue.nextValue;
 
-    if (record.prepTxId == null) {
-      // Write down the target transaction ID to let conflict transactions on the same page.
-      metricsLogger.execSetPrepTxIdInRecord(
-          () -> {
-            replicationRecordRepository.updateWithPrepTxId(record, lastValue.txId);
-            return null;
-          });
-    }
-
     Buildable putBuilder =
         Put.newBuilder()
             .namespace(record.key.namespace)
@@ -264,6 +211,12 @@ class RecordHandler {
           com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
               .toScalarDbKey(record.key.ck));
     }
+
+    // FIXME: `before_tx_version` must not be used in production. Prepare a proper new column which
+    // has bigint type.
+    String versionColForConditionUpdate = "before_tx_prepared_at";
+    putBuilder.bigIntValue(versionColForConditionUpdate, record.nextVersion());
+
     putBuilder.textValue("tx_id", lastValue.txId);
     putBuilder.intValue("tx_version", lastValue.txVersion);
     putBuilder.bigIntValue("tx_prepared_at", lastValue.txPreparedAtInMillis);
@@ -278,7 +231,7 @@ class RecordHandler {
       mutationCondition =
           ConditionBuilder.putIf(
                   ConditionBuilder.buildConditionalExpression(
-                      TextColumn.of("tx_id", record.currentTxId), Operator.EQ))
+                      BigIntColumn.of(versionColForConditionUpdate, record.version), Operator.LTE))
               .build();
     }
     putBuilder.condition(mutationCondition);
@@ -303,32 +256,17 @@ class RecordHandler {
     try {
       backupScalarDbStorage.put(putBuilder.build());
     } catch (NoMutationException e) {
-      BuildableGet getBuilder =
-          Get.newBuilder()
-              .namespace(record.key.namespace)
-              .table(record.key.table)
-              .partitionKey(
-                  com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
-                      .toScalarDbKey(record.key.pk));
-      if (!record.key.ck.columns.isEmpty()) {
-        getBuilder.clusteringKey(
-            com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
-                .toScalarDbKey(record.key.ck));
-      }
-      Optional<Result> result = backupScalarDbStorage.get(getBuilder.build());
-      if (result.isPresent() && result.get().getText("tx_id").equals(lastValue.txId)) {
-        // The backup DB table is already updated.
-      } else {
-        // TODO: Revisit this exception type.
-        throw new RuntimeException(
-            String.format(
-                "Failed to update the secondary DB table. Record: %s, Next value: %s, Put operator: %s, Result: %s",
-                record.toStringOnlyWithMetadata(),
-                nextValue.toStringOnlyWithMetadata(),
-                convPutOperationMetadataToString(putBuilder.build()),
-                convOptBackupDbTableResultMetadataToString(result)),
-            e);
-      }
+      // It's possible another thread inserted a record to the backup DB table.
+      Put retryPut =
+          Put.newBuilder(putBuilder.build())
+              .condition(
+                  ConditionBuilder.putIf(
+                          ConditionBuilder.buildConditionalExpression(
+                              BigIntColumn.of(versionColForConditionUpdate, record.version),
+                              Operator.LTE))
+                      .build())
+              .build();
+      backupScalarDbStorage.put(retryPut);
     }
 
     try {
