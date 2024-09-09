@@ -10,6 +10,13 @@ import java.util.List;
 import java.util.Map;
 import javax.annotation.concurrent.Immutable;
 
+// FIXME: This worker must be executed only when a process starts to avoid repeatedly scanning and
+// enqueueing
+//        Therefore, the following changes are needed:
+//        - Make BaseScanWorker able to stop scanning after `handle()` returns a specific value.
+//        - TransactionScanWorker starts scanning from the oldest transaction record.
+//        - TransactionScanWorker ends scanning when it handles a transaction enqueued after the
+//          process started.
 public class TransactionScanWorker extends BaseScanWorker {
   private final Configuration conf;
   private final ReplicationTransactionRepository replicationTransactionRepository;
