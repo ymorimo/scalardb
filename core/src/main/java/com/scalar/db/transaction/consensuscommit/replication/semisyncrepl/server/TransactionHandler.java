@@ -31,7 +31,6 @@ import org.slf4j.LoggerFactory;
 
 class TransactionHandler {
   private static final Logger logger = LoggerFactory.getLogger(TransactionHandler.class);
-  private final long oldTransactionThresholdMillis;
   private final ReplicationTransactionRepository replicationTransactionRepository;
   private final ReplicationRecordRepository replicationRecordRepository;
   private final CoordinatorStateRepository coordinatorStateRepository;
@@ -39,13 +38,11 @@ class TransactionHandler {
   private final MetricsLogger metricsLogger;
 
   public TransactionHandler(
-      long oldTransactionThresholdMillis,
       ReplicationTransactionRepository replicationTransactionRepository,
       ReplicationRecordRepository replicationRecordRepository,
       CoordinatorStateRepository coordinatorStateRepository,
       RecordHandler recordHandler,
       MetricsLogger metricsLogger) {
-    this.oldTransactionThresholdMillis = oldTransactionThresholdMillis;
     this.replicationTransactionRepository = replicationTransactionRepository;
     this.replicationRecordRepository = replicationRecordRepository;
     this.coordinatorStateRepository = coordinatorStateRepository;

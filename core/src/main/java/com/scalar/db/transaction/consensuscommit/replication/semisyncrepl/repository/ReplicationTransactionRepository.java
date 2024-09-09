@@ -36,7 +36,7 @@ public class ReplicationTransactionRepository {
     this.replicationDbTransactionTable = replicationDbTransactionTable;
   }
 
-  public List<Transaction> scan(int partitionId, int fetchTransactionSize)
+  public List<Transaction> scan(int partitionId, int fetchTransactionSize, long scanStartTsMillis)
       throws ExecutionException, IOException {
     try (Scanner scan =
         replicationDbStorage.scan(
@@ -45,6 +45,7 @@ public class ReplicationTransactionRepository {
                 .table(replicationDbTransactionTable)
                 .partitionKey(Key.ofInt("partition_id", partitionId))
                 .ordering(Ordering.asc("updated_at"))
+                .end(Key.ofBigInt("updated_at", scanStartTsMillis))
                 .limit(fetchTransactionSize)
                 .build())) {
       return scan.all().stream()

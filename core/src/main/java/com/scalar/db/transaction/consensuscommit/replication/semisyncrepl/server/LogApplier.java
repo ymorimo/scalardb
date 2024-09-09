@@ -28,6 +28,8 @@ public class LogApplier {
       "LOG_APPLIER_NUM_OF_BULK_TRANSACTION_SCAN_THREADS";
   private static final String ENV_VAR_NUM_OF_TRANSACTION_SCAN_THREADS =
       "LOG_APPLIER_NUM_OF_TRANSACTION_SCAN_THREADS";
+  private static final String ENV_VAR_TRANSACTION_SCAN_OLD_TIMESTAMP_THRESHOLD_MILLIS =
+      "LOG_APPLIER_TRANSACTION_SCAN_OLD_TIMESTAMP_THRESHOLD_MILLIS";
   private static final String ENV_VAR_NUM_OF_TRANSACTION_HANDLER_THREADS =
       "LOG_APPLIER_NUM_OF_TRANSACTION_HANDLER_THREADS";
   private static final String ENV_VAR_NUM_OF_RECORD_HANDLER_THREADS =
@@ -35,8 +37,6 @@ public class LogApplier {
   private static final String ENV_VAR_TRANSACTION_FETCH_SIZE = "LOG_APPLIER_TRANSACTION_FETCH_SIZE";
   private static final String ENV_VAR_TRANSACTION_WAIT_MILLIS_PER_PARTITION =
       "LOG_APPLIER_TRANSACTION_WAIT_MILLIS_PER_PARTITION";
-  private static final String ENV_VAR_THRESHOLD_MILLIS_FOR_OLD_TRANSACTION =
-      "LOG_APPLIER_THRESHOLD_MILLIS_FOR_OLD_TRANSACTION";
 
   private static final int REPLICATION_DB_PARTITION_SIZE = 256;
 
@@ -73,6 +73,12 @@ public class LogApplier {
           Integer.parseInt(System.getenv(ENV_VAR_NUM_OF_TRANSACTION_SCAN_THREADS));
     }
 
+    long transactionScanOldTimestampThresholdMillis = 10000;
+    if (System.getenv(ENV_VAR_TRANSACTION_SCAN_OLD_TIMESTAMP_THRESHOLD_MILLIS) != null) {
+      transactionScanOldTimestampThresholdMillis =
+          Integer.parseInt(System.getenv(ENV_VAR_TRANSACTION_SCAN_OLD_TIMESTAMP_THRESHOLD_MILLIS));
+    }
+
     int numOfTransactionHandlerThreads = 16;
     if (System.getenv(ENV_VAR_NUM_OF_TRANSACTION_HANDLER_THREADS) != null) {
       numOfTransactionHandlerThreads =
@@ -94,12 +100,6 @@ public class LogApplier {
     if (System.getenv(ENV_VAR_TRANSACTION_WAIT_MILLIS_PER_PARTITION) != null) {
       waitMillisPerPartition =
           Integer.parseInt(System.getenv(ENV_VAR_TRANSACTION_WAIT_MILLIS_PER_PARTITION));
-    }
-
-    int thresholdMillisForOldTransaction = 2000;
-    if (System.getenv(ENV_VAR_THRESHOLD_MILLIS_FOR_OLD_TRANSACTION) != null) {
-      thresholdMillisForOldTransaction =
-          Integer.parseInt(System.getenv(ENV_VAR_THRESHOLD_MILLIS_FOR_OLD_TRANSACTION));
     }
 
     CoordinatorStateRepository coordinatorStateRepository =
@@ -138,7 +138,6 @@ public class LogApplier {
 
     TransactionHandler transactionHandler =
         new TransactionHandler(
-            thresholdMillisForOldTransaction,
             replicationTransactionRepository,
             replicationRecordRepository,
             coordinatorStateRepository,
@@ -171,7 +170,8 @@ public class LogApplier {
                 REPLICATION_DB_PARTITION_SIZE,
                 numOfTransactionScanThreads,
                 waitMillisPerPartition,
-                transactionFetchSize),
+                transactionFetchSize,
+                transactionScanOldTimestampThresholdMillis),
             replicationTransactionRepository,
             transactionHandleWorker,
             metricsLogger)
