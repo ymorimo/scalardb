@@ -4,7 +4,6 @@ import static com.scalar.db.transaction.consensuscommit.replication.semisyncrepl
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.Streams;
 import com.scalar.db.api.ConditionBuilder;
 import com.scalar.db.api.ConditionalExpression.Operator;
 import com.scalar.db.api.DistributedStorage;
@@ -21,14 +20,13 @@ import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record.RecordKey;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record.Value;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationRecordRepository;
-import java.util.ArrayDeque;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.Map;
-import java.util.Queue;
 import java.util.Set;
-import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import org.slf4j.Logger;
@@ -89,7 +87,8 @@ class RecordHandler {
   @VisibleForTesting
   @Nullable
   NextValue findNextValue(RecordKey key, Record record) {
-    Queue<Value> valuesForInsert = new ArrayDeque<>();
+    // This variable is defined as a concrete class. It's needed to use as both Queue and List...
+    LinkedList<Value> valuesForInsert = new LinkedList<>();
     Map<String, Value> valuesForNonInsert = new HashMap<>();
     for (Value value : record.values) {
       if (value.type.equals("insert")) {
@@ -102,7 +101,7 @@ class RecordHandler {
         valuesForNonInsert.put(value.prevTxId, value);
       }
     }
-    // TODO: Sort valuesForInsert just in case
+    valuesForInsert.sort(Comparator.comparingLong(a -> a.txCommittedAtInMillis));
 
     // Not merge following operations once an insert operation is found.
     // Assuming the following operations are stored in `records.values`:
@@ -124,7 +123,11 @@ class RecordHandler {
     while (!suspendFollowingOperation) {
       Value value;
       if (currentTxId == null || deleted) {
-        value = valuesForInsert.poll();
+        if (valuesForInsert.isEmpty()) {
+          value = null;
+        } else {
+          value = valuesForInsert.poll();
+        }
       } else {
         value = valuesForNonInsert.remove(currentTxId);
       }
@@ -173,14 +176,16 @@ class RecordHandler {
       return null;
     }
 
+    Set<Value> restValues = new HashSet<>(valuesForNonInsert.values());
+    restValues.addAll(valuesForInsert);
+
     return new NextValue(
         lastValue,
         deleted,
-        Streams.concat(valuesForInsert.stream(), valuesForNonInsert.values().stream())
-            .collect(Collectors.toSet()),
+        restValues,
         updatedColumns,
         insertTxIds,
-        suspendFollowingOperation && (!valuesForInsert.isEmpty() || !valuesForNonInsert.isEmpty()));
+        suspendFollowingOperation && !restValues.isEmpty());
   }
 
   @VisibleForTesting
@@ -212,8 +217,8 @@ class RecordHandler {
               .toScalarDbKey(record.key.ck));
     }
 
-    // FIXME: `before_tx_version` must not be used in production. Prepare a proper new column which
-    // has bigint type.
+    // FIXME: `before_tx_version` must not be used in production to avoid confusion. Prepare a
+    //         proper new column which has bigint type.
     String versionColForConditionUpdate = "before_tx_prepared_at";
     putBuilder.bigIntValue(versionColForConditionUpdate, record.nextVersion());
 
