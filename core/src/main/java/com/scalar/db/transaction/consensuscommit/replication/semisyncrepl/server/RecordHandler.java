@@ -231,7 +231,8 @@ class RecordHandler {
       mutationCondition =
           ConditionBuilder.putIf(
                   ConditionBuilder.buildConditionalExpression(
-                      BigIntColumn.of(versionColForConditionUpdate, record.version), Operator.LTE))
+                      BigIntColumn.of(versionColForConditionUpdate, record.nextVersion()),
+                      Operator.LTE))
               .build();
     }
     putBuilder.condition(mutationCondition);
@@ -262,7 +263,7 @@ class RecordHandler {
               .condition(
                   ConditionBuilder.putIf(
                           ConditionBuilder.buildConditionalExpression(
-                              BigIntColumn.of(versionColForConditionUpdate, record.version),
+                              BigIntColumn.of(versionColForConditionUpdate, record.nextVersion()),
                               Operator.LTE))
                       .build())
               .build();
