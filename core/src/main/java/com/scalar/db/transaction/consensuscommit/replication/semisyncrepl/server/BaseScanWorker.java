@@ -43,13 +43,15 @@ public abstract class BaseScanWorker {
             conf.threadSize,
             new ThreadFactoryBuilder()
                 .setDaemon(true)
-                .setNameFormat(String.format("log-distributor-%s", label) + "-%d")
+                .setNameFormat(String.format("%s-scan", label) + "-%d")
                 .setUncaughtExceptionHandler(
                     (thread, e) -> logger.error("Got an uncaught exception. thread:{}", thread, e))
                 .build());
     this.metricsLogger = metricsLogger;
   }
 
+  // TODO: BaseScanWorker should manage until which record is scanned for each partition, so that
+  //       ScanWorkers can resume the scan from the last scanned point.
   protected abstract boolean handle(int partitionId) throws Exception;
 
   public void run() {

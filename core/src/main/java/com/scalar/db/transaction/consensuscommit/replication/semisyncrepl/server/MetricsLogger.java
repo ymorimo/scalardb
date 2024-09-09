@@ -52,6 +52,13 @@ public class MetricsLogger {
     withPrintAndCleanup(metrics -> metrics.blkTxnScannedTxns.incrementAndGet());
   }
 
+  public void incrTxnsScannedTxns() {
+    if (!isEnabled) {
+      return;
+    }
+    withPrintAndCleanup(metrics -> metrics.txnScannedTxns.incrementAndGet());
+  }
+
   public void incrCommittedTxns() {
     if (!isEnabled) {
       return;
@@ -122,7 +129,7 @@ public class MetricsLogger {
     return new ResultWithDuration<>(result, end - start);
   }
 
-  public List<Transaction> execFetchTransactions(Task<List<Transaction>> task) {
+  public List<Transaction> execScanTransactions(Task<List<Transaction>> task) {
     ResultWithDuration<List<Transaction>> resultWithDuration = captureDuration(task);
     if (!isEnabled) {
       return resultWithDuration.result;

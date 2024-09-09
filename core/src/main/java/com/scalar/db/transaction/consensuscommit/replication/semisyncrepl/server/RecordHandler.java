@@ -87,6 +87,7 @@ class RecordHandler {
   @VisibleForTesting
   @Nullable
   NextValue findNextValue(RecordKey key, Record record) {
+    // TODO: Use ArrayDeque instead.
     // This variable is defined as a concrete class. It's needed to use as both Queue and List...
     LinkedList<Value> valuesForInsert = new LinkedList<>();
     Map<String, Value> valuesForNonInsert = new HashMap<>();

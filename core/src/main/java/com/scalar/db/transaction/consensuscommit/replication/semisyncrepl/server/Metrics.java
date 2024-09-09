@@ -6,6 +6,7 @@ import javax.annotation.Nullable;
 
 class Metrics {
   public final AtomicInteger blkTxnScannedTxns = new AtomicInteger();
+  public final AtomicInteger txnScannedTxns = new AtomicInteger();
   public final AtomicInteger txnUncommittedTxns = new AtomicInteger();
   public final AtomicInteger txnAbortedTxns = new AtomicInteger();
   public final AtomicInteger txnCommittedTxns = new AtomicInteger();
@@ -60,6 +61,7 @@ class Metrics {
             + "    }\n"
             + "  },\n"
             + "  \"Txn\":{\n"
+            + "    \"ScannedTxns\":%d,\n"
             + "    \"TxnState\":{\n"
             + "      \"CommittedTxns\":%d,\n"
             + "      \"UncommittedTxns\":%d,\n"
@@ -85,6 +87,7 @@ class Metrics {
         blkTxnScannedTxns.get(),
         blkTxnOpCountToScanBlkTxns.get(),
         meanDuration(blkTxnOpCountToScanBlkTxns.get(), blkTxnOpDurationMillisToScanBlkTxns.get()),
+        txnScannedTxns.get(),
         txnCommittedTxns.get(),
         txnUncommittedTxns.get(),
         txnAbortedTxns.get(),

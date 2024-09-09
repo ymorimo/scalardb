@@ -24,16 +24,14 @@ public class LogApplier {
   private static final String ENV_VAR_REPLICATION_CONFIG = "LOG_APPLIER_REPLICATION_CONFIG";
   private static final String ENV_VAR_COORDINATOR_STATE_CONFIG =
       "LOG_APPLIER_COORDINATOR_STATE_CONFIG";
-  private static final String ENV_VAR_NUM_OF_BULK_TRANSACTION_HANDLER_THREADS =
-      "LOG_APPLIER_NUM_OF_BULK_TRANSACTION_HANDLER_THREADS";
+  private static final String ENV_VAR_NUM_OF_BULK_TRANSACTION_SCAN_THREADS =
+      "LOG_APPLIER_NUM_OF_BULK_TRANSACTION_SCAN_THREADS";
+  private static final String ENV_VAR_NUM_OF_TRANSACTION_SCAN_THREADS =
+      "LOG_APPLIER_NUM_OF_TRANSACTION_SCAN_THREADS";
   private static final String ENV_VAR_NUM_OF_TRANSACTION_HANDLER_THREADS =
       "LOG_APPLIER_NUM_OF_TRANSACTION_HANDLER_THREADS";
-  private static final String ENV_VAR_NUM_OF_TRANSACTION_QUEUE_CONSUMER_THREADS =
-      "LOG_APPLIER_NUM_OF_TRANSACTION_QUEUE_CONSUMER_THREADS";
   private static final String ENV_VAR_NUM_OF_RECORD_HANDLER_THREADS =
       "LOG_APPLIER_NUM_OF_RECORD_HANDLER_THREADS";
-  private static final String ENV_VAR_NUM_OF_RECORD_QUEUE_CONSUMER_THREADS =
-      "LOG_APPLIER_NUM_OF_RECORD_QUEUE_CONSUMER_THREADS";
   private static final String ENV_VAR_TRANSACTION_FETCH_SIZE = "LOG_APPLIER_TRANSACTION_FETCH_SIZE";
   private static final String ENV_VAR_TRANSACTION_WAIT_MILLIS_PER_PARTITION =
       "LOG_APPLIER_TRANSACTION_WAIT_MILLIS_PER_PARTITION";
@@ -63,10 +61,16 @@ public class LogApplier {
               + ENV_VAR_COORDINATOR_STATE_CONFIG);
     }
 
-    int numOfBulkTransactionHandlerThreads = 16;
-    if (System.getenv(ENV_VAR_NUM_OF_BULK_TRANSACTION_HANDLER_THREADS) != null) {
-      numOfBulkTransactionHandlerThreads =
-          Integer.parseInt(System.getenv(ENV_VAR_NUM_OF_BULK_TRANSACTION_HANDLER_THREADS));
+    int numOfBulkTransactionScanThreads = 16;
+    if (System.getenv(ENV_VAR_NUM_OF_BULK_TRANSACTION_SCAN_THREADS) != null) {
+      numOfBulkTransactionScanThreads =
+          Integer.parseInt(System.getenv(ENV_VAR_NUM_OF_BULK_TRANSACTION_SCAN_THREADS));
+    }
+
+    int numOfTransactionScanThreads = 16;
+    if (System.getenv(ENV_VAR_NUM_OF_TRANSACTION_SCAN_THREADS) != null) {
+      numOfTransactionScanThreads =
+          Integer.parseInt(System.getenv(ENV_VAR_NUM_OF_TRANSACTION_SCAN_THREADS));
     }
 
     int numOfTransactionHandlerThreads = 16;
@@ -153,7 +157,7 @@ public class LogApplier {
     new BulkTransactionScanWorker(
             new BulkTransactionScanWorker.Configuration(
                 REPLICATION_DB_PARTITION_SIZE,
-                numOfBulkTransactionHandlerThreads,
+                numOfBulkTransactionScanThreads,
                 waitMillisPerPartition,
                 transactionFetchSize),
             replicationBulkTransactionRepository,
@@ -162,7 +166,16 @@ public class LogApplier {
             metricsLogger)
         .run();
 
-    // TODO: Add TransactionScanner.
+    new TransactionScanWorker(
+            new TransactionScanWorker.Configuration(
+                REPLICATION_DB_PARTITION_SIZE,
+                numOfTransactionScanThreads,
+                waitMillisPerPartition,
+                transactionFetchSize),
+            replicationTransactionRepository,
+            transactionHandleWorker,
+            metricsLogger)
+        .run();
 
     while (true) {
       Uninterruptibles.sleepUninterruptibly(Duration.ofMinutes(1));
