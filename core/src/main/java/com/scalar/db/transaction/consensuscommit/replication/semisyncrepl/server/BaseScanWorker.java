@@ -121,7 +121,7 @@ public abstract class BaseScanWorker {
                 }
               }
             }
-            logger.info("Finishing {}", this);
+            logger.info("Finishing the partition scan. Start Partition ID: {}", startPartitionId);
           });
     }
   }

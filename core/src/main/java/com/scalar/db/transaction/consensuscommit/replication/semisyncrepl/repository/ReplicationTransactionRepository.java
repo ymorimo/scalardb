@@ -8,6 +8,7 @@ import com.scalar.db.api.Put;
 import com.scalar.db.api.Result;
 import com.scalar.db.api.Scan;
 import com.scalar.db.api.Scan.Ordering;
+import com.scalar.db.api.ScanBuilder.BuildableScan;
 import com.scalar.db.api.Scanner;
 import com.scalar.db.exception.storage.ExecutionException;
 import com.scalar.db.io.Key;
@@ -47,21 +48,26 @@ public class ReplicationTransactionRepository {
     }
   }
 
-  public ScanResult scan(int partitionId, int fetchTransactionSize, long scanStartTsMillis)
+  public ScanResult scan(
+      int partitionId, int fetchTransactionSize, Long scanStartTsMillis, long scanEndTsMillis)
       throws ExecutionException, IOException {
-    try (Scanner scan =
-        replicationDbStorage.scan(
-            Scan.newBuilder()
-                .namespace(replicationDbNamespace)
-                .table(replicationDbTransactionTable)
-                .partitionKey(Key.ofInt("partition_id", partitionId))
-                .ordering(Ordering.asc("created_at"))
-                .end(Key.ofBigInt("created_at", scanStartTsMillis))
-                .limit(fetchTransactionSize)
-                .build())) {
+    BuildableScan builder =
+        Scan.newBuilder()
+            .namespace(replicationDbNamespace)
+            .table(replicationDbTransactionTable)
+            .partitionKey(Key.ofInt("partition_id", partitionId))
+            .ordering(Ordering.asc("created_at"));
 
+    if (scanStartTsMillis != null) {
+      builder.start(Key.ofBigInt("created_at", scanStartTsMillis));
+    }
+
+    builder.end(Key.ofBigInt("created_at", scanEndTsMillis)).limit(fetchTransactionSize);
+
+    try (Scanner scan = replicationDbStorage.scan(builder.build())) {
       Long lastTimestampMillis = null;
-      List<Transaction> transactions = new ArrayList<>(scan.all().size());
+      List<Transaction> transactions = new ArrayList<>();
+
       for (Result result : scan.all()) {
         String transactionId = result.getText("transaction_id");
         Instant createdAt = Instant.ofEpochMilli(result.getBigInt("created_at"));

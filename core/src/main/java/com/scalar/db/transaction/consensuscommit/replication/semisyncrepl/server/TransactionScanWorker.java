@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,8 +29,9 @@ public class TransactionScanWorker extends BaseScanWorker {
   private final MetricsLogger metricsLogger;
   private final TransactionHandleWorker transactionHandleWorker;
   private final Map<Integer, Long> lastScannedTimestampMap = new HashMap<>();
-  private final long startTimestampMillis;
+  private final long workerStartTimestampMillis;
   private final Set<Integer> finishedPartitionIds;
+  private final int partitionsPerThread;
 
   @Immutable
   public static class Configuration extends BaseScanWorker.Configuration {
@@ -53,8 +55,9 @@ public class TransactionScanWorker extends BaseScanWorker {
     this.replicationTransactionRepository = replicationTransactionRepository;
     this.transactionHandleWorker = transactionHandleWorker;
     this.metricsLogger = metricsLogger;
-    this.startTimestampMillis = System.currentTimeMillis();
+    this.workerStartTimestampMillis = System.currentTimeMillis();
     this.finishedPartitionIds = new HashSet<>(conf.replicationDbPartitionSize);
+    this.partitionsPerThread = conf.replicationDbPartitionSize / conf.threadSize;
   }
 
   private void moveTransaction(Transaction transaction) throws ExecutionException {
@@ -65,14 +68,13 @@ public class TransactionScanWorker extends BaseScanWorker {
 
   @Override
   protected boolean handle(int partitionId) throws ExecutionException {
-    Long scanStartTsMillis =
-        lastScannedTimestampMap.computeIfAbsent(partitionId, key -> startTimestampMillis);
+    @Nullable Long scanStartTsMillis = lastScannedTimestampMap.get(partitionId);
 
     ScanResult scanResult =
         metricsLogger.execScanTransactions(
             () ->
                 replicationTransactionRepository.scan(
-                    partitionId, conf.fetchSize, scanStartTsMillis));
+                    partitionId, conf.fetchSize, scanStartTsMillis, workerStartTimestampMillis));
     for (Transaction transaction : scanResult.transactions) {
       moveTransaction(transaction);
     }
@@ -92,6 +94,6 @@ public class TransactionScanWorker extends BaseScanWorker {
 
   @Override
   protected boolean shouldFinish() {
-    return finishedPartitionIds.size() >= conf.replicationDbPartitionSize;
+    return finishedPartitionIds.size() >= partitionsPerThread;
   }
 }
