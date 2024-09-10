@@ -5,10 +5,14 @@ import static com.google.common.base.Preconditions.checkArgument;
 import com.scalar.db.exception.storage.ExecutionException;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Transaction;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationTransactionRepository;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationTransactionRepository.ScanResult;
 import java.util.HashMap;
-import java.util.List;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import javax.annotation.concurrent.Immutable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 // FIXME: This worker must be executed only when a process starts to avoid repeatedly scanning and
 // enqueueing
@@ -18,27 +22,24 @@ import javax.annotation.concurrent.Immutable;
 //        - TransactionScanWorker ends scanning when it handles a transaction enqueued after the
 //          process started.
 public class TransactionScanWorker extends BaseScanWorker {
+  private static final Logger logger = LoggerFactory.getLogger(TransactionScanWorker.class);
   private final Configuration conf;
   private final ReplicationTransactionRepository replicationTransactionRepository;
   private final MetricsLogger metricsLogger;
   private final TransactionHandleWorker transactionHandleWorker;
   private final Map<Integer, Long> lastScannedTimestampMap = new HashMap<>();
+  private final long startTimestampMillis;
+  private final Set<Integer> finishedPartitionIds;
 
   @Immutable
   public static class Configuration extends BaseScanWorker.Configuration {
     private final int fetchSize;
-    private final long transactionScanOldTimestampThresholdMillis;
 
     public Configuration(
-        int replicationDbPartitionSize,
-        int threadSize,
-        int waitMillisPerPartition,
-        int fetchSize,
-        long transactionScanOldTimestampThresholdMillis) {
+        int replicationDbPartitionSize, int threadSize, int waitMillisPerPartition, int fetchSize) {
       super(replicationDbPartitionSize, threadSize, waitMillisPerPartition);
       checkArgument(fetchSize > 0, "fetch size should be greater than 0", fetchSize);
       this.fetchSize = fetchSize;
-      this.transactionScanOldTimestampThresholdMillis = transactionScanOldTimestampThresholdMillis;
     }
   }
 
@@ -52,6 +53,8 @@ public class TransactionScanWorker extends BaseScanWorker {
     this.replicationTransactionRepository = replicationTransactionRepository;
     this.transactionHandleWorker = transactionHandleWorker;
     this.metricsLogger = metricsLogger;
+    this.startTimestampMillis = System.currentTimeMillis();
+    this.finishedPartitionIds = new HashSet<>(conf.replicationDbPartitionSize);
   }
 
   private void moveTransaction(Transaction transaction) throws ExecutionException {
@@ -63,29 +66,32 @@ public class TransactionScanWorker extends BaseScanWorker {
   @Override
   protected boolean handle(int partitionId) throws ExecutionException {
     Long scanStartTsMillis =
-        lastScannedTimestampMap.computeIfAbsent(
-            partitionId,
-            key -> System.currentTimeMillis() - conf.transactionScanOldTimestampThresholdMillis);
+        lastScannedTimestampMap.computeIfAbsent(partitionId, key -> startTimestampMillis);
 
-    List<Transaction> scannedTxns =
+    ScanResult scanResult =
         metricsLogger.execScanTransactions(
             () ->
                 replicationTransactionRepository.scan(
                     partitionId, conf.fetchSize, scanStartTsMillis));
-    for (Transaction transaction : scannedTxns) {
+    for (Transaction transaction : scanResult.transactions) {
       moveTransaction(transaction);
     }
 
-    if (scannedTxns.size() >= conf.fetchSize) {
-      Transaction lastTransaction = scannedTxns.get(scannedTxns.size() - 1);
-      // TODO: Which column should be used is hidden in ReplicationTransactionRepository.
-      lastScannedTimestampMap.putIfAbsent(partitionId, lastTransaction.updatedAt.toEpochMilli());
+    if (scanResult.nextScanTimestampMillis == null) {
+      assert scanResult.transactions.isEmpty();
+      // All transactions in Replication DB are scanned.
+      lastScannedTimestampMap.remove(partitionId);
+      finishedPartitionIds.add(partitionId);
+      logger.info("Finishing the partition. Partition ID: {}", partitionId);
     } else {
-      lastScannedTimestampMap.put(
-          partitionId,
-          System.currentTimeMillis() - conf.transactionScanOldTimestampThresholdMillis);
+      lastScannedTimestampMap.put(partitionId, scanResult.nextScanTimestampMillis);
     }
 
-    return scannedTxns.size() >= conf.fetchSize;
+    return scanResult.transactions.size() >= conf.fetchSize;
+  }
+
+  @Override
+  protected boolean shouldFinish() {
+    return finishedPartitionIds.size() >= conf.replicationDbPartitionSize;
   }
 }

@@ -50,9 +50,11 @@ public abstract class BaseScanWorker {
     this.metricsLogger = metricsLogger;
   }
 
-  // TODO: BaseScanWorker should manage until which record is scanned for each partition, so that
-  //       ScanWorkers can resume the scan from the last scanned point.
   protected abstract boolean handle(int partitionId) throws Exception;
+
+  protected boolean shouldFinish() {
+    return false;
+  }
 
   public void run() {
     for (int i = 0; i < conf.threadSize; i++) {
@@ -86,7 +88,7 @@ public abstract class BaseScanWorker {
             // entries and decides. It decides to wait until fetching the maximum size entries.
             //
             Integer partitionIdHavingMoreEnntries = null;
-            while (!executorService.isShutdown()) {
+            while (!shouldFinish()) {
               for (int partitionId = startPartitionId;
                   partitionId < conf.replicationDbPartitionSize;
                   partitionId += conf.threadSize) {
@@ -119,6 +121,7 @@ public abstract class BaseScanWorker {
                 }
               }
             }
+            logger.info("Finishing {}", this);
           });
     }
   }

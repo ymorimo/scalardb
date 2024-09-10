@@ -3,7 +3,6 @@ package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.MoreObjects;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.Utils;
-import java.time.Instant;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.Set;
@@ -17,9 +16,8 @@ public class Record {
   public final Set<Value> values;
   public final boolean deleted;
   // TODO: `deleted` is added, so we can remove this field?
+  //       Probably "no" considering retry by TransactionScanWorker.
   public final Set<String> insertTxIds;
-  @Nullable public final Instant appendedAt;
-  @Nullable public final Instant shrinkedAt;
 
   /** A class that represents a write-set in `records` table. See also {@link WrittenTuple}. */
   public static class Value {
@@ -98,17 +96,13 @@ public class Record {
       @Nullable String currentTxId,
       boolean deleted,
       Set<Value> values,
-      Set<String> insertTxIds,
-      @Nullable Instant appendedAt,
-      @Nullable Instant shrinkedAt) {
+      Set<String> insertTxIds) {
     this.key = key;
     this.version = version;
     this.currentTxId = currentTxId;
     this.deleted = deleted;
     this.values = values;
     this.insertTxIds = insertTxIds;
-    this.appendedAt = appendedAt;
-    this.shrinkedAt = shrinkedAt;
   }
 
   public long nextVersion() {
@@ -124,8 +118,6 @@ public class Record {
         .add("deleted", deleted)
         .add("values", values)
         .add("insertTxIds", insertTxIds)
-        .add("appendedAt", appendedAt)
-        .add("shrinkedAt", shrinkedAt)
         .toString();
   }
 
@@ -137,8 +129,6 @@ public class Record {
         .add("deleted", deleted)
         .add("values", Utils.convValuesToString(values))
         .add("insertTxIds", insertTxIds)
-        .add("appendedAt", appendedAt)
-        .add("shrinkedAt", shrinkedAt)
         .toString();
   }
 

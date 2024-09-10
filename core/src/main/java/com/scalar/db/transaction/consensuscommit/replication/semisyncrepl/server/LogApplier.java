@@ -170,8 +170,7 @@ public class LogApplier {
                 REPLICATION_DB_PARTITION_SIZE,
                 numOfTransactionScanThreads,
                 waitMillisPerPartition,
-                transactionFetchSize,
-                transactionScanOldTimestampThresholdMillis),
+                transactionFetchSize),
             replicationTransactionRepository,
             transactionHandleWorker,
             metricsLogger)

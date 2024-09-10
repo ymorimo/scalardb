@@ -2,7 +2,7 @@ package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.serve
 
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.BulkTransaction;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record;
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Transaction;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationTransactionRepository.ScanResult;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -129,8 +129,8 @@ public class MetricsLogger {
     return new ResultWithDuration<>(result, end - start);
   }
 
-  public List<Transaction> execScanTransactions(Task<List<Transaction>> task) {
-    ResultWithDuration<List<Transaction>> resultWithDuration = captureDuration(task);
+  public ScanResult execScanTransactions(Task<ScanResult> task) {
+    ResultWithDuration<ScanResult> resultWithDuration = captureDuration(task);
     if (!isEnabled) {
       return resultWithDuration.result;
     }

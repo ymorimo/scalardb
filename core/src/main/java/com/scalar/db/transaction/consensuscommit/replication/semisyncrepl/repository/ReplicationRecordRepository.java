@@ -16,7 +16,6 @@ import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.Utils;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record.RecordKey;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record.Value;
-import java.time.Instant;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -73,9 +72,7 @@ public class ReplicationRecordRepository {
                   r.getText("current_tx_id"),
                   r.getBoolean("deleted"),
                   JSON.parseObject(r.getText("values"), typeRefForValueInRecords),
-                  JSON.parseObject(r.getText("insert_tx_ids"), typeRefForInsertTxIdsInRecords),
-                  Instant.ofEpochMilli(r.getBigInt("appended_at")),
-                  Instant.ofEpochMilli(r.getBigInt("shrinked_at")));
+                  JSON.parseObject(r.getText("insert_tx_ids"), typeRefForInsertTxIdsInRecords));
 
           logger.debug("[get]\n  key:{}\n  record:{}\n", key, record.toStringOnlyWithMetadata());
 
@@ -126,42 +123,26 @@ public class ReplicationRecordRepository {
       putBuilder.textValue("insert_tx_ids", emptySet);
     }
 
-    long appendedAtMillis = System.currentTimeMillis();
     logger.debug(
         "[upsertWithNewValue]\n  key:{}\n  values={}\n", key, Utils.convValuesToString(values));
 
-    replicationDbStorage.put(
-        putBuilder
-            .textValue("values", JSON.toJSONString(values))
-            .bigIntValue("appended_at", appendedAtMillis)
-            .build());
+    replicationDbStorage.put(putBuilder.textValue("values", JSON.toJSONString(values)).build());
 
     String curTxId;
     boolean deleted;
     Set<String> insertTxIds;
-    Instant shrinkedAt;
     if (recordOpt.isPresent()) {
       Record record = recordOpt.get();
       curTxId = record.currentTxId;
       deleted = record.deleted;
       insertTxIds = record.insertTxIds;
-      shrinkedAt = record.shrinkedAt;
     } else {
       curTxId = null;
       deleted = false;
       insertTxIds = Collections.emptySet();
-      shrinkedAt = null;
     }
 
-    return new Record(
-        key,
-        nextVersion,
-        curTxId,
-        deleted,
-        values,
-        insertTxIds,
-        Instant.ofEpochMilli(appendedAtMillis),
-        shrinkedAt);
+    return new Record(key, nextVersion, curTxId, deleted, values, insertTxIds);
   }
 
   public void updateWithValues(

@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.TypeReference;
 import com.scalar.db.api.Delete;
 import com.scalar.db.api.DistributedStorage;
 import com.scalar.db.api.Put;
+import com.scalar.db.api.Result;
 import com.scalar.db.api.Scan;
 import com.scalar.db.api.Scan.Ordering;
 import com.scalar.db.api.Scanner;
@@ -15,8 +16,8 @@ import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.WrittenTuple;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class ReplicationTransactionRepository {
 
@@ -36,7 +37,17 @@ public class ReplicationTransactionRepository {
     this.replicationDbTransactionTable = replicationDbTransactionTable;
   }
 
-  public List<Transaction> scan(int partitionId, int fetchTransactionSize, long scanStartTsMillis)
+  public static class ScanResult {
+    public final Long nextScanTimestampMillis;
+    public final List<Transaction> transactions;
+
+    public ScanResult(Long nextScanTimestampMillis, List<Transaction> transactions) {
+      this.nextScanTimestampMillis = nextScanTimestampMillis;
+      this.transactions = transactions;
+    }
+  }
+
+  public ScanResult scan(int partitionId, int fetchTransactionSize, long scanStartTsMillis)
       throws ExecutionException, IOException {
     try (Scanner scan =
         replicationDbStorage.scan(
@@ -44,23 +55,26 @@ public class ReplicationTransactionRepository {
                 .namespace(replicationDbNamespace)
                 .table(replicationDbTransactionTable)
                 .partitionKey(Key.ofInt("partition_id", partitionId))
-                .ordering(Ordering.asc("updated_at"))
-                .end(Key.ofBigInt("updated_at", scanStartTsMillis))
+                .ordering(Ordering.asc("created_at"))
+                .end(Key.ofBigInt("created_at", scanStartTsMillis))
                 .limit(fetchTransactionSize)
                 .build())) {
-      return scan.all().stream()
-          .map(
-              result -> {
-                String transactionId = result.getText("transaction_id");
-                Instant createdAt = Instant.ofEpochMilli(result.getBigInt("created_at"));
-                Instant updatedAt = Instant.ofEpochMilli(result.getBigInt("updated_at"));
-                List<WrittenTuple> writtenTuples;
-                String writeSet = result.getText("write_set");
-                writtenTuples = JSON.parseObject(writeSet, typeReferenceForWrittenTuples);
-                return new Transaction(
-                    partitionId, createdAt, updatedAt, transactionId, writtenTuples);
-              })
-          .collect(Collectors.toList());
+
+      Long lastTimestampMillis = null;
+      List<Transaction> transactions = new ArrayList<>(scan.all().size());
+      for (Result result : scan.all()) {
+        String transactionId = result.getText("transaction_id");
+        Instant createdAt = Instant.ofEpochMilli(result.getBigInt("created_at"));
+        List<WrittenTuple> writtenTuples;
+        String writeSet = result.getText("write_set");
+        writtenTuples = JSON.parseObject(writeSet, typeReferenceForWrittenTuples);
+        if (lastTimestampMillis == null || lastTimestampMillis < createdAt.toEpochMilli()) {
+          lastTimestampMillis = createdAt.toEpochMilli();
+        }
+        transactions.add(new Transaction(partitionId, createdAt, transactionId, writtenTuples));
+      }
+
+      return new ScanResult(lastTimestampMillis, transactions);
     }
   }
 
@@ -73,7 +87,7 @@ public class ReplicationTransactionRepository {
         .partitionKey(Key.ofInt("partition_id", transaction.partitionId))
         .clusteringKey(
             Key.newBuilder()
-                .addBigInt("updated_at", transaction.updatedAt.toEpochMilli())
+                .addBigInt("created_at", transaction.createdAt.toEpochMilli())
                 .addText("transaction_id", transaction.transactionId)
                 .build())
         .value(TextColumn.of("write_set", writeSet))
@@ -84,15 +98,11 @@ public class ReplicationTransactionRepository {
     replicationDbStorage.put(createPutFromTransaction(transaction));
   }
 
-  public Transaction updateUpdatedAt(Transaction transaction) throws ExecutionException {
+  public Transaction updateCreatedAt(Transaction transaction) throws ExecutionException {
     Instant now = Instant.now();
     Transaction updatedTransaction =
         new Transaction(
-            transaction.partitionId,
-            transaction.createdAt,
-            now,
-            transaction.transactionId,
-            transaction.writtenTuples);
+            transaction.partitionId, now, transaction.transactionId, transaction.writtenTuples);
 
     add(updatedTransaction);
     // It's okay if deleting the old record remains
@@ -109,7 +119,7 @@ public class ReplicationTransactionRepository {
             .partitionKey(Key.ofInt("partition_id", transaction.partitionId))
             .clusteringKey(
                 Key.newBuilder()
-                    .addBigInt("updated_at", transaction.updatedAt.toEpochMilli())
+                    .addBigInt("created_at", transaction.createdAt.toEpochMilli())
                     .addText("transaction_id", transaction.transactionId)
                     .build())
             .build());

@@ -46,14 +46,14 @@ public class ReplicationBulkTransactionRepository {
                 .namespace(replicationDbNamespace)
                 .table(replicationDbBulkTransactionTable)
                 .partitionKey(Key.ofInt("partition_id", partitionId))
-                .ordering(Ordering.asc("updated_at"))
+                .ordering(Ordering.asc("created_at"))
                 .limit(fetchTransactionSize)
                 .build())) {
       return scan.all().stream()
           .map(
               result -> {
                 String uniqueId = result.getText("unique_id");
-                Instant updatedAt = Instant.ofEpochMilli(result.getBigInt("updated_at"));
+                Instant updatedAt = Instant.ofEpochMilli(result.getBigInt("created_at"));
                 String serializedTransactions = result.getText("transactions");
                 List<Transaction> transactions;
                 transactions = JSON.parseArray(serializedTransactions, Transaction.class);
@@ -73,7 +73,7 @@ public class ReplicationBulkTransactionRepository {
         .partitionKey(Key.ofInt("partition_id", partitionId))
         .clusteringKey(
             Key.newBuilder()
-                .addBigInt("updated_at", System.currentTimeMillis())
+                .addBigInt("created_at", System.currentTimeMillis())
                 // TODO: Make unique_id be passed from outside for retry
                 .addText("unique_id", UUID.randomUUID().toString())
                 .build())
@@ -99,7 +99,7 @@ public class ReplicationBulkTransactionRepository {
             .partitionKey(Key.ofInt("partition_id", bulkTransaction.partitionId))
             .clusteringKey(
                 Key.newBuilder()
-                    .addBigInt("updated_at", bulkTransaction.updatedAt.toEpochMilli())
+                    .addBigInt("created_at", bulkTransaction.createdAt.toEpochMilli())
                     .addText("unique_id", bulkTransaction.uniqueId)
                     .build())
             .build());

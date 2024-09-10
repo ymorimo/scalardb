@@ -5,12 +5,12 @@
       "partition_id"
     ],
     "clustering-key": [
-      "updated_at",
+      "created_at",
       "unique_id"
     ],
     "columns": {
       "partition_id": "INT",
-      "updated_at": "BIGINT",
+      "created_at": "BIGINT",
       "unique_id": "TEXT",
       "transactions": "TEXT"
     }
@@ -21,15 +21,14 @@
       "partition_id"
     ],
     "clustering-key": [
-      "updated_at",
+      "created_at",
       "transaction_id"
     ],
     "columns": {
       "partition_id": "INT",
       "transaction_id": "TEXT",
       "write_set": "TEXT",
-      "created_at": "BIGINT",
-      "updated_at": "BIGINT"
+      "created_at": "BIGINT"
     }
   },
   "replication.records": {
@@ -43,9 +42,7 @@
       "current_tx_id": "TEXT",
       "deleted": "BOOLEAN",
       "values": "TEXT",
-      "insert_tx_ids": "TEXT",
-      "appended_at": "BIGINT",
-      "shrinked_at": "BIGINT"
+      "insert_tx_ids": "TEXT"
     }
   }
 }

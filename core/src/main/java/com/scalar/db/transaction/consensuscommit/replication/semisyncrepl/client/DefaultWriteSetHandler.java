@@ -225,7 +225,7 @@ public class DefaultWriteSetHandler implements WriteSetHandler {
     if (groupCommitter != null) {
       try {
         groupCommitter.addValue(
-            new Transaction(partitionId, now, now, composer.transactionId(), writtenTuples));
+            new Transaction(partitionId, now, composer.transactionId(), writtenTuples));
       } catch (ReplicationGroupCommitException e) {
         throw new RuntimeException(
             "Group commit failed. transactionId:" + composer.transactionId(), e);
@@ -233,7 +233,7 @@ public class DefaultWriteSetHandler implements WriteSetHandler {
     } else {
       logger.info("Add start(thread_id:{})", Thread.currentThread().getId());
       replicationTransactionRepository.add(
-          new Transaction(partitionId, now, now, composer.transactionId(), writtenTuples));
+          new Transaction(partitionId, now, composer.transactionId(), writtenTuples));
       logger.info(
           "Add end(thread_id:{}): {} ms",
           Thread.currentThread().getId(),

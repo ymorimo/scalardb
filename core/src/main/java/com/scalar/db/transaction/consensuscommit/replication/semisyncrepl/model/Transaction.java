@@ -11,7 +11,6 @@ import javax.annotation.concurrent.Immutable;
 public class Transaction {
   public final int partitionId;
   public final Instant createdAt;
-  public final Instant updatedAt;
   public final String transactionId;
   public final Collection<WrittenTuple> writtenTuples;
   // FIXME
@@ -20,12 +19,10 @@ public class Transaction {
   public Transaction(
       @JsonProperty("partitionId") int partitionId,
       @JsonProperty("createdAt") Instant createdAt,
-      @JsonProperty("updatedAt") Instant updatedAt,
       @JsonProperty("transactionId") String transactionId,
       @JsonProperty("writtenTuples") Collection<WrittenTuple> writtenTuples) {
     this.partitionId = partitionId;
     this.createdAt = createdAt;
-    this.updatedAt = updatedAt;
     this.transactionId = transactionId;
     this.writtenTuples = writtenTuples;
   }
