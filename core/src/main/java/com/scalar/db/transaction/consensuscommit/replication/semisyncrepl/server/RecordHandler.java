@@ -102,7 +102,13 @@ class RecordHandler {
         valuesForNonInsert.put(value.prevTxId, value);
       }
     }
+    // TODO: milli-second timestamp can conflict. Use transaction ID as the second factor.
     valuesForInsert.sort(Comparator.comparingLong(a -> a.txCommittedAtInMillis));
+
+    // TODO: The following concern wouldn't be needed if the order of INSERT operations is
+    //       deterministic. With `repl_version` on the table in the Backup site and deterministic
+    //       INSERT operation order, the merge termination at INSERT operation can be removed,
+    //       probably. This will improve the performance.
 
     // Not merge following operations once an insert operation is found.
     // Assuming the following operations are stored in `records.values`:
