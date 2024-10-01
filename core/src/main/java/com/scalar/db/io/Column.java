@@ -1,6 +1,10 @@
 package com.scalar.db.io;
 
 import java.nio.ByteBuffer;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.Optional;
 import javax.annotation.Nullable;
 
@@ -150,6 +154,46 @@ public interface Column<T> extends Comparable<Column<T>> {
    */
   @Nullable
   default byte[] getBlobValueAsBytes() {
+    throw new UnsupportedOperationException("The data type of this column is " + getDataType());
+  }
+
+  /**
+   * Returns the DATE value of this {@code Column} as a Java LocalDate type.
+   *
+   * @return the value of this {@code Column}. if the value is NULL, null
+   */
+  @Nullable
+  default LocalDate getDateValue() {
+    throw new UnsupportedOperationException("The data type of this column is " + getDataType());
+  }
+
+  /**
+   * Returns the TIME value of this {@code Column} as a Java LocalTime type.
+   *
+   * @return the value of this {@code Column}. if the value is NULL, null
+   */
+  @Nullable
+  default LocalTime getTimeValue() {
+    throw new UnsupportedOperationException("The data type of this column is " + getDataType());
+  }
+
+  /**
+   * Returns the DATETIME value of this {@code Column} as a Java LocalDateTime type.
+   *
+   * @return the value of this {@code Column}. if the value is NULL, null
+   */
+  @Nullable
+  default LocalDateTime getDateTimeValue() {
+    throw new UnsupportedOperationException("The data type of this column is " + getDataType());
+  }
+
+  /**
+   * Returns the TIME value of this {@code Column} as a Java Instant type.
+   *
+   * @return the value of this {@code Column}. if the value is NULL, null
+   */
+  @Nullable
+  default Instant getTimestampValue() {
     throw new UnsupportedOperationException("The data type of this column is " + getDataType());
   }
 
