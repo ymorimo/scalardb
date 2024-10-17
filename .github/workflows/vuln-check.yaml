@@ -25,7 +25,7 @@ env:
 jobs:
   call-vuln-check:
     # uses: ./.github/workflows/vuln-check-reusable.yaml
-    uses: ymorimo/scalar-actions/.github/workflows/vuln-check-reusable.yaml@add-vuln-check
+    uses: ymorimo/scalar-actions/.github/workflows/vuln-check-reusable.yaml@main
     with:
       target-ref: ${{ inputs.target-ref }}
       find-latest-release: ${{ inputs.find-latest-release }}
