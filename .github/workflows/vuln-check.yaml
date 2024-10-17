@@ -30,6 +30,7 @@ jobs:
       target-ref: ${{ inputs.target-ref }}
       find-latest-release: ${{ inputs.find-latest-release }}
       images: '[["ScalarDB Schema Loader", "scalardb-schema-loader"]]'
+      version-command: "./gradlew :core:properties -q | grep version: | awk '{print $2}'"
     secrets:
       CR_PAT: ${{ secrets.CR_PAT }}
       SLACK_SECURITY_WEBHOOK_URL: ${{ secrets.SLACK_SECURITY_WEBHOOK_URL }}
