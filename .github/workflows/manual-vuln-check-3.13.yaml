@@ -1,0 +1,15 @@
+name: Manual Vulnerability Check Trigger v3.13
+
+on:
+  workflow_dispatch:
+
+env:
+  TERM: dumb
+
+jobs:
+  call-vuln-check:
+    uses: ./.github/workflows/vuln-check.yaml
+    with:
+      target-ref: v3.13
+      find-latest-release: true
+    secrets: inherit
