@@ -15,7 +15,6 @@ import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.WrittenTuple;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.CoordinatorStateRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationRecordRepository;
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationTransactionRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server.RecordHandler.ResultOfKeyHandling;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -31,19 +30,16 @@ import org.slf4j.LoggerFactory;
 
 class TransactionHandler {
   private static final Logger logger = LoggerFactory.getLogger(TransactionHandler.class);
-  private final ReplicationTransactionRepository replicationTransactionRepository;
   private final ReplicationRecordRepository replicationRecordRepository;
   private final CoordinatorStateRepository coordinatorStateRepository;
   private final RecordHandler recordHandler;
   private final MetricsLogger metricsLogger;
 
   public TransactionHandler(
-      ReplicationTransactionRepository replicationTransactionRepository,
       ReplicationRecordRepository replicationRecordRepository,
       CoordinatorStateRepository coordinatorStateRepository,
       RecordHandler recordHandler,
       MetricsLogger metricsLogger) {
-    this.replicationTransactionRepository = replicationTransactionRepository;
     this.replicationRecordRepository = replicationRecordRepository;
     this.coordinatorStateRepository = coordinatorStateRepository;
     this.recordHandler = recordHandler;
@@ -203,7 +199,6 @@ class TransactionHandler {
     }
     if (coordinatorState.get().txState != TransactionState.COMMITTED) {
       metricsLogger.incrementAbortedTransactions();
-      replicationTransactionRepository.delete(transaction);
       return true;
     }
 
@@ -246,7 +241,6 @@ class TransactionHandler {
     }
 
     metricsLogger.incrCommittedTxns();
-    replicationTransactionRepository.delete(transaction);
 
     return true;
   }

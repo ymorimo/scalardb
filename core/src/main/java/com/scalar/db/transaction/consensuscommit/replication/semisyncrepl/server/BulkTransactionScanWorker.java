@@ -1,17 +1,24 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server;
 
+import com.google.common.util.concurrent.Uninterruptibles;
 import com.scalar.db.exception.storage.ExecutionException;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.BulkTransaction;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Transaction;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository;
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationTransactionRepository;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.CountDownLatch;
 import javax.annotation.concurrent.Immutable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class BulkTransactionScanWorker extends BaseScanWorker {
+  private static final Logger logger = LoggerFactory.getLogger(BulkTransactionScanWorker.class);
   private final Configuration conf;
   private final ReplicationBulkTransactionRepository replicationBulkTransactionRepository;
-  private final ReplicationTransactionRepository replicationTransactionRepository;
   private final MetricsLogger metricsLogger;
   private final TransactionHandleWorker transactionHandleWorker;
 
@@ -29,21 +36,13 @@ public class BulkTransactionScanWorker extends BaseScanWorker {
   public BulkTransactionScanWorker(
       Configuration conf,
       ReplicationBulkTransactionRepository replicationBulkTransactionRepository,
-      ReplicationTransactionRepository replicationTransactionRepository,
       TransactionHandleWorker transactionHandleWorker,
       MetricsLogger metricsLogger) {
     super(conf, "bulk-tx", metricsLogger);
     this.conf = conf;
     this.replicationBulkTransactionRepository = replicationBulkTransactionRepository;
-    this.replicationTransactionRepository = replicationTransactionRepository;
     this.transactionHandleWorker = transactionHandleWorker;
     this.metricsLogger = metricsLogger;
-  }
-
-  private void moveTransaction(Transaction transaction) throws ExecutionException {
-    metricsLogger.incrBlkTxnsScannedTxns();
-    replicationTransactionRepository.add(transaction);
-    transactionHandleWorker.enqueue(transaction);
   }
 
   @Override
@@ -51,12 +50,36 @@ public class BulkTransactionScanWorker extends BaseScanWorker {
     List<BulkTransaction> scannedBulkTxns =
         metricsLogger.execScanBulkTransactions(
             () -> replicationBulkTransactionRepository.scan(partitionId, conf.fetchSize));
+    CountDownLatch countDownLatch = new CountDownLatch(1);
+    Map<BulkTransaction, Set<Transaction>> remainingBulkTxns = new ConcurrentHashMap<>();
     for (BulkTransaction bulkTransaction : scannedBulkTxns) {
+      remainingBulkTxns.put(
+          bulkTransaction, new ConcurrentSkipListSet<>(bulkTransaction.transactions));
       for (Transaction transaction : bulkTransaction.transactions) {
-        moveTransaction(transaction);
+        transactionHandleWorker.enqueue(
+            transaction,
+            () -> {
+              Set<Transaction> remainingTxns = remainingBulkTxns.get(bulkTransaction);
+              if (!remainingTxns.remove(transaction)) {
+                logger.warn(
+                    "The Transaction {} wasn't contained in {}", transaction, bulkTransaction);
+              }
+              if (remainingTxns.isEmpty()) {
+                try {
+                  replicationBulkTransactionRepository.delete(bulkTransaction);
+                } catch (ExecutionException e) {
+                  // TODO
+                  throw new RuntimeException(e);
+                }
+                remainingBulkTxns.remove(bulkTransaction);
+                if (remainingBulkTxns.isEmpty()) {
+                  countDownLatch.countDown();
+                }
+              }
+            });
       }
-      replicationBulkTransactionRepository.delete(bulkTransaction);
     }
+    Uninterruptibles.awaitUninterruptibly(countDownLatch);
 
     return scannedBulkTxns.size() >= conf.fetchSize;
   }

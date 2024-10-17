@@ -4,10 +4,10 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.Objects;
 import javax.annotation.concurrent.Immutable;
 
 @Immutable
-// TODO: Rename this to WriteSet
 public class Transaction {
   public final int partitionId;
   public final Instant createdAt;
@@ -25,5 +25,20 @@ public class Transaction {
     this.createdAt = createdAt;
     this.transactionId = transactionId;
     this.writtenTuples = writtenTuples;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (!(o instanceof Transaction)) return false;
+    Transaction that = (Transaction) o;
+    return partitionId == that.partitionId
+        && Objects.equals(createdAt, that.createdAt)
+        && Objects.equals(transactionId, that.transactionId);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(partitionId, createdAt, transactionId);
   }
 }

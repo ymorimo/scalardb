@@ -60,11 +60,12 @@ public class TransactionHandleWorker {
     this.metricsLogger = metricsLogger;
   }
 
-  private void handleTransactionWithRetry(Transaction transaction) {
+  private void handleTransactionWithRetry(Transaction transaction, Runnable callback) {
     while (true) {
       try {
         if (transactionHandler.handleTransaction(recordHandlerExecutorService, transaction)) {
           metricsLogger.incrementHandleTransaction();
+          callback.run();
           return;
         }
       } catch (InterruptedException e) {
@@ -81,8 +82,9 @@ public class TransactionHandleWorker {
     }
   }
 
-  public void enqueue(Transaction transaction) {
-    transactionHandlerExecutorService.execute(() -> handleTransactionWithRetry(transaction));
+  public void enqueue(Transaction transaction, Runnable callback) {
+    transactionHandlerExecutorService.execute(
+        () -> handleTransactionWithRetry(transaction, callback));
   }
 
   @Override

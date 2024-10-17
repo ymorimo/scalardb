@@ -5,7 +5,6 @@ import com.scalar.db.service.StorageFactory;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.CoordinatorStateRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationRecordRepository;
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationTransactionRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server.TransactionHandleWorker.Configuration;
 import java.io.IOException;
 import java.io.InputStream;
@@ -110,12 +109,6 @@ public class LogApplier {
         new ReplicationRecordRepository(
             StorageFactory.create(replicationDbConfigPath).getStorage(), "replication", "records");
 
-    ReplicationTransactionRepository replicationTransactionRepository =
-        new ReplicationTransactionRepository(
-            StorageFactory.create(replicationDbConfigPath).getStorage(),
-            "replication",
-            "transactions");
-
     ReplicationBulkTransactionRepository replicationBulkTransactionRepository =
         new ReplicationBulkTransactionRepository(
             StorageFactory.create(replicationDbConfigPath).getStorage(),
@@ -138,11 +131,7 @@ public class LogApplier {
 
     TransactionHandler transactionHandler =
         new TransactionHandler(
-            replicationTransactionRepository,
-            replicationRecordRepository,
-            coordinatorStateRepository,
-            recordHandler,
-            metricsLogger);
+            replicationRecordRepository, coordinatorStateRepository, recordHandler, metricsLogger);
 
     TransactionHandleWorker transactionHandleWorker =
         new TransactionHandleWorker(
@@ -160,18 +149,6 @@ public class LogApplier {
                 waitMillisPerPartition,
                 transactionFetchSize),
             replicationBulkTransactionRepository,
-            replicationTransactionRepository,
-            transactionHandleWorker,
-            metricsLogger)
-        .run();
-
-    new TransactionScanWorker(
-            new TransactionScanWorker.Configuration(
-                REPLICATION_DB_PARTITION_SIZE,
-                numOfTransactionScanThreads,
-                waitMillisPerPartition,
-                transactionFetchSize),
-            replicationTransactionRepository,
             transactionHandleWorker,
             metricsLogger)
         .run();
