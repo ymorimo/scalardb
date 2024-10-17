@@ -7,10 +7,11 @@ env:
   TERM: dumb
 jobs:
   call-vuln-check:
-    uses: ./.github/workflows/vuln-check.yaml
+    # uses: ./.github/workflows/vuln-check.yaml
+    uses: ymorimo/scalar-actions/.github/workflows/vuln-check-reusable.yaml@add-vuln-check
     with:
       target-ref: ${{ github.ref_name }}
+      images: '[["ScalarDB Schema Loader", "scalardb-schema-loader"]]'
     secrets:
       CR_PAT: ${{ secrets.CR_PAT }}
       SLACK_SECURITY_WEBHOOK_URL: ${{ secrets.SLACK_SECURITY_WEBHOOK_URL }}
-
