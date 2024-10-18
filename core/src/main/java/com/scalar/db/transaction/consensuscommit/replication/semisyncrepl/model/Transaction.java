@@ -2,6 +2,7 @@ package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.base.MoreObjects;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.Objects;
@@ -57,5 +58,14 @@ public class Transaction implements Comparable<Transaction> {
     }
 
     return transactionId.compareTo(o.transactionId);
+  }
+
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(this)
+        .add("partitionId", partitionId)
+        .add("createdAt", createdAt)
+        .add("transactionId", transactionId)
+        .toString();
   }
 }

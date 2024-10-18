@@ -1,9 +1,8 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server;
 
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.BulkTransaction;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository.ScanResult;
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,12 +13,19 @@ public class MetricsLogger {
   private final boolean isEnabled;
   private final Map<Instant, Metrics> metricsMap = new ConcurrentHashMap<>();
   private final AtomicReference<Instant> keyHolder = new AtomicReference<>();
+  private final AtomicReference<BulkTransactionHandleWorker> bulkTransactionHandleWorker =
+      new AtomicReference<>();
   private final AtomicReference<TransactionHandleWorker> transactionHandleWorker =
       new AtomicReference<>();
 
   public MetricsLogger() {
     String metricsEnabled = System.getenv("LOG_APPLIER_METRICS_ENABLED");
     this.isEnabled = metricsEnabled != null && metricsEnabled.equalsIgnoreCase("true");
+  }
+
+  public void setBulkTransactionHandleWorker(
+      BulkTransactionHandleWorker bulkTransactionHandleWorker) {
+    this.bulkTransactionHandleWorker.set(bulkTransactionHandleWorker);
   }
 
   public void setTransactionHandleWorker(TransactionHandleWorker transactionHandleWorker) {
@@ -34,7 +40,9 @@ public class MetricsLogger {
     Instant currentKey = currentTimestampRoundedInSeconds();
     Instant oldKey = keyHolder.getAndSet(currentKey);
     Metrics metrics =
-        metricsMap.computeIfAbsent(currentKey, k -> new Metrics(transactionHandleWorker.get()));
+        metricsMap.computeIfAbsent(
+            currentKey,
+            k -> new Metrics(bulkTransactionHandleWorker.get(), transactionHandleWorker.get()));
     consumer.accept(metrics);
     if (oldKey == null) {
       return;
@@ -44,11 +52,11 @@ public class MetricsLogger {
     }
   }
 
-  public void incrBlkTxnsScannedTxns() {
+  public void incrBlkTxnsScannedTxns(int size) {
     if (!isEnabled) {
       return;
     }
-    withPrintAndCleanup(metrics -> metrics.blkTxnScannedTxns.incrementAndGet());
+    withPrintAndCleanup(metrics -> metrics.blkTxnScannedTxns.addAndGet(size));
   }
 
   public void incrTxnsScannedTxns() {
@@ -128,8 +136,8 @@ public class MetricsLogger {
     return new ResultWithDuration<>(result, end - start);
   }
 
-  public List<BulkTransaction> execScanBulkTransactions(Task<List<BulkTransaction>> task) {
-    ResultWithDuration<List<BulkTransaction>> resultWithDuration = captureDuration(task);
+  public ScanResult execScanBulkTransactions(Task<ScanResult> task) {
+    ResultWithDuration<ScanResult> resultWithDuration = captureDuration(task);
     if (!isEnabled) {
       return resultWithDuration.result;
     }

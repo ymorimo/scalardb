@@ -5,8 +5,10 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.scalar.db.api.Delete;
 import com.scalar.db.api.DistributedStorage;
 import com.scalar.db.api.Put;
+import com.scalar.db.api.Result;
 import com.scalar.db.api.Scan;
 import com.scalar.db.api.Scan.Ordering;
+import com.scalar.db.api.ScanBuilder.BuildableScan;
 import com.scalar.db.api.Scanner;
 import com.scalar.db.exception.storage.ExecutionException;
 import com.scalar.db.io.Key;
@@ -15,10 +17,10 @@ import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Transaction;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 public class ReplicationBulkTransactionRepository {
 
@@ -38,6 +40,17 @@ public class ReplicationBulkTransactionRepository {
     this.replicationDbBulkTransactionTable = replicationDbBulkTransactionTable;
   }
 
+  public static class ScanResult {
+    public final Long nextScanTimestampMillis;
+    public final List<BulkTransaction> bulkTransactions;
+
+    public ScanResult(Long nextScanTimestampMillis, List<BulkTransaction> bulkTransactions) {
+      this.nextScanTimestampMillis = nextScanTimestampMillis;
+      this.bulkTransactions = bulkTransactions;
+    }
+  }
+
+  /*
   public List<BulkTransaction> scan(int partitionId, int fetchTransactionSize)
       throws ExecutionException, IOException {
     try (Scanner scan =
@@ -60,6 +73,41 @@ public class ReplicationBulkTransactionRepository {
                 return new BulkTransaction(partitionId, updatedAt, uniqueId, transactions);
               })
           .collect(Collectors.toList());
+    }
+  }
+   */
+  public ScanResult scan(int partitionId, int fetchTransactionSize, Long scanStartTsMillis)
+      throws ExecutionException, IOException {
+    BuildableScan builder =
+        Scan.newBuilder()
+            .namespace(replicationDbNamespace)
+            .table(replicationDbBulkTransactionTable)
+            .partitionKey(Key.ofInt("partition_id", partitionId))
+            .ordering(Ordering.asc("created_at"));
+
+    if (scanStartTsMillis != null) {
+      builder.start(Key.ofBigInt("created_at", scanStartTsMillis));
+    }
+
+    builder.limit(fetchTransactionSize);
+
+    try (Scanner scan = replicationDbStorage.scan(builder.build())) {
+      Long lastTimestampMillis = null;
+      List<BulkTransaction> bulkTransactions = new ArrayList<>();
+
+      for (Result result : scan.all()) {
+        String uniqueId = result.getText("unique_id");
+        Instant createdAt = Instant.ofEpochMilli(result.getBigInt("created_at"));
+        String serializedTransactions = result.getText("transactions");
+        List<Transaction> transactions = JSON.parseArray(serializedTransactions, Transaction.class);
+        bulkTransactions.add(new BulkTransaction(partitionId, createdAt, uniqueId, transactions));
+
+        if (lastTimestampMillis == null || lastTimestampMillis < createdAt.toEpochMilli()) {
+          lastTimestampMillis = createdAt.toEpochMilli();
+        }
+      }
+
+      return new ScanResult(lastTimestampMillis, bulkTransactions);
     }
   }
 

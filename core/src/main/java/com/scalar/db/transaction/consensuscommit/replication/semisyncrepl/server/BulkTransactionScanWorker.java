@@ -1,16 +1,13 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server;
 
-import com.google.common.util.concurrent.Uninterruptibles;
 import com.scalar.db.exception.storage.ExecutionException;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.BulkTransaction;
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Transaction;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository.ScanResult;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentSkipListSet;
-import java.util.concurrent.CountDownLatch;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +17,8 @@ public class BulkTransactionScanWorker extends BaseScanWorker {
   private final Configuration conf;
   private final ReplicationBulkTransactionRepository replicationBulkTransactionRepository;
   private final MetricsLogger metricsLogger;
-  private final TransactionHandleWorker transactionHandleWorker;
+  private final BulkTransactionHandleWorker bulkTransactionHandleWorker;
+  private final Map<Integer, Long> lastScannedTimestampMap = new HashMap<>();
 
   @Immutable
   public static class Configuration extends BaseScanWorker.Configuration {
@@ -36,55 +34,47 @@ public class BulkTransactionScanWorker extends BaseScanWorker {
   public BulkTransactionScanWorker(
       Configuration conf,
       ReplicationBulkTransactionRepository replicationBulkTransactionRepository,
-      TransactionHandleWorker transactionHandleWorker,
+      BulkTransactionHandleWorker bulkTransactionHandleWorker,
       MetricsLogger metricsLogger) {
     super(conf, "bulk-tx", metricsLogger);
     this.conf = conf;
     this.replicationBulkTransactionRepository = replicationBulkTransactionRepository;
-    this.transactionHandleWorker = transactionHandleWorker;
+    this.bulkTransactionHandleWorker = bulkTransactionHandleWorker;
     this.metricsLogger = metricsLogger;
   }
 
   @Override
   protected boolean handle(int partitionId) throws ExecutionException {
-    metricsLogger.incrBlkTxnsScannedTxns();
-    List<BulkTransaction> scannedBulkTxns =
-        metricsLogger.execScanBulkTransactions(
-            () -> replicationBulkTransactionRepository.scan(partitionId, conf.fetchSize));
-    if (scannedBulkTxns.isEmpty()) {
+    // If the worker is busy, wait for a while.
+    if (bulkTransactionHandleWorker.getActiveCount()
+        >= bulkTransactionHandleWorker.getMaximumPoolSize()) {
       return false;
     }
 
-    CountDownLatch countDownLatch = new CountDownLatch(1);
-    Map<BulkTransaction, Set<Transaction>> remainingBulkTxns = new ConcurrentHashMap<>();
-    for (BulkTransaction bulkTransaction : scannedBulkTxns) {
-      remainingBulkTxns.put(
-          bulkTransaction, new ConcurrentSkipListSet<>(bulkTransaction.transactions));
-      for (Transaction transaction : bulkTransaction.transactions) {
-        transactionHandleWorker.enqueue(
-            transaction,
-            () -> {
-              Set<Transaction> remainingTxns = remainingBulkTxns.get(bulkTransaction);
-              if (!remainingTxns.remove(transaction)) {
-                logger.warn(
-                    "The Transaction {} wasn't contained in {}", transaction, bulkTransaction);
-              }
-              if (remainingTxns.isEmpty()) {
-                try {
-                  replicationBulkTransactionRepository.delete(bulkTransaction);
-                } catch (ExecutionException e) {
-                  // TODO
-                  throw new RuntimeException(e);
-                }
-                remainingBulkTxns.remove(bulkTransaction);
-                if (remainingBulkTxns.isEmpty()) {
-                  countDownLatch.countDown();
-                }
-              }
-            });
-      }
+    @Nullable Long scanStartTsMillis = lastScannedTimestampMap.get(partitionId);
+
+    ScanResult scanResult =
+        metricsLogger.execScanBulkTransactions(
+            () ->
+                replicationBulkTransactionRepository.scan(
+                    partitionId, conf.fetchSize, scanStartTsMillis));
+    List<BulkTransaction> scannedBulkTxns = scanResult.bulkTransactions;
+    metricsLogger.incrBlkTxnsScannedTxns(scannedBulkTxns.size());
+    if (scannedBulkTxns.isEmpty()) {
+      lastScannedTimestampMap.remove(partitionId);
+      return false;
     }
-    Uninterruptibles.awaitUninterruptibly(countDownLatch);
+
+    for (BulkTransaction bulkTransaction : scannedBulkTxns) {
+      bulkTransactionHandleWorker.enqueue(bulkTransaction);
+    }
+
+    if (scanResult.nextScanTimestampMillis == null || scannedBulkTxns.size() < conf.fetchSize) {
+      // It's likely no more record is stored.
+      lastScannedTimestampMap.remove(partitionId);
+    } else {
+      lastScannedTimestampMap.put(partitionId, scanResult.nextScanTimestampMillis);
+    }
 
     return scannedBulkTxns.size() >= conf.fetchSize;
   }

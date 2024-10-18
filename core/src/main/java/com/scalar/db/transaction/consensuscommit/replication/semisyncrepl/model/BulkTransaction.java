@@ -1,5 +1,6 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model;
 
+import com.google.common.base.MoreObjects;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.Objects;
@@ -34,5 +35,15 @@ public class BulkTransaction {
   @Override
   public int hashCode() {
     return Objects.hash(partitionId, createdAt, uniqueId);
+  }
+
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(this)
+        .add("partitionId", partitionId)
+        .add("createdAt", createdAt)
+        .add("uniqueId", uniqueId)
+        .add("transactions", transactions)
+        .toString();
   }
 }
