@@ -47,9 +47,14 @@ public class BulkTransactionScanWorker extends BaseScanWorker {
 
   @Override
   protected boolean handle(int partitionId) throws ExecutionException {
+    metricsLogger.incrBlkTxnsScannedTxns();
     List<BulkTransaction> scannedBulkTxns =
         metricsLogger.execScanBulkTransactions(
             () -> replicationBulkTransactionRepository.scan(partitionId, conf.fetchSize));
+    if (scannedBulkTxns.isEmpty()) {
+      return false;
+    }
+
     CountDownLatch countDownLatch = new CountDownLatch(1);
     Map<BulkTransaction, Set<Transaction>> remainingBulkTxns = new ConcurrentHashMap<>();
     for (BulkTransaction bulkTransaction : scannedBulkTxns) {

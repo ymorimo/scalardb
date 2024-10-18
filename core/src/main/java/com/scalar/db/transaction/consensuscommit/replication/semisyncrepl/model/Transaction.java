@@ -8,7 +8,7 @@ import java.util.Objects;
 import javax.annotation.concurrent.Immutable;
 
 @Immutable
-public class Transaction {
+public class Transaction implements Comparable<Transaction> {
   public final int partitionId;
   public final Instant createdAt;
   public final String transactionId;
@@ -40,5 +40,22 @@ public class Transaction {
   @Override
   public int hashCode() {
     return Objects.hash(partitionId, createdAt, transactionId);
+  }
+
+  @Override
+  public int compareTo(Transaction o) {
+    if (partitionId < o.partitionId) {
+      return -1;
+    } else if (partitionId > o.partitionId) {
+      return 1;
+    }
+
+    if (createdAt.toEpochMilli() < o.createdAt.toEpochMilli()) {
+      return -1;
+    } else if (createdAt.toEpochMilli() > o.createdAt.toEpochMilli()) {
+      return 1;
+    }
+
+    return transactionId.compareTo(o.transactionId);
   }
 }
