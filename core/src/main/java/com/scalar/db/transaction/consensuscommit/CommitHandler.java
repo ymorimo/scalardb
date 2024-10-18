@@ -23,7 +23,6 @@ import com.scalar.db.transaction.consensuscommit.replication.WriteSetHandler;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.client.DefaultWriteSetHandler;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.client.PrepareMutationComposerForReplication;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository;
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationTransactionRepository;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -50,14 +49,8 @@ public class CommitHandler {
     if (replicationDbConfigPath == null) {
       return Optional.empty();
     }
-    ReplicationTransactionRepository replicationTransactionRepository;
     ReplicationBulkTransactionRepository replicationBulkTransactionRepository;
     try {
-      replicationTransactionRepository =
-          new ReplicationTransactionRepository(
-              StorageFactory.create(replicationDbConfigPath).getStorage(),
-              "replication",
-              "transactions");
       replicationBulkTransactionRepository =
           new ReplicationBulkTransactionRepository(
               StorageFactory.create(replicationDbConfigPath).getStorage(),
@@ -68,10 +61,7 @@ public class CommitHandler {
     }
 
     return Optional.of(
-        new DefaultWriteSetHandler(
-            tableMetadataManager,
-            replicationTransactionRepository,
-            replicationBulkTransactionRepository));
+        new DefaultWriteSetHandler(tableMetadataManager, replicationBulkTransactionRepository));
   }
 
   @SuppressFBWarnings("EI_EXPOSE_REP2")

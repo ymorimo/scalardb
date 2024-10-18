@@ -18,7 +18,6 @@ import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.UpdatedTuple;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.WrittenTuple;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository;
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationTransactionRepository;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -51,7 +50,6 @@ public class DefaultWriteSetHandler implements WriteSetHandler {
   private final ExecutorService executorService =
       Executors.newCachedThreadPool(
           new ThreadFactoryBuilder().setNameFormat("log-recorder-%d").setDaemon(true).build());
-  private final ReplicationTransactionRepository replicationTransactionRepository;
   @Nullable private final ReplicationGroupCommitter<Transaction> groupCommitter;
 
   private String defaultNamespace;
@@ -62,10 +60,8 @@ public class DefaultWriteSetHandler implements WriteSetHandler {
 
   public DefaultWriteSetHandler(
       TransactionTableMetadataManager tableMetadataManager,
-      ReplicationTransactionRepository replicationTransactionRepository,
       ReplicationBulkTransactionRepository replicationBulkTransactionRepository) {
     this.tableMetadataManager = tableMetadataManager;
-    this.replicationTransactionRepository = replicationTransactionRepository;
 
     boolean groupCommitEnabled = true;
     if (System.getenv(ENV_VAR_GROUP_COMMIT_ENABLED) != null) {
@@ -222,22 +218,12 @@ public class DefaultWriteSetHandler implements WriteSetHandler {
     int partitionId = Math.abs(composer.transactionId().hashCode()) % REPLICATION_DB_PARTITION_SIZE;
     Instant now = Instant.now();
 
-    if (groupCommitter != null) {
-      try {
-        groupCommitter.addValue(
-            new Transaction(partitionId, now, composer.transactionId(), writtenTuples));
-      } catch (ReplicationGroupCommitException e) {
-        throw new RuntimeException(
-            "Group commit failed. transactionId:" + composer.transactionId(), e);
-      }
-    } else {
-      logger.info("Add start(thread_id:{})", Thread.currentThread().getId());
-      replicationTransactionRepository.add(
+    try {
+      groupCommitter.addValue(
           new Transaction(partitionId, now, composer.transactionId(), writtenTuples));
-      logger.info(
-          "Add end(thread_id:{}): {} ms",
-          Thread.currentThread().getId(),
-          System.currentTimeMillis() - now.toEpochMilli());
+    } catch (ReplicationGroupCommitException e) {
+      throw new RuntimeException(
+          "Group commit failed. transactionId:" + composer.transactionId(), e);
     }
   }
 
