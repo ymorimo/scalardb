@@ -46,8 +46,7 @@ public class BulkTransactionScanWorker extends BaseScanWorker {
   @Override
   protected boolean handle(int partitionId) throws ExecutionException {
     // If the worker is busy, wait for a while.
-    if (bulkTransactionHandleWorker.getActiveCount()
-        >= bulkTransactionHandleWorker.getMaximumPoolSize()) {
+    if (bulkTransactionHandleWorker.isBusy()) {
       return false;
     }
 
