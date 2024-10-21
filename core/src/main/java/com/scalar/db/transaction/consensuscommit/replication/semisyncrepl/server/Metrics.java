@@ -27,12 +27,8 @@ class Metrics {
   public final AtomicInteger exceptions = new AtomicInteger();
 
   @Nullable private final TransactionHandleWorker transactionHandleWorker;
-  @Nullable private final BulkTransactionHandleWorker bulkTransactionHandleWorker;
 
-  public Metrics(
-      @Nullable BulkTransactionHandleWorker bulkTransactionHandleWorker,
-      @Nullable TransactionHandleWorker transactionHandleWorker) {
-    this.bulkTransactionHandleWorker = bulkTransactionHandleWorker;
+  public Metrics(@Nullable TransactionHandleWorker transactionHandleWorker) {
     this.transactionHandleWorker = transactionHandleWorker;
   }
 
@@ -45,16 +41,6 @@ class Metrics {
   }
 
   public String toJson() {
-    String bulkTransactionHandleWorkerJson;
-    {
-      BulkTransactionHandleWorker worker = bulkTransactionHandleWorker;
-      if (worker == null) {
-        bulkTransactionHandleWorkerJson = "{}";
-      } else {
-        bulkTransactionHandleWorkerJson = worker.toJson();
-      }
-    }
-
     String transactionHandleWorkerJson;
     {
       TransactionHandleWorker worker = transactionHandleWorker;
@@ -95,7 +81,6 @@ class Metrics {
             + "      \"UpdateRecord\":{\"Count\":%d, \"DurationMs\":%f}\n"
             + "    }\n"
             + "  },\n"
-            + "  \"BulkTxnHandleWorker\":%s,\n"
             + "  \"TxnHandleWorker\":%s\n"
             + "}",
         exceptions.get(),
@@ -121,7 +106,6 @@ class Metrics {
             recordOpDurationMillisToSetPrepTxIdInRecord.get()),
         recordOpCountToUpdateRecord.get(),
         meanDuration(recordOpCountToUpdateRecord.get(), recordOpDurationMillisToUpdateRecord.get()),
-        bulkTransactionHandleWorkerJson,
         transactionHandleWorkerJson);
   }
 }

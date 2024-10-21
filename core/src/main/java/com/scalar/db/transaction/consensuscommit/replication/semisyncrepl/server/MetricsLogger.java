@@ -13,19 +13,12 @@ public class MetricsLogger {
   private final boolean isEnabled;
   private final Map<Instant, Metrics> metricsMap = new ConcurrentHashMap<>();
   private final AtomicReference<Instant> keyHolder = new AtomicReference<>();
-  private final AtomicReference<BulkTransactionHandleWorker> bulkTransactionHandleWorker =
-      new AtomicReference<>();
   private final AtomicReference<TransactionHandleWorker> transactionHandleWorker =
       new AtomicReference<>();
 
   public MetricsLogger() {
     String metricsEnabled = System.getenv("LOG_APPLIER_METRICS_ENABLED");
     this.isEnabled = metricsEnabled != null && metricsEnabled.equalsIgnoreCase("true");
-  }
-
-  public void setBulkTransactionHandleWorker(
-      BulkTransactionHandleWorker bulkTransactionHandleWorker) {
-    this.bulkTransactionHandleWorker.set(bulkTransactionHandleWorker);
   }
 
   public void setTransactionHandleWorker(TransactionHandleWorker transactionHandleWorker) {
@@ -40,9 +33,7 @@ public class MetricsLogger {
     Instant currentKey = currentTimestampRoundedInSeconds();
     Instant oldKey = keyHolder.getAndSet(currentKey);
     Metrics metrics =
-        metricsMap.computeIfAbsent(
-            currentKey,
-            k -> new Metrics(bulkTransactionHandleWorker.get(), transactionHandleWorker.get()));
+        metricsMap.computeIfAbsent(currentKey, k -> new Metrics(transactionHandleWorker.get()));
     consumer.accept(metrics);
     if (oldKey == null) {
       return;

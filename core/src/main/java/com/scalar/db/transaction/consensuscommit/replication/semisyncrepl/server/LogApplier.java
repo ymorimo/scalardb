@@ -27,8 +27,6 @@ public class LogApplier {
       "LOG_APPLIER_NUM_OF_BULK_TRANSACTION_SCAN_THREADS";
   private static final String ENV_VAR_NUM_OF_TRANSACTION_HANDLER_THREADS =
       "LOG_APPLIER_NUM_OF_TRANSACTION_HANDLER_THREADS";
-  private static final String ENV_VAR_NUM_OF_BULK_TRANSACTION_HANDLER_THREADS =
-      "LOG_APPLIER_NUM_OF_BULK_TRANSACTION_HANDLER_THREADS";
   private static final String ENV_VAR_NUM_OF_RECORD_HANDLER_THREADS =
       "LOG_APPLIER_NUM_OF_RECORD_HANDLER_THREADS";
   private static final String ENV_VAR_TRANSACTION_FETCH_SIZE = "LOG_APPLIER_TRANSACTION_FETCH_SIZE";
@@ -62,12 +60,6 @@ public class LogApplier {
     if (System.getenv(ENV_VAR_NUM_OF_BULK_TRANSACTION_SCAN_THREADS) != null) {
       numOfBulkTransactionScanThreads =
           Integer.parseInt(System.getenv(ENV_VAR_NUM_OF_BULK_TRANSACTION_SCAN_THREADS));
-    }
-
-    int numOfBulkTransactionHandlerThreads = 16;
-    if (System.getenv(ENV_VAR_NUM_OF_BULK_TRANSACTION_HANDLER_THREADS) != null) {
-      numOfBulkTransactionHandlerThreads =
-          Integer.parseInt(System.getenv(ENV_VAR_NUM_OF_BULK_TRANSACTION_HANDLER_THREADS));
     }
 
     int numOfTransactionHandlerThreads = 16;
@@ -134,7 +126,8 @@ public class LogApplier {
 
     metricsLogger.setTransactionHandleWorker(transactionHandleWorker);
 
-    new BulkTransactionScanWorker(
+    BulkTransactionScanWorker bulkTransactionScanWorker =
+        new BulkTransactionScanWorker(
             new BulkTransactionScanWorker.Configuration(
                 REPLICATION_DB_PARTITION_SIZE,
                 numOfBulkTransactionScanThreads,
@@ -142,8 +135,8 @@ public class LogApplier {
                 transactionFetchSize),
             replicationBulkTransactionRepository,
             transactionHandleWorker,
-            metricsLogger)
-        .run();
+            metricsLogger);
+    bulkTransactionScanWorker.run();
 
     while (true) {
       Uninterruptibles.sleepUninterruptibly(Duration.ofMinutes(1));
