@@ -2,11 +2,14 @@ package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.serve
 
 import com.scalar.db.exception.storage.ExecutionException;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.BulkTransaction;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Transaction;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository.ScanResult;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentSkipListSet;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import org.slf4j.Logger;
@@ -16,9 +19,10 @@ public class BulkTransactionScanWorker extends BaseScanWorker {
   private static final Logger logger = LoggerFactory.getLogger(BulkTransactionScanWorker.class);
   private final Configuration conf;
   private final ReplicationBulkTransactionRepository replicationBulkTransactionRepository;
+  private final TransactionHandleWorker transactionHandleWorker;
   private final MetricsLogger metricsLogger;
-  private final BulkTransactionHandleWorker bulkTransactionHandleWorker;
   private final Map<Integer, Long> lastScannedTimestampMap = new HashMap<>();
+  private final Set<String> ongoingBulkTransactionIds = new ConcurrentSkipListSet<>();
 
   @Immutable
   public static class Configuration extends BaseScanWorker.Configuration {
@@ -34,22 +38,17 @@ public class BulkTransactionScanWorker extends BaseScanWorker {
   public BulkTransactionScanWorker(
       Configuration conf,
       ReplicationBulkTransactionRepository replicationBulkTransactionRepository,
-      BulkTransactionHandleWorker bulkTransactionHandleWorker,
+      TransactionHandleWorker transactionHandleWorker,
       MetricsLogger metricsLogger) {
     super(conf, "bulk-tx", metricsLogger);
     this.conf = conf;
     this.replicationBulkTransactionRepository = replicationBulkTransactionRepository;
-    this.bulkTransactionHandleWorker = bulkTransactionHandleWorker;
+    this.transactionHandleWorker = transactionHandleWorker;
     this.metricsLogger = metricsLogger;
   }
 
   @Override
   protected boolean handle(int partitionId) throws ExecutionException {
-    // If the worker is busy, wait for a while.
-    if (bulkTransactionHandleWorker.isBusy()) {
-      return false;
-    }
-
     @Nullable Long scanStartTsMillis = lastScannedTimestampMap.get(partitionId);
 
     ScanResult scanResult =
@@ -60,12 +59,48 @@ public class BulkTransactionScanWorker extends BaseScanWorker {
     List<BulkTransaction> scannedBulkTxns = scanResult.bulkTransactions;
     metricsLogger.incrBlkTxnsScannedTxns(scannedBulkTxns.size());
     if (scannedBulkTxns.isEmpty()) {
+      assert scanResult.nextScanTimestampMillis == null;
       lastScannedTimestampMap.remove(partitionId);
       return false;
     }
 
     for (BulkTransaction bulkTransaction : scannedBulkTxns) {
-      bulkTransactionHandleWorker.enqueue(bulkTransaction);
+      if (ongoingBulkTransactionIds.contains(bulkTransaction.uniqueId)) {
+        logger.warn("BulkTransaction {} is still ongoing. Skipping it...", bulkTransaction);
+        continue;
+      }
+
+      Set<Transaction> remainingTransactions =
+          new ConcurrentSkipListSet<>(bulkTransaction.transactions);
+
+      for (Transaction transaction : bulkTransaction.transactions) {
+        transactionHandleWorker.enqueue(
+            transaction,
+            () -> {
+              if (!remainingTransactions.remove(transaction)) {
+                logger.warn(
+                    "The Transaction {} wasn't contained in {}. Remaining transactions: {}",
+                    transaction,
+                    bulkTransaction,
+                    remainingTransactions);
+              }
+
+              if (remainingTransactions.isEmpty()) {
+                try {
+                  replicationBulkTransactionRepository.delete(bulkTransaction);
+                  if (!ongoingBulkTransactionIds.remove(bulkTransaction.uniqueId)) {
+                    logger.warn(
+                        "BulkTransaction {} doesn't exist in `ongoingBulkTransactionIds`",
+                        bulkTransaction);
+                  }
+                } catch (ExecutionException e) {
+                  // TODO
+                  throw new RuntimeException(e);
+                }
+              }
+            });
+        ongoingBulkTransactionIds.add(bulkTransaction.uniqueId);
+      }
     }
 
     if (scanResult.nextScanTimestampMillis == null || scannedBulkTxns.size() < conf.fetchSize) {

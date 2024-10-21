@@ -134,16 +134,6 @@ public class LogApplier {
 
     metricsLogger.setTransactionHandleWorker(transactionHandleWorker);
 
-    BulkTransactionHandleWorker bulkTransactionHandleWorker =
-        new BulkTransactionHandleWorker(
-            new BulkTransactionHandleWorker.Configuration(
-                numOfBulkTransactionHandlerThreads, waitMillisPerPartition),
-            replicationBulkTransactionRepository,
-            transactionHandleWorker,
-            metricsLogger);
-
-    metricsLogger.setBulkTransactionHandleWorker(bulkTransactionHandleWorker);
-
     new BulkTransactionScanWorker(
             new BulkTransactionScanWorker.Configuration(
                 REPLICATION_DB_PARTITION_SIZE,
@@ -151,7 +141,7 @@ public class LogApplier {
                 waitMillisPerPartition,
                 transactionFetchSize),
             replicationBulkTransactionRepository,
-            bulkTransactionHandleWorker,
+            transactionHandleWorker,
             metricsLogger)
         .run();
 
