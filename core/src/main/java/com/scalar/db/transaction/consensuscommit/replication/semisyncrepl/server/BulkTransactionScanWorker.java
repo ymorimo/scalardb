@@ -5,6 +5,7 @@ import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Transaction;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository.ScanResult;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,7 @@ public class BulkTransactionScanWorker extends BaseScanWorker {
   private final TransactionHandleWorker transactionHandleWorker;
   private final MetricsLogger metricsLogger;
   private final Map<Integer, Long> lastScannedTimestampMap = new HashMap<>();
+  private final Map<Integer, Long> lastBulkTransactionTimestampMap = new HashMap<>();
   private final Set<String> ongoingBulkTransactionIds = new ConcurrentSkipListSet<>();
 
   @Immutable
@@ -50,6 +52,7 @@ public class BulkTransactionScanWorker extends BaseScanWorker {
   @Override
   protected boolean handle(int partitionId) throws ExecutionException {
     @Nullable Long scanStartTsMillis = lastScannedTimestampMap.get(partitionId);
+    @Nullable Long previousLastBulkTxnTsMillis = lastBulkTransactionTimestampMap.get(partitionId);
 
     ScanResult scanResult =
         metricsLogger.execScanBulkTransactions(
@@ -61,13 +64,28 @@ public class BulkTransactionScanWorker extends BaseScanWorker {
     if (scannedBulkTxns.isEmpty()) {
       assert scanResult.nextScanTimestampMillis == null;
       lastScannedTimestampMap.remove(partitionId);
+      lastBulkTransactionTimestampMap.remove(partitionId);
       return false;
     }
 
+    Long lastBulkTxnTsMillis = null;
     for (BulkTransaction bulkTransaction : scannedBulkTxns) {
       if (ongoingBulkTransactionIds.contains(bulkTransaction.uniqueId)) {
         logger.warn("BulkTransaction {} is still ongoing. Skipping it...", bulkTransaction);
         continue;
+      }
+
+      long bulkTxnTsMillis = bulkTransaction.createdAt.toEpochMilli();
+      if (previousLastBulkTxnTsMillis != null && bulkTxnTsMillis < previousLastBulkTxnTsMillis) {
+        logger.warn(
+            "Fetched older BulkTransaction than previously handled ones. Previous Last BulkTxnTs: {}, Unique ID: {}, TxnTs: {}.",
+            Instant.ofEpochMilli(previousLastBulkTxnTsMillis),
+            bulkTransaction.uniqueId,
+            bulkTransaction.createdAt);
+      }
+
+      if (lastBulkTxnTsMillis == null || lastBulkTxnTsMillis < bulkTxnTsMillis) {
+        lastBulkTxnTsMillis = bulkTxnTsMillis;
       }
 
       Set<Transaction> remainingTransactions =
@@ -106,8 +124,10 @@ public class BulkTransactionScanWorker extends BaseScanWorker {
     if (scanResult.nextScanTimestampMillis == null || scannedBulkTxns.size() < conf.fetchSize) {
       // It's likely no more record is stored.
       lastScannedTimestampMap.remove(partitionId);
+      lastBulkTransactionTimestampMap.remove(partitionId);
     } else {
       lastScannedTimestampMap.put(partitionId, scanResult.nextScanTimestampMillis);
+      lastBulkTransactionTimestampMap.put(partitionId, lastBulkTxnTsMillis);
     }
 
     return scannedBulkTxns.size() >= conf.fetchSize;
