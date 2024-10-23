@@ -85,6 +85,7 @@ public class MetricsLogger {
     withPrintAndCleanup(metrics -> metrics.recordHandleTxns.incrementAndGet());
   }
 
+  // TODO: Split these into Transaction/BulkTransaction.
   public void incrementRetryTransaction() {
     if (!isEnabled) {
       return;
@@ -93,6 +94,13 @@ public class MetricsLogger {
   }
 
   public void incrementExceptionCount() {
+    if (!isEnabled) {
+      return;
+    }
+    withPrintAndCleanup(metrics -> metrics.exceptions.incrementAndGet());
+  }
+
+  public void incrementWaitBulkTransactions() {
     if (!isEnabled) {
       return;
     }
@@ -139,6 +147,18 @@ public class MetricsLogger {
               resultWithDuration.durationInMillis);
         });
     return resultWithDuration.result;
+  }
+
+  public void execWaitBulkTransactions(Task<Void> task) {
+    ResultWithDuration<Void> resultWithDuration = captureDuration(task);
+    if (!isEnabled) {
+      return;
+    }
+    withPrintAndCleanup(
+        metrics -> {
+          metrics.blkTxnWaitCount.incrementAndGet();
+          metrics.blkTxnWaitDurationMillis.addAndGet(resultWithDuration.durationInMillis);
+        });
   }
 
   public Record execAppendValueToRecord(Task<Record> task) {

@@ -14,6 +14,8 @@ class Metrics {
   public final AtomicInteger txnOpCountToScanTxns = new AtomicInteger();
   public final AtomicLong blkTxnOpDurationMillisToScanBlkTxns = new AtomicLong();
   public final AtomicInteger blkTxnOpCountToScanBlkTxns = new AtomicInteger();
+  public final AtomicLong blkTxnWaitDurationMillis = new AtomicLong();
+  public final AtomicInteger blkTxnWaitCount = new AtomicInteger();
   public final AtomicLong txnOpDurationMillisToAppendValueToRecord = new AtomicLong();
   public final AtomicInteger txnOpCountToAppendValueToRecord = new AtomicInteger();
   public final AtomicLong recordOpDurationMillisToSetPrepTxIdInRecord = new AtomicLong();
@@ -57,7 +59,8 @@ class Metrics {
             + "  \"BulkTxn\":{\n"
             + "    \"ScannedTxns\":%d,\n"
             + "    \"Ops\":{\n"
-            + "      \"ScanBlkTxns\":{\"Count\":%d, \"DurationMs\":%f}\n"
+            + "      \"Scan\":{\"Count\":%d, \"DurationMs\":%f},\n"
+            + "      \"Wait\":{\"Count\":%d, \"DurationMs\":%f}\n"
             + "    }\n"
             + "  },\n"
             + "  \"Txn\":{\n"
@@ -87,6 +90,8 @@ class Metrics {
         blkTxnScannedTxns.get(),
         blkTxnOpCountToScanBlkTxns.get(),
         meanDuration(blkTxnOpCountToScanBlkTxns.get(), blkTxnOpDurationMillisToScanBlkTxns.get()),
+        blkTxnWaitCount.get(),
+        meanDuration(blkTxnWaitCount.get(), blkTxnWaitDurationMillis.get()),
         txnScannedTxns.get(),
         txnCommittedTxns.get(),
         txnUncommittedTxns.get(),

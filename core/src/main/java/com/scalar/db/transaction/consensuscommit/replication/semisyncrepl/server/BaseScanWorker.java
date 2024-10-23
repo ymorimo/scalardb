@@ -1,9 +1,10 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.google.common.util.concurrent.Uninterruptibles;
+import java.time.Duration;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import javax.annotation.concurrent.Immutable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,73 +57,63 @@ public abstract class BaseScanWorker {
     return false;
   }
 
-  public void run() {
-    for (int i = 0; i < conf.threadSize; i++) {
-      int startPartitionId = i;
-      executorService.execute(
-          () -> {
-            // Each worker thread handles some partition IDs that are calculated based on:
-            // - The total partition size
-            // - The number of threads
-            // - `startPartitionId`
-            //
-            // For instance, assuming there are 64 threads, the number of total partitions is 256
-            // and `startPartitionId` is 10, the thread is responsible for partition ID: 10, 74,
-            // 138, 202.
-            //
-            // Each thread waits only if all the partitions the thread manages don't have next
-            // entries to process.
-            //
-            // Let's say the following situation:
-            // - The thread handles two partitions (ID: 10 and 74) sequentially. The thread fetches
-            // entries from
-            //   them as same as the maximum fetch size. The thread thinks they may have more
-            // entries and decides not to wait until handling them again.
-            // - The thread handles the other two partitions (ID: 138 and 202). The thread fetches
-            // entries from them less
-            //   than the maximum fetch size. The thread thinks they may not have more entries and
-            // decides. But it doesn't wait until handling partition ID: 10 and 74.
-            // - The thread handles the two partitions (ID: 10 and 74) again. The thread fetches
-            // entries from them less
-            //   than the maximum fetch size. The thread thinks all the partitions may not have more
-            // entries and decides. It decides to wait until fetching the maximum size entries.
-            //
-            Integer partitionIdHavingMoreEnntries = null;
-            while (!shouldFinish()) {
-              for (int partitionId = startPartitionId;
-                  partitionId < conf.replicationDbPartitionSize;
-                  partitionId += conf.threadSize) {
-                // Quit no-wait mode if it reaches the target partition ID again.
-                if (partitionIdHavingMoreEnntries != null
-                    && partitionIdHavingMoreEnntries == partitionId) {
-                  partitionIdHavingMoreEnntries = null;
-                }
+  private void waitAndUpdateNextInvocations(Long[] nextInvocationsMillis) {
+    long currentTimeMillis = System.currentTimeMillis();
+    long soonestNextInvocationMillis = Long.MAX_VALUE;
+    for (int i = 0; i < nextInvocationsMillis.length; i++) {
+      if (nextInvocationsMillis[i] != null && nextInvocationsMillis[i] <= currentTimeMillis) {
+        nextInvocationsMillis[i] = null;
+      }
+      if (nextInvocationsMillis[i] == null) {
+        // If any partition can be immediately handled, no wait is needed.
+        return;
+      }
+      soonestNextInvocationMillis = Math.min(soonestNextInvocationMillis, nextInvocationsMillis[i]);
+    }
 
-                try {
-                  if (handle(partitionId)) {
-                    // Fetched the maximum size entries. Enter no-wait mode.
-                    partitionIdHavingMoreEnntries = partitionId;
-                  }
-                } catch (Throwable e) {
-                  metricsLogger.incrementExceptionCount();
-                  logger.error("Unexpected exception occurred", e);
-                } finally {
-                  try {
-                    // Wait only unless in no-wait mode.
-                    if (partitionIdHavingMoreEnntries == null) {
-                      if (conf.waitMillisPerPartition > 0) {
-                        TimeUnit.MILLISECONDS.sleep(conf.waitMillisPerPartition);
-                      }
-                    }
-                  } catch (InterruptedException ex) {
-                    logger.error("Interrupted", ex);
-                    Thread.currentThread().interrupt();
-                  }
-                }
-              }
-            }
-            logger.info("Finishing the partition scan. Start Partition ID: {}", startPartitionId);
-          });
+    // If all partitions should be handled later, let's wait for the soonest timing.
+    long durationForSoonestPartitionMills = soonestNextInvocationMillis - currentTimeMillis;
+    metricsLogger.execWaitBulkTransactions(
+        () -> {
+          Uninterruptibles.sleepUninterruptibly(
+              Duration.ofMillis(durationForSoonestPartitionMills));
+          return null;
+        });
+  }
+
+  private void execLoop(int startPartitionId) {
+    int partitionSizePerThread = conf.replicationDbPartitionSize / conf.threadSize;
+    Long[] nextInvocationsMillis = new Long[partitionSizePerThread];
+    while (!shouldFinish()) {
+      for (int partitionIndex = 0; partitionIndex < partitionSizePerThread; partitionIndex++) {
+        int partitionId = startPartitionId + (conf.threadSize * partitionIndex);
+
+        try {
+          if (nextInvocationsMillis[partitionIndex] != null) {
+            waitAndUpdateNextInvocations(nextInvocationsMillis);
+            continue;
+          }
+
+          if (handle(partitionId)) {
+            // Fetched full size entries. Next scan should be executed immediately.
+            nextInvocationsMillis[partitionIndex] = null;
+          } else {
+            // Fetched partial size entries. Next scan should be delayed.
+            nextInvocationsMillis[partitionIndex] =
+                System.currentTimeMillis() + conf.waitMillisPerPartition;
+          }
+        } catch (Throwable e) {
+          metricsLogger.incrementExceptionCount();
+          logger.error("Unexpected exception occurred", e);
+        }
+      }
+    }
+  }
+
+  public void run() {
+    for (int threadIndex = 0; threadIndex < conf.threadSize; threadIndex++) {
+      int startPartitionId = threadIndex;
+      executorService.execute(() -> execLoop(startPartitionId));
     }
   }
 }

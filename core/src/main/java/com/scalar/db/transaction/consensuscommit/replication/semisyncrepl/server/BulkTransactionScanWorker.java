@@ -6,10 +6,10 @@ import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository.ScanResult;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
@@ -22,8 +22,8 @@ public class BulkTransactionScanWorker extends BaseScanWorker {
   private final ReplicationBulkTransactionRepository replicationBulkTransactionRepository;
   private final TransactionHandleWorker transactionHandleWorker;
   private final MetricsLogger metricsLogger;
-  private final Map<Integer, Long> lastScannedTimestampMap = new HashMap<>();
-  private final Map<Integer, Long> lastBulkTransactionTimestampMap = new HashMap<>();
+  private final Map<Integer, Long> lastScannedTimestampMap = new ConcurrentHashMap<>();
+  private final Map<Integer, Long> lastBulkTransactionTimestampMap = new ConcurrentHashMap<>();
   private final Set<String> ongoingBulkTransactionIds = new ConcurrentSkipListSet<>();
 
   @Immutable
@@ -71,7 +71,10 @@ public class BulkTransactionScanWorker extends BaseScanWorker {
     Long lastBulkTxnTsMillis = null;
     for (BulkTransaction bulkTransaction : scannedBulkTxns) {
       if (ongoingBulkTransactionIds.contains(bulkTransaction.uniqueId)) {
-        logger.warn("BulkTransaction {} is still ongoing. Skipping it...", bulkTransaction);
+        logger.info(
+            "This BulkTransaction is still ongoing. Skipping it... Unique ID: {}, CreatedAt: {}\n",
+            bulkTransaction.uniqueId,
+            bulkTransaction.createdAt);
         continue;
       }
 
@@ -121,11 +124,12 @@ public class BulkTransactionScanWorker extends BaseScanWorker {
       }
     }
 
-    if (scanResult.nextScanTimestampMillis == null || scannedBulkTxns.size() < conf.fetchSize) {
+    if (scannedBulkTxns.size() < conf.fetchSize) {
       // It's likely no more record is stored.
       lastScannedTimestampMap.remove(partitionId);
       lastBulkTransactionTimestampMap.remove(partitionId);
     } else {
+      assert scanResult.nextScanTimestampMillis != null;
       lastScannedTimestampMap.put(partitionId, scanResult.nextScanTimestampMillis);
       lastBulkTransactionTimestampMap.put(partitionId, lastBulkTxnTsMillis);
     }
