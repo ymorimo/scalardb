@@ -65,6 +65,8 @@ public abstract class BaseScanWorker {
         nextInvocationsMillis[i] = null;
       }
       if (nextInvocationsMillis[i] == null) {
+        // TODO: This should return boolean to tell if it's possible to continue processing the
+        // partition.
         // If any partition can be immediately handled, no wait is needed.
         return;
       }

@@ -100,13 +100,6 @@ public class MetricsLogger {
     withPrintAndCleanup(metrics -> metrics.exceptions.incrementAndGet());
   }
 
-  public void incrementWaitBulkTransactions() {
-    if (!isEnabled) {
-      return;
-    }
-    withPrintAndCleanup(metrics -> metrics.exceptions.incrementAndGet());
-  }
-
   public static class ResultWithDuration<T> {
     public T result;
     public long durationInMillis;
