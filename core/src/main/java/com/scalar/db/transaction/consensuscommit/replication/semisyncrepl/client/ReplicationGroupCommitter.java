@@ -29,6 +29,7 @@ public class ReplicationGroupCommitter<V> {
   private final ExecutorService emitExecutorService;
   private final ScheduledExecutorService expirationCheckExecutorService;
   private final Consumer<List<V>> emitter;
+  private final boolean debugMode;
 
   private interface Itemable<V> {}
 
@@ -60,11 +61,13 @@ public class ReplicationGroupCommitter<V> {
       int numberOfRetentionValues,
       long expirationCheckIntervalInMillis,
       int numberOfThreads,
-      Consumer<List<V>> emitter) {
+      Consumer<List<V>> emitter,
+      boolean debugMode) {
     this.retentionTimeInMillis = retentionTimeInMillis;
     this.numberOfRetentionValues = numberOfRetentionValues;
     this.expirationCheckIntervalInMillis = expirationCheckIntervalInMillis;
     this.emitter = emitter;
+    this.debugMode = debugMode;
 
     this.dequeueExecutorService =
         Executors.newSingleThreadExecutor(
@@ -101,23 +104,29 @@ public class ReplicationGroupCommitter<V> {
       emitExecutorService.submit(
           () -> {
             try {
-              logger.info(
-                  "Emitting (thread_id:{}, num_of_values:{})",
-                  Thread.currentThread().getId(),
-                  bufferedValueItems.values.size());
+              if (debugMode) {
+                logger.info(
+                    "Emitting (thread_id:{}, num_of_values:{})",
+                    Thread.currentThread().getId(),
+                    bufferedValueItems.values.size());
+              }
               emitter.accept(
                   bufferedValueItems.values.stream()
                       .map(vf -> vf.value)
                       .collect(Collectors.toList()));
-              logger.info(
-                  "Emitted (thread_id:{}, num_of_values:{})",
-                  Thread.currentThread().getId(),
-                  bufferedValueItems.values.size());
+              if (debugMode) {
+                logger.info(
+                    "Emitted (thread_id:{}, num_of_values:{})",
+                    Thread.currentThread().getId(),
+                    bufferedValueItems.values.size());
+              }
               bufferedValueItems.values.forEach(vf -> vf.future.complete(null));
-              logger.info(
-                  "Notified (thread_id:{}, num_of_values:{})",
-                  Thread.currentThread().getId(),
-                  bufferedValueItems.values.size());
+              if (debugMode) {
+                logger.info(
+                    "Notified (thread_id:{}, num_of_values:{})",
+                    Thread.currentThread().getId(),
+                    bufferedValueItems.values.size());
+              }
             } catch (Throwable e) {
               bufferedValueItems.values.forEach(vf -> vf.future.completeExceptionally(e));
             }
@@ -178,12 +187,16 @@ public class ReplicationGroupCommitter<V> {
     queue.add(new ValueItem<>(value, future));
     try {
       long start = System.currentTimeMillis();
-      logger.info("Wait start(thread_id:{})", Thread.currentThread().getId());
+      if (debugMode) {
+        logger.info("Wait start(thread_id:{})", Thread.currentThread().getId());
+      }
       future.get();
-      logger.info(
-          "Wait end(thread_id:{}): {} ms",
-          Thread.currentThread().getId(),
-          System.currentTimeMillis() - start);
+      if (debugMode) {
+        logger.info(
+            "Wait end(thread_id:{}): {} ms",
+            Thread.currentThread().getId(),
+            System.currentTimeMillis() - start);
+      }
     } catch (ExecutionException e) {
       if (e.getCause() instanceof ReplicationGroupCommitCascadeException) {
         throw (ReplicationGroupCommitCascadeException) e.getCause();

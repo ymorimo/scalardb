@@ -42,6 +42,8 @@ public class DefaultWriteSetHandler implements WriteSetHandler {
       "LOG_RECORDER_GROUP_COMMIT_NUM_OF_RETENTION_VALUES";
   private static final String ENV_VAR_GROUP_COMMIT_EXPIRATION_CHECK_INTERVAL_IN_MILLIS =
       "LOG_RECORDER_GROUP_COMMIT_EXPIRATION_CHECK_INTERVAL_IN_MILLIS";
+  private static final String ENV_VAR_GROUP_COMMIT_DEBUG_ENABLED =
+      "LOG_RECORDER_GROUP_COMMIT_DEBUG_ENABLED";
 
   // TODO: Make these configurable
   private static final int REPLICATION_DB_PARTITION_SIZE = 256;
@@ -92,6 +94,12 @@ public class DefaultWriteSetHandler implements WriteSetHandler {
           Long.parseLong(System.getenv(ENV_VAR_GROUP_COMMIT_EXPIRATION_CHECK_INTERVAL_IN_MILLIS));
     }
 
+    boolean groupCommitDebugEnabled = false;
+    if (System.getenv(ENV_VAR_GROUP_COMMIT_DEBUG_ENABLED) != null) {
+      groupCommitDebugEnabled =
+          Boolean.parseBoolean(System.getenv(ENV_VAR_GROUP_COMMIT_DEBUG_ENABLED));
+    }
+
     if (groupCommitEnabled) {
       Consumer<List<Transaction>> emitter =
           transactions -> {
@@ -110,7 +118,8 @@ public class DefaultWriteSetHandler implements WriteSetHandler {
               groupCommitNumOfRetentionValues,
               groupCommitExpirationCheckIntervalInMillis,
               groupCommitNumOfThreads,
-              emitter);
+              emitter,
+              groupCommitDebugEnabled);
     } else {
       this.groupCommitter = null;
     }
