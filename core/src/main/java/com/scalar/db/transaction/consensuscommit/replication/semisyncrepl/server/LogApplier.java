@@ -1,6 +1,7 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server;
 
 import com.google.common.util.concurrent.Uninterruptibles;
+import com.scalar.db.api.DistributedStorage;
 import com.scalar.db.service.StorageFactory;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.CoordinatorStateRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository;
@@ -8,12 +9,7 @@ import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.reposi
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationTransactionRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server.TransactionHandleWorker.Configuration;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.time.Duration;
-import java.util.Properties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -73,12 +69,6 @@ public class LogApplier {
           Integer.parseInt(System.getenv(ENV_VAR_NUM_OF_TRANSACTION_SCAN_THREADS));
     }
 
-    long transactionScanOldTimestampThresholdMillis = 10000;
-    if (System.getenv(ENV_VAR_TRANSACTION_SCAN_OLD_TIMESTAMP_THRESHOLD_MILLIS) != null) {
-      transactionScanOldTimestampThresholdMillis =
-          Integer.parseInt(System.getenv(ENV_VAR_TRANSACTION_SCAN_OLD_TIMESTAMP_THRESHOLD_MILLIS));
-    }
-
     int numOfTransactionHandlerThreads = 16;
     if (System.getenv(ENV_VAR_NUM_OF_TRANSACTION_HANDLER_THREADS) != null) {
       numOfTransactionHandlerThreads =
@@ -102,39 +92,28 @@ public class LogApplier {
           Integer.parseInt(System.getenv(ENV_VAR_TRANSACTION_WAIT_MILLIS_PER_PARTITION));
     }
 
+    DistributedStorage coordinatorDbStorage =
+        StorageFactory.create(coordinatorStateConfigPath).getStorage();
+    DistributedStorage replDbStorage = StorageFactory.create(replicationDbConfigPath).getStorage();
+    DistributedStorage backupSiteStorage =
+        StorageFactory.create(backupScalarDbConfigPath).getStorage();
+
     CoordinatorStateRepository coordinatorStateRepository =
-        new CoordinatorStateRepository(
-            StorageFactory.create(coordinatorStateConfigPath).getStorage(), "coordinator", "state");
+        new CoordinatorStateRepository(coordinatorDbStorage, "coordinator", "state");
 
     ReplicationRecordRepository replicationRecordRepository =
-        new ReplicationRecordRepository(
-            StorageFactory.create(replicationDbConfigPath).getStorage(), "replication", "records");
+        new ReplicationRecordRepository(backupSiteStorage, "replication", "records");
 
     ReplicationTransactionRepository replicationTransactionRepository =
-        new ReplicationTransactionRepository(
-            StorageFactory.create(replicationDbConfigPath).getStorage(),
-            "replication",
-            "transactions");
+        new ReplicationTransactionRepository(backupSiteStorage, "replication", "transactions");
 
     ReplicationBulkTransactionRepository replicationBulkTransactionRepository =
-        new ReplicationBulkTransactionRepository(
-            StorageFactory.create(replicationDbConfigPath).getStorage(),
-            "replication",
-            "bulk_transactions");
-
-    Properties backupScalarDbProps = new Properties();
-    try (InputStream in =
-        Files.newInputStream(Paths.get(backupScalarDbConfigPath), StandardOpenOption.READ)) {
-      backupScalarDbProps.load(in);
-    }
+        new ReplicationBulkTransactionRepository(replDbStorage, "replication", "bulk_transactions");
 
     MetricsLogger metricsLogger = new MetricsLogger();
 
     RecordHandler recordHandler =
-        new RecordHandler(
-            replicationRecordRepository,
-            StorageFactory.create(backupScalarDbProps).getStorage(),
-            metricsLogger);
+        new RecordHandler(replicationRecordRepository, backupSiteStorage, metricsLogger);
 
     TransactionHandler transactionHandler =
         new TransactionHandler(
