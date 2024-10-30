@@ -4,7 +4,7 @@ import com.google.common.util.concurrent.Uninterruptibles;
 import com.scalar.db.api.TransactionState;
 import com.scalar.db.exception.storage.ExecutionException;
 import com.scalar.db.exception.storage.NoMutationException;
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.CoordinatorState;
+import com.scalar.db.transaction.consensuscommit.Coordinator;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.DeletedTuple;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.InsertedTuple;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record;
@@ -177,7 +177,7 @@ class TransactionHandler {
    */
   boolean handleTransaction(ExecutorService executorService, Transaction transaction)
       throws Exception {
-    Optional<CoordinatorState> coordinatorState =
+    Optional<Coordinator.State> coordinatorState =
         coordinatorStateRepository.get(transaction.transactionId);
     if (!coordinatorState.isPresent()) {
       metricsLogger.incrementUncommittedTransactions();
@@ -197,7 +197,7 @@ class TransactionHandler {
        */
       return false;
     }
-    if (coordinatorState.get().txState != TransactionState.COMMITTED) {
+    if (coordinatorState.get().getState() != TransactionState.COMMITTED) {
       metricsLogger.incrementAbortedTransactions();
       return true;
     }
@@ -213,7 +213,9 @@ class TransactionHandler {
           () -> {
             try {
               handleWrittenTuple(
-                  transaction.transactionId, writtenTuple, coordinatorState.get().txCommittedAt);
+                  transaction.transactionId,
+                  writtenTuple,
+                  Instant.ofEpochMilli(coordinatorState.get().getCreatedAt()));
             } catch (Exception e) {
               throw new RuntimeException(
                   String.format(

@@ -2,12 +2,15 @@ package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.serve
 
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.scalar.db.api.DistributedStorage;
+import com.scalar.db.config.DatabaseConfig;
 import com.scalar.db.service.StorageFactory;
+import com.scalar.db.transaction.consensuscommit.ConsensusCommitConfig;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.CoordinatorStateRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationRecordRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server.TransactionHandleWorker.Configuration;
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -88,7 +91,9 @@ public class LogApplier {
         StorageFactory.create(backupScalarDbConfigPath).getStorage();
 
     CoordinatorStateRepository coordinatorStateRepository =
-        new CoordinatorStateRepository(coordinatorDbStorage, "coordinator", "state");
+        new CoordinatorStateRepository(
+            coordinatorDbStorage,
+            new ConsensusCommitConfig(new DatabaseConfig(Paths.get(coordinatorStateConfigPath))));
 
     ReplicationRecordRepository replicationRecordRepository =
         new ReplicationRecordRepository(backupSiteStorage, "replication", "records");
