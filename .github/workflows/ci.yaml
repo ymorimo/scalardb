@@ -51,9 +51,9 @@ jobs:
       SET_UP_INT_TEST_RUNTIME_JDK_WHEN_NOT_ORACLE_8_OR_11: "${{ (github.event_name == 'workflow_dispatch' && !(inputs.INT_TEST_JAVA_RUNTIME_VERSION == '8' && inputs.INT_TEST_JAVA_RUNTIME_VENDOR == 'temurin') && !(inputs.INT_TEST_JAVA_RUNTIME_VENDOR == 'oracle' && (inputs.INT_TEST_JAVA_RUNTIME_VERSION == '8' || inputs.INT_TEST_JAVA_RUNTIME_VERSION == '11'))) && 'true' || 'false' }}"
       SET_UP_INT_TEST_RUNTIME_ORACLE_JDK_8_OR_11: "${{ (inputs.INT_TEST_JAVA_RUNTIME_VENDOR == 'oracle' && (inputs.INT_TEST_JAVA_RUNTIME_VERSION == '8' || inputs.INT_TEST_JAVA_RUNTIME_VERSION == '11')) &&  'true' || 'false' }}"
 
-    strategy:
-      matrix:
-        run_nb: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+#    strategy:
+#      matrix:
+#        run_nb: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
 
     steps:
       - uses: actions/checkout@v4
@@ -99,7 +99,7 @@ jobs:
         run: |
           Write-Host "Launching Cosmos DB Emulator"
           Import-Module "$env:ProgramFiles\Azure Cosmos DB Emulator\PSModules\Microsoft.Azure.CosmosDB.Emulator"
-          Start-CosmosDbEmulator -Consistency Strong
+          Start-CosmosDbEmulator -Consistency Strong -Timeout 10
 
       
 
