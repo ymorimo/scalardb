@@ -44,7 +44,7 @@ env:
 
 jobs:
   integration-test-for-cosmos:
-    name: Cosmos DB integration test (${{ matrix.mode.label }})
+    name: Cosmos DB integration test (${{ matrix.run_nb }})
     runs-on: windows-latest
     env:
       # This variable evaluates to: if {!(Temurin JDK 8) && !(Oracle JDK 8 or 11)} then {true} else {false}
@@ -53,9 +53,7 @@ jobs:
 
     strategy:
       matrix:
-        mode:
-          - run_nb: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
-            label: "run number ${{ matrix.mode.run_nb }}"
+        run_nb: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
 
     steps:
       - uses: actions/checkout@v4
