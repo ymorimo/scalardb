@@ -5,6 +5,7 @@ import com.scalar.db.api.DistributedStorage;
 import com.scalar.db.config.DatabaseConfig;
 import com.scalar.db.service.StorageFactory;
 import com.scalar.db.transaction.consensuscommit.ConsensusCommitConfig;
+import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.CachedCoordinatorStateRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.CoordinatorStateRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationBulkTransactionRepository;
 import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationRecordRepository;
@@ -31,6 +32,8 @@ public class LogApplier {
   private static final String ENV_VAR_TRANSACTION_FETCH_SIZE = "LOG_APPLIER_TRANSACTION_FETCH_SIZE";
   private static final String ENV_VAR_TRANSACTION_WAIT_MILLIS_PER_PARTITION =
       "LOG_APPLIER_TRANSACTION_WAIT_MILLIS_PER_PARTITION";
+  private static final String ENV_VAR_COORDINATOR_STATE_CACHE_ENABLED =
+      "LOG_APPLIER_COORDINATOR_STATE_CACHE_ENABLED";
 
   private static final int REPLICATION_DB_PARTITION_SIZE = 256;
 
@@ -84,24 +87,37 @@ public class LogApplier {
           Integer.parseInt(System.getenv(ENV_VAR_TRANSACTION_WAIT_MILLIS_PER_PARTITION));
     }
 
+    boolean coordinatorStateCacheEnabled = true;
+    if (System.getenv(ENV_VAR_COORDINATOR_STATE_CACHE_ENABLED) != null) {
+      coordinatorStateCacheEnabled =
+          Boolean.parseBoolean(System.getenv(ENV_VAR_COORDINATOR_STATE_CACHE_ENABLED));
+    }
+
+    MetricsLogger metricsLogger = new MetricsLogger();
+
     DistributedStorage coordinatorDbStorage =
         StorageFactory.create(coordinatorStateConfigPath).getStorage();
     DistributedStorage replDbStorage = StorageFactory.create(replicationDbConfigPath).getStorage();
     DistributedStorage backupSiteStorage =
         StorageFactory.create(backupScalarDbConfigPath).getStorage();
 
-    CoordinatorStateRepository coordinatorStateRepository =
-        new CoordinatorStateRepository(
-            coordinatorDbStorage,
-            new ConsensusCommitConfig(new DatabaseConfig(Paths.get(coordinatorStateConfigPath))));
+    ConsensusCommitConfig consensusCommitConfig =
+        new ConsensusCommitConfig(new DatabaseConfig(Paths.get(coordinatorStateConfigPath)));
+    CoordinatorStateRepository coordinatorStateRepository;
+    if (coordinatorStateCacheEnabled) {
+      coordinatorStateRepository =
+          new CachedCoordinatorStateRepository(
+              coordinatorDbStorage, consensusCommitConfig, metricsLogger);
+    } else {
+      coordinatorStateRepository =
+          new CoordinatorStateRepository(coordinatorDbStorage, consensusCommitConfig);
+    }
 
     ReplicationRecordRepository replicationRecordRepository =
         new ReplicationRecordRepository(backupSiteStorage, "replication", "records");
 
     ReplicationBulkTransactionRepository replicationBulkTransactionRepository =
         new ReplicationBulkTransactionRepository(replDbStorage, "replication", "bulk_transactions");
-
-    MetricsLogger metricsLogger = new MetricsLogger();
 
     RecordHandler recordHandler =
         new RecordHandler(replicationRecordRepository, backupSiteStorage, metricsLogger);

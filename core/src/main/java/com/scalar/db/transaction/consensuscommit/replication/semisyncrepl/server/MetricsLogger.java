@@ -109,6 +109,20 @@ public class MetricsLogger {
     withPrintAndCleanup(metrics -> metrics.exceptions.incrementAndGet());
   }
 
+  public void incrementCoordStateCacheHit() {
+    if (!isEnabled) {
+      return;
+    }
+    withPrintAndCleanup(metrics -> metrics.coordStateCacheHit.incrementAndGet());
+  }
+
+  public void incrementCoordStateCacheMiss() {
+    if (!isEnabled) {
+      return;
+    }
+    withPrintAndCleanup(metrics -> metrics.coordStateCacheMiss.incrementAndGet());
+  }
+
   public static class ResultWithDuration<T> {
     public T result;
     public long durationInMillis;

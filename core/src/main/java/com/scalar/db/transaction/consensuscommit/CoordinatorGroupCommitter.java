@@ -31,7 +31,7 @@ public class CoordinatorGroupCommitter
     }
   }
 
-  static class CoordinatorGroupCommitKeyManipulator
+  public static class CoordinatorGroupCommitKeyManipulator
       implements KeyManipulator<String, String, String, String> {
     private static final int PRIMARY_KEY_SIZE = 24;
     private static final char DELIMITER = ':';

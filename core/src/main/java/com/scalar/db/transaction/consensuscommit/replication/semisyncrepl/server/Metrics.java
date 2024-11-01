@@ -27,6 +27,8 @@ class Metrics {
   public final AtomicInteger recordHandleTxns = new AtomicInteger();
   public final AtomicInteger recordRetryTxns = new AtomicInteger();
   public final AtomicInteger exceptions = new AtomicInteger();
+  public final AtomicInteger coordStateCacheHit = new AtomicInteger();
+  public final AtomicInteger coordStateCacheMiss = new AtomicInteger();
 
   @Nullable private final TransactionHandleWorker transactionHandleWorker;
 
@@ -67,7 +69,11 @@ class Metrics {
             + "  \"CoordState\":{\n"
             + "    \"Ops\":{\n"
             + "      \"Get\":{\"Count\":%d, \"DurationMs\":%f}\n"
-            + "    }\n"
+            + "    },\n"
+            + "    \"Cache\":{\n"
+            + "      \"Hit\":%d,\n"
+            + "      \"Miss\":%d\n"
+            + "    },\n"
             + "  },\n"
             + "  \"Txn\":{\n"
             + "    \"ScannedTxns\":%d,\n"
@@ -100,6 +106,8 @@ class Metrics {
         meanDuration(blkTxnWaitCount.get(), blkTxnWaitDurationMillis.get()),
         coordSteteOpCountToGet.get(),
         meanDuration(coordSteteOpCountToGet.get(), coordStateOpDurationMillisToGet.get()),
+        coordStateCacheHit.get(),
+        coordStateCacheMiss.get(),
         txnScannedTxns.get(),
         txnCommittedTxns.get(),
         txnUncommittedTxns.get(),

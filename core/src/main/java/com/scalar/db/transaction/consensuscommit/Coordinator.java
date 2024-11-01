@@ -297,8 +297,8 @@ public class Coordinator {
       return createdAt;
     }
 
-    @VisibleForTesting
-    List<String> getChildIds() {
+    @Nonnull
+    public List<String> getChildIds() {
       return childIds;
     }
 
