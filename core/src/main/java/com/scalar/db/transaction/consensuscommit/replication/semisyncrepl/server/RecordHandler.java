@@ -169,6 +169,7 @@ class RecordHandler {
         }
         deleted = false;
       } else if (value.type.equals("delete")) {
+        // TODO: Probably all columns must be set to null.
         updatedColumns.clear();
         deleted = true;
       } else {
