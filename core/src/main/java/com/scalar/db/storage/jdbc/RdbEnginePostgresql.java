@@ -192,7 +192,7 @@ class RdbEnginePostgresql implements RdbEngineStrategy {
       case DOUBLE:
         return "DOUBLE PRECISION";
       case FLOAT:
-        return "FLOAT";
+        return "REAL";
       case INT:
         return "INT";
       case TEXT:
@@ -204,6 +204,8 @@ class RdbEnginePostgresql implements RdbEngineStrategy {
 
   @Override
   public String getDataTypeForKey(DataType dataType) {
+    // The number 10485760 is due to the maximum length of the character column.
+    // https://www.postgresql.org/docs/15/datatype-character.html
     if (dataType == DataType.TEXT) {
       return "VARCHAR(10485760)";
     }

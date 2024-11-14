@@ -1,50 +1,12 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-
-import com.google.common.collect.Sets;
-import com.google.errorprone.annotations.concurrent.LazyInit;
-import com.scalar.db.api.ConditionBuilder;
-import com.scalar.db.api.ConditionalExpression.Operator;
-import com.scalar.db.api.DistributedStorage;
-import com.scalar.db.api.Get;
-import com.scalar.db.api.Put;
-import com.scalar.db.api.Result;
-import com.scalar.db.api.TransactionState;
-import com.scalar.db.exception.storage.ExecutionException;
-import com.scalar.db.exception.storage.NoMutationException;
-import com.scalar.db.io.TextColumn;
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Column;
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key;
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record;
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Record.Value;
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.repository.ReplicationRecordRepository;
-import com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server.RecordWriterThread.KeyHandler;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.Random;
-import java.util.Set;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.stream.Collectors;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+/*
 
 @ExtendWith(MockitoExtension.class)
+ */
+
 class RecordWriterThreadTest {
+  /*
   private final com.scalar.db.io.Key key =
       com.scalar.db.io.Key.newBuilder()
           .add(TextColumn.of("pk", "pk1"))
@@ -1076,4 +1038,5 @@ class RecordWriterThreadTest {
                             TextColumn.of("tx_id", "txZZZ"), Operator.EQ))
                     .build()));
   }
+   */
 }

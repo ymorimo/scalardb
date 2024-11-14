@@ -53,6 +53,7 @@ public class JdbcServiceTest {
   @Mock private QueryBuilder queryBuilder;
   @Mock private OperationChecker operationChecker;
   @Mock private TableMetadataManager tableMetadataManager;
+  @Mock private RdbEngineStrategy rdbEngine;
 
   @Mock private SelectQuery.Builder selectQueryBuilder;
   @Mock private SelectQuery selectQuery;
@@ -77,7 +78,7 @@ public class JdbcServiceTest {
   @BeforeEach
   public void setUp() throws Exception {
     MockitoAnnotations.openMocks(this).close();
-    jdbcService = new JdbcService(tableMetadataManager, operationChecker, queryBuilder);
+    jdbcService = new JdbcService(tableMetadataManager, operationChecker, rdbEngine, queryBuilder);
 
     // Arrange
     when(tableMetadataManager.getTableMetadata(any(Operation.class)))
@@ -95,7 +96,7 @@ public class JdbcServiceTest {
     // Arrange
     when(queryBuilder.select(any())).thenReturn(selectQueryBuilder);
     when(selectQueryBuilder.from(any(), any(), any())).thenReturn(selectQueryBuilder);
-    when(selectQueryBuilder.where(any(), any())).thenReturn(selectQueryBuilder);
+    when(selectQueryBuilder.where(any(), any(), anySet())).thenReturn(selectQueryBuilder);
     when(selectQueryBuilder.build()).thenReturn(selectQuery);
     when(connection.prepareStatement(any())).thenReturn(preparedStatement);
     when(preparedStatement.executeQuery()).thenReturn(resultSet);
@@ -116,7 +117,7 @@ public class JdbcServiceTest {
     when(queryBuilder.select(any())).thenReturn(selectQueryBuilder);
 
     when(selectQueryBuilder.from(any(), any(), any())).thenReturn(selectQueryBuilder);
-    when(selectQueryBuilder.where(any(), any(), anyBoolean(), any(), anyBoolean()))
+    when(selectQueryBuilder.where(any(), any(), anyBoolean(), any(), anyBoolean(), anySet()))
         .thenReturn(selectQueryBuilder);
     when(selectQueryBuilder.orderBy(any())).thenReturn(selectQueryBuilder);
     when(selectQueryBuilder.limit(anyInt())).thenReturn(selectQueryBuilder);
@@ -200,7 +201,7 @@ public class JdbcServiceTest {
     when(queryBuilder.select(any())).thenReturn(selectQueryBuilder);
 
     when(selectQueryBuilder.from(any(), any(), any())).thenReturn(selectQueryBuilder);
-    when(selectQueryBuilder.where(any(), any(), anyBoolean(), any(), anyBoolean()))
+    when(selectQueryBuilder.where(any(), any(), anyBoolean(), any(), anyBoolean(), anySet()))
         .thenReturn(selectQueryBuilder);
     when(selectQueryBuilder.orderBy(any())).thenReturn(selectQueryBuilder);
     when(selectQueryBuilder.limit(anyInt())).thenReturn(selectQueryBuilder);
@@ -443,7 +444,7 @@ public class JdbcServiceTest {
     when(insertQueryBuilder.build()).thenReturn(insertQuery);
     when(connection.prepareStatement(any())).thenReturn(preparedStatement);
     when(preparedStatement.executeUpdate()).thenThrow(sqlException);
-    when(sqlException.getSQLState()).thenReturn("23000");
+    when(rdbEngine.isDuplicateKeyError(sqlException)).thenReturn(true);
 
     // Act
     Put put =

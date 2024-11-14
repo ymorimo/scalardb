@@ -3,6 +3,7 @@ package com.scalar.db.transaction.consensuscommit;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.collect.ImmutableList;
+import com.google.errorprone.annotations.concurrent.LazyInit;
 import com.scalar.db.api.DistributedStorage;
 import com.scalar.db.api.TransactionState;
 import com.scalar.db.common.error.CoreError;
@@ -29,6 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Future;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,6 +66,8 @@ public class CommitHandler {
         new DefaultWriteSetHandler(tableMetadataManager, replicationBulkTransactionRepository));
   }
 
+  @LazyInit @Nullable private BeforePreparationSnapshotHook beforePreparationSnapshotHook;
+
   @SuppressFBWarnings("EI_EXPOSE_REP2")
   public CommitHandler(
       DistributedStorage storage,
@@ -82,9 +86,54 @@ public class CommitHandler {
 
   protected void onValidateFailure(Snapshot snapshot) {}
 
-  public void commit(Snapshot snapshot) throws CommitException, UnknownTransactionStatusException {
-    Optional<Future<Void>> writeSetHandleFuture;
+  private Optional<Future<Void>> invokeBeforePreparationSnapshotHook(Snapshot snapshot)
+      throws UnknownTransactionStatusException, CommitException {
+    if (beforePreparationSnapshotHook == null) {
+      return Optional.empty();
+    }
 
+    try {
+      return Optional.of(
+          beforePreparationSnapshotHook.handle(tableMetadataManager, snapshot.getReadWriteSets()));
+    } catch (Exception e) {
+      abortState(snapshot.getId());
+      rollbackRecords(snapshot);
+      // TODO: This method is actually a part of preparation phase. But the callback method name
+      //       `onPrepareFailure()` should be renamed to more reasonable one.
+      onPrepareFailure(snapshot);
+      throw new CommitException(
+          CoreError.HANDLING_BEFORE_PREPARATION_SNAPSHOT_HOOK_FAILED.buildMessage(e.getMessage()),
+          e,
+          snapshot.getId());
+    }
+  }
+
+  private void waitBeforePreparationSnapshotHookFuture(
+      Snapshot snapshot, @Nullable Future<Void> snapshotHookFuture)
+      throws UnknownTransactionStatusException, CommitException {
+    if (snapshotHookFuture == null) {
+      return;
+    }
+
+    try {
+      snapshotHookFuture.get();
+    } catch (Exception e) {
+      abortState(snapshot.getId());
+      rollbackRecords(snapshot);
+      // TODO: This method is actually a part of validation phase. But the callback method name
+      //       `onValidateFailure()` should be renamed to more reasonable one.
+      onValidateFailure(snapshot);
+      throw new CommitException(
+          CoreError.HANDLING_BEFORE_PREPARATION_SNAPSHOT_HOOK_FAILED.buildMessage(e.getMessage()),
+          e,
+          snapshot.getId());
+    }
+  }
+
+  public void commit(Snapshot snapshot) throws CommitException, UnknownTransactionStatusException {
+    Optional<Future<Void>> snapshotHookFuture = invokeBeforePreparationSnapshotHook(snapshot);
+
+    Optional<Future<Void>> writeSetHandleFuture;
     try {
       writeSetHandleFuture = prepare(snapshot);
     } catch (PreparationException e) {
@@ -129,6 +178,8 @@ public class CommitHandler {
                 String.format("Write-set handling failed. transactionId:%s", snapshot.getId()), e);
           }
         });
+
+    waitBeforePreparationSnapshotHookFuture(snapshot, snapshotHookFuture.orElse(null));
 
     commitState(snapshot);
     commitRecords(snapshot);
@@ -233,7 +284,8 @@ public class CommitHandler {
 
   public void commitRecords(Snapshot snapshot) {
     try {
-      CommitMutationComposer composer = new CommitMutationComposer(snapshot.getId());
+      CommitMutationComposer composer =
+          new CommitMutationComposer(snapshot.getId(), tableMetadataManager);
       snapshot.to(composer);
       PartitionedMutations mutations = new PartitionedMutations(composer.get());
 
@@ -295,5 +347,17 @@ public class CommitHandler {
       logger.warn("Rolling back records failed. Transaction ID: {}", snapshot.getId(), e);
       // ignore since records are recovered lazily
     }
+  }
+
+  /**
+   * Sets the {@link BeforePreparationSnapshotHook}. This method must be called immediately after
+   * the constructor is invoked.
+   *
+   * @param beforePreparationSnapshotHook The snapshot hook to set.
+   * @throws NullPointerException If the argument is null.
+   */
+  public void setBeforePreparationSnapshotHook(
+      BeforePreparationSnapshotHook beforePreparationSnapshotHook) {
+    this.beforePreparationSnapshotHook = checkNotNull(beforePreparationSnapshotHook);
   }
 }

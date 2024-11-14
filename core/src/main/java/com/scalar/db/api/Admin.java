@@ -1,5 +1,6 @@
 package com.scalar.db.api;
 
+import com.scalar.db.common.error.CoreError;
 import com.scalar.db.exception.storage.ExecutionException;
 import com.scalar.db.io.DataType;
 import java.util.Collections;
@@ -361,7 +362,7 @@ public interface Admin {
   }
 
   /**
-   * Repair a namespace that may be in an unknown state, such as the namespace exists in the
+   * Repairs a namespace that may be in an unknown state, such as the namespace exists in the
    * underlying storage but not its ScalarDB metadata or vice versa. This will re-create the
    * namespace and its metadata if necessary.
    *
@@ -372,7 +373,7 @@ public interface Admin {
   void repairNamespace(String namespace, Map<String, String> options) throws ExecutionException;
 
   /**
-   * Repair a table that may be in an unknown state, such as the table exists in the underlying
+   * Repairs a table that may be in an unknown state, such as the table exists in the underlying
    * storage but not its ScalarDB metadata or vice versa. This will re-create the table, its
    * secondary indexes, and their metadata if necessary.
    *
@@ -387,7 +388,7 @@ public interface Admin {
       throws ExecutionException;
 
   /**
-   * Add a new column to an existing table. The new column cannot be a partition or clustering key.
+   * Adds a new column to an existing table. The new column cannot be a partition or clustering key.
    * <br>
    * <br>
    * <strong>Attention:</strong> You should carefully consider adding a new column to a table
@@ -418,7 +419,30 @@ public interface Admin {
       throws ExecutionException;
 
   /**
-   * Import an existing table that is not managed by ScalarDB.
+   * Adds a new column to an existing table. The new column cannot be a partition or clustering key.
+   * <br>
+   * See {@link #addNewColumnToTable(String, String, String, DataType)} for more information.
+   *
+   * @param namespace the table namespace
+   * @param table the table name
+   * @param columnName the name of the new column
+   * @param columnType the type of the new column
+   * @param encrypted whether the new column should be encrypted
+   * @throws IllegalArgumentException if the table does not exist or the column already exists
+   * @throws ExecutionException if the operation fails
+   */
+  default void addNewColumnToTable(
+      String namespace, String table, String columnName, DataType columnType, boolean encrypted)
+      throws ExecutionException {
+    if (encrypted) {
+      throw new UnsupportedOperationException(CoreError.ENCRYPTION_NOT_ENABLED.buildMessage());
+    } else {
+      addNewColumnToTable(namespace, table, columnName, columnType);
+    }
+  }
+
+  /**
+   * Imports an existing table that is not managed by ScalarDB.
    *
    * @param namespace an existing namespace
    * @param table an existing table

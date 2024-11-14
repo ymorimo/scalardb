@@ -51,10 +51,12 @@ public interface SelectQuery extends Query {
     /*
      * Assumes this is called by get operations
      */
-    public Builder where(Key partitionKey, Optional<Key> clusteringKey) {
+    public Builder where(
+        Key partitionKey, Optional<Key> clusteringKey, Set<Conjunction> conjunctions) {
       isConditionalQuery = true;
       this.partitionKey = Optional.of(partitionKey);
       this.clusteringKey = clusteringKey;
+      this.conjunctions = ImmutableSet.copyOf(conjunctions);
       setIndexInfoIfUsed(partitionKey);
       return this;
     }
@@ -67,24 +69,27 @@ public interface SelectQuery extends Query {
         Optional<Key> startClusteringKey,
         boolean startInclusive,
         Optional<Key> endClusteringKey,
-        boolean endInclusive) {
+        boolean endInclusive,
+        Set<Conjunction> conjunctions) {
       isConditionalQuery = true;
 
       this.partitionKey = Optional.of(partitionKey);
 
       if (startClusteringKey.isPresent()) {
-        commonClusteringKey =
-            Optional.of(
-                new Key(
-                    startClusteringKey
-                        .get()
-                        .get()
-                        .subList(0, startClusteringKey.get().size() - 1)));
+        Key.Builder keyBuilder = Key.newBuilder();
+        startClusteringKey
+            .get()
+            .getColumns()
+            .subList(0, startClusteringKey.get().size() - 1)
+            .forEach(keyBuilder::add);
+        commonClusteringKey = Optional.of(keyBuilder.build());
       } else {
         endClusteringKey.ifPresent(
-            values ->
-                commonClusteringKey =
-                    Optional.of(new Key(values.get().subList(0, values.size() - 1))));
+            values -> {
+              Key.Builder keyBuilder = Key.newBuilder();
+              values.getColumns().subList(0, values.size() - 1).forEach(keyBuilder::add);
+              commonClusteringKey = Optional.of(keyBuilder.build());
+            });
       }
 
       if (startClusteringKey.isPresent()) {
@@ -99,6 +104,8 @@ public interface SelectQuery extends Query {
             Optional.of(endClusteringKey.get().getColumns().get(endClusteringKey.get().size() - 1));
         this.endInclusive = endInclusive;
       }
+
+      this.conjunctions = ImmutableSet.copyOf(conjunctions);
 
       isRangeQuery = true;
       setIndexInfoIfUsed(partitionKey);
@@ -115,7 +122,7 @@ public interface SelectQuery extends Query {
         return;
       }
 
-      String column = partitionKey.get().get(0).getName();
+      String column = partitionKey.getColumns().get(0).getName();
       if (!tableMetadata.getSecondaryIndexNames().contains(column)) {
         return;
       }

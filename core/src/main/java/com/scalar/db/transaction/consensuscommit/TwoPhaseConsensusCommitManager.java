@@ -4,25 +4,49 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.scalar.db.api.Delete;
 import com.scalar.db.api.DistributedStorage;
 import com.scalar.db.api.DistributedStorageAdmin;
+import com.scalar.db.api.Get;
+import com.scalar.db.api.Insert;
+import com.scalar.db.api.Mutation;
+import com.scalar.db.api.Put;
+import com.scalar.db.api.Result;
+import com.scalar.db.api.Scan;
 import com.scalar.db.api.TransactionState;
 import com.scalar.db.api.TwoPhaseCommitTransaction;
+import com.scalar.db.api.Update;
+import com.scalar.db.api.Upsert;
 import com.scalar.db.common.ActiveTransactionManagedTwoPhaseCommitTransactionManager;
+import com.scalar.db.common.error.CoreError;
 import com.scalar.db.config.DatabaseConfig;
+import com.scalar.db.exception.transaction.CommitConflictException;
+import com.scalar.db.exception.transaction.CrudConflictException;
+import com.scalar.db.exception.transaction.CrudException;
+import com.scalar.db.exception.transaction.PreparationConflictException;
+import com.scalar.db.exception.transaction.RollbackException;
 import com.scalar.db.exception.transaction.TransactionException;
+import com.scalar.db.exception.transaction.TransactionNotFoundException;
 import com.scalar.db.exception.transaction.UnknownTransactionStatusException;
+import com.scalar.db.exception.transaction.ValidationConflictException;
 import com.scalar.db.service.StorageFactory;
 import com.scalar.db.transaction.consensuscommit.Coordinator.State;
+import com.scalar.db.util.ThrowableFunction;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import javax.annotation.concurrent.ThreadSafe;
 import javax.inject.Inject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @ThreadSafe
 public class TwoPhaseConsensusCommitManager
     extends ActiveTransactionManagedTwoPhaseCommitTransactionManager {
+
+  private static final Logger logger =
+      LoggerFactory.getLogger(TwoPhaseConsensusCommitManager.class);
 
   private final DistributedStorage storage;
   private final DistributedStorageAdmin admin;
@@ -34,7 +58,6 @@ public class TwoPhaseConsensusCommitManager
   private final CommitHandler commit;
   private final boolean isIncludeMetadataEnabled;
   private final ConsensusCommitMutationOperationChecker mutationOperationChecker;
-  private final CoordinatorGroupCommitter groupCommitter;
 
   @SuppressFBWarnings("EI_EXPOSE_REP2")
   @Inject
@@ -50,8 +73,7 @@ public class TwoPhaseConsensusCommitManager
     coordinator = new Coordinator(storage, config);
     parallelExecutor = new ParallelExecutor(config);
     recovery = new RecoveryHandler(storage, coordinator, tableMetadataManager);
-    groupCommitter = CoordinatorGroupCommitter.from(config).orElse(null);
-    commit = createCommitHandler();
+    commit = new CommitHandler(storage, coordinator, tableMetadataManager, parallelExecutor);
     isIncludeMetadataEnabled = config.isIncludeMetadataEnabled();
     mutationOperationChecker = new ConsensusCommitMutationOperationChecker(tableMetadataManager);
   }
@@ -61,7 +83,6 @@ public class TwoPhaseConsensusCommitManager
     StorageFactory storageFactory = StorageFactory.create(databaseConfig.getProperties());
     storage = storageFactory.getStorage();
     admin = storageFactory.getStorageAdmin();
-
     config = new ConsensusCommitConfig(databaseConfig);
     tableMetadataManager =
         new TransactionTableMetadataManager(
@@ -69,8 +90,7 @@ public class TwoPhaseConsensusCommitManager
     coordinator = new Coordinator(storage, config);
     parallelExecutor = new ParallelExecutor(config);
     recovery = new RecoveryHandler(storage, coordinator, tableMetadataManager);
-    groupCommitter = CoordinatorGroupCommitter.from(config).orElse(null);
-    commit = createCommitHandler();
+    commit = new CommitHandler(storage, coordinator, tableMetadataManager, parallelExecutor);
     isIncludeMetadataEnabled = config.isIncludeMetadataEnabled();
     mutationOperationChecker = new ConsensusCommitMutationOperationChecker(tableMetadataManager);
   }
@@ -85,8 +105,7 @@ public class TwoPhaseConsensusCommitManager
       Coordinator coordinator,
       ParallelExecutor parallelExecutor,
       RecoveryHandler recovery,
-      CommitHandler commit,
-      CoordinatorGroupCommitter groupCommitter) {
+      CommitHandler commit) {
     super(databaseConfig);
     this.storage = storage;
     this.admin = admin;
@@ -98,18 +117,15 @@ public class TwoPhaseConsensusCommitManager
     this.parallelExecutor = parallelExecutor;
     this.recovery = recovery;
     this.commit = commit;
-    this.groupCommitter = groupCommitter;
     isIncludeMetadataEnabled = config.isIncludeMetadataEnabled();
     mutationOperationChecker = new ConsensusCommitMutationOperationChecker(tableMetadataManager);
   }
 
-  // `groupCommitter` must be set before calling this method.
-  private CommitHandler createCommitHandler() {
-    if (isGroupCommitEnabled()) {
-      return new CommitHandlerWithGroupCommit(
-          storage, coordinator, tableMetadataManager, parallelExecutor, groupCommitter);
-    } else {
-      return new CommitHandler(storage, coordinator, tableMetadataManager, parallelExecutor);
+  private void throwIfGroupCommitIsEnabled() {
+    if (CoordinatorGroupCommitter.isEnabled(config)) {
+      throw new IllegalArgumentException(
+          CoreError.CONSENSUS_COMMIT_GROUP_COMMIT_WITH_TWO_PHASE_COMMIT_INTERFACE_NOT_ALLOWED
+              .buildMessage());
     }
   }
 
@@ -135,11 +151,7 @@ public class TwoPhaseConsensusCommitManager
   @VisibleForTesting
   TwoPhaseCommitTransaction begin(String txId, Isolation isolation, SerializableStrategy strategy)
       throws TransactionException {
-    if (isGroupCommitEnabled()) {
-      txId = groupCommitter.reserve(txId);
-    }
-    // The coordinator service always commits coordinator states regardless of whether the group
-    // commit feature is enabled.
+    throwIfGroupCommitIsEnabled();
     return createNewTransaction(txId, isolation, strategy, true);
   }
 
@@ -152,21 +164,17 @@ public class TwoPhaseConsensusCommitManager
   @VisibleForTesting
   TwoPhaseCommitTransaction join(String txId, Isolation isolation, SerializableStrategy strategy)
       throws TransactionException {
+    throwIfGroupCommitIsEnabled();
     // If the transaction associated with the specified transaction ID is active, resume it
     if (isTransactionActive(txId)) {
       return resume(txId);
     }
 
-    // Participant services don't use the group commit feature even if it's enabled. They simply use
-    // the passed transaction ID that is managed by the coordinator service, which utilizes the
-    // group commit feature.
-    // Also, participant services don't commit coordinator states if the group commit feature is
-    // enabled.
-    return createNewTransaction(txId, isolation, strategy, !isGroupCommitEnabled());
+    return createNewTransaction(txId, isolation, strategy, true);
   }
 
   private TwoPhaseCommitTransaction createNewTransaction(
-      String txId, Isolation isolation, SerializableStrategy strategy, boolean isCoordinator)
+      String txId, Isolation isolation, SerializableStrategy strategy, boolean decorate)
       throws TransactionException {
     Snapshot snapshot =
         new Snapshot(txId, isolation, strategy, tableMetadataManager, parallelExecutor);
@@ -174,20 +182,146 @@ public class TwoPhaseConsensusCommitManager
         new CrudHandler(
             storage, snapshot, tableMetadataManager, isIncludeMetadataEnabled, parallelExecutor);
 
-    // If the group commit feature is enabled, only the coordinator service must manage the
-    // coordinator table state of transactions. With the group commit feature enabled, transactions
-    // are grouped and managed in memory on a node based on various events (e.g., timeouts).  It's
-    // highly likely that the coordinator and participants in the two-phase commit interface will
-    // group and manage transactions differently, resulting in attempts to store different
-    // transaction groups in the coordinator table. Therefore, TwoPhaseConsensusCommit must not
-    // commit or abort states if it's a participant when the group commit feature is enabled.
-    boolean shouldManageCoordinatorState = isCoordinator || !isGroupCommitEnabled();
     TwoPhaseConsensusCommit transaction =
-        new TwoPhaseConsensusCommit(
-            crud, commit, recovery, mutationOperationChecker, shouldManageCoordinatorState);
+        new TwoPhaseConsensusCommit(crud, commit, recovery, mutationOperationChecker);
     getNamespace().ifPresent(transaction::withNamespace);
     getTable().ifPresent(transaction::withTable);
-    return decorate(transaction);
+    return decorate ? decorate(transaction) : transaction;
+  }
+
+  @Override
+  public Optional<Result> get(Get get) throws CrudException, UnknownTransactionStatusException {
+    return executeTransaction(t -> t.get(copyAndSetTargetToIfNot(get)));
+  }
+
+  @Override
+  public List<Result> scan(Scan scan) throws CrudException, UnknownTransactionStatusException {
+    return executeTransaction(t -> t.scan(copyAndSetTargetToIfNot(scan)));
+  }
+
+  @Deprecated
+  @Override
+  public void put(Put put) throws CrudException, UnknownTransactionStatusException {
+    executeTransaction(
+        t -> {
+          t.put(copyAndSetTargetToIfNot(put));
+          return null;
+        });
+  }
+
+  @Deprecated
+  @Override
+  public void put(List<Put> puts) throws CrudException, UnknownTransactionStatusException {
+    executeTransaction(
+        t -> {
+          t.put(copyAndSetTargetToIfNot(puts));
+          return null;
+        });
+  }
+
+  @Override
+  public void insert(Insert insert) throws CrudException, UnknownTransactionStatusException {
+    executeTransaction(
+        t -> {
+          t.insert(copyAndSetTargetToIfNot(insert));
+          return null;
+        });
+  }
+
+  @Override
+  public void upsert(Upsert upsert) throws CrudException, UnknownTransactionStatusException {
+    executeTransaction(
+        t -> {
+          t.upsert(copyAndSetTargetToIfNot(upsert));
+          return null;
+        });
+  }
+
+  @Override
+  public void update(Update update) throws CrudException, UnknownTransactionStatusException {
+    executeTransaction(
+        t -> {
+          t.update(copyAndSetTargetToIfNot(update));
+          return null;
+        });
+  }
+
+  @Override
+  public void delete(Delete delete) throws CrudException, UnknownTransactionStatusException {
+    executeTransaction(
+        t -> {
+          t.delete(copyAndSetTargetToIfNot(delete));
+          return null;
+        });
+  }
+
+  @Deprecated
+  @Override
+  public void delete(List<Delete> deletes) throws CrudException, UnknownTransactionStatusException {
+    executeTransaction(
+        t -> {
+          t.delete(copyAndSetTargetToIfNot(deletes));
+          return null;
+        });
+  }
+
+  @Override
+  public void mutate(List<? extends Mutation> mutations)
+      throws CrudException, UnknownTransactionStatusException {
+    executeTransaction(
+        t -> {
+          t.mutate(copyAndSetTargetToIfNot(mutations));
+          return null;
+        });
+  }
+
+  private <R> R executeTransaction(
+      ThrowableFunction<TwoPhaseCommitTransaction, R, TransactionException> throwableFunction)
+      throws CrudException, UnknownTransactionStatusException {
+    TwoPhaseCommitTransaction transaction;
+    try {
+      transaction = beginInternal();
+    } catch (TransactionNotFoundException e) {
+      throw new CrudConflictException(e.getMessage(), e, e.getTransactionId().orElse(null));
+    } catch (TransactionException e) {
+      throw new CrudException(e.getMessage(), e, e.getTransactionId().orElse(null));
+    }
+
+    try {
+      R result = throwableFunction.apply(transaction);
+      transaction.prepare();
+      transaction.validate();
+      transaction.commit();
+      return result;
+    } catch (CrudException e) {
+      rollbackTransaction(transaction);
+      throw e;
+    } catch (PreparationConflictException
+        | ValidationConflictException
+        | CommitConflictException e) {
+      rollbackTransaction(transaction);
+      throw new CrudConflictException(e.getMessage(), e, e.getTransactionId().orElse(null));
+    } catch (UnknownTransactionStatusException e) {
+      throw e;
+    } catch (TransactionException e) {
+      rollbackTransaction(transaction);
+      throw new CrudException(e.getMessage(), e, e.getTransactionId().orElse(null));
+    }
+  }
+
+  @VisibleForTesting
+  TwoPhaseCommitTransaction beginInternal() throws TransactionException {
+    String txId = UUID.randomUUID().toString();
+    return createNewTransaction(
+        txId, config.getIsolation(), config.getSerializableStrategy(), false);
+  }
+
+  private void rollbackTransaction(TwoPhaseCommitTransaction transaction) {
+    try {
+      transaction.rollback();
+    } catch (RollbackException e) {
+      logger.warn("Rolling back the transaction failed", e);
+    }
   }
 
   @Override
@@ -215,17 +349,10 @@ public class TwoPhaseConsensusCommitManager
     }
   }
 
-  private boolean isGroupCommitEnabled() {
-    return groupCommitter != null;
-  }
-
   @Override
   public void close() {
     storage.close();
     admin.close();
     parallelExecutor.close();
-    if (isGroupCommitEnabled()) {
-      groupCommitter.close();
-    }
   }
 }

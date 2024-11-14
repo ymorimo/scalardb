@@ -5,6 +5,7 @@ plugins {
     id 'signing'
     // PoC
     id 'application'
+    id 'base'
 }
 
 sourceSets {
@@ -21,6 +22,7 @@ sourceSets {
             compileClasspath += main.output + test.output
             runtimeClasspath += main.output + test.output
             srcDir file('src/integration-test/java')
+            include '**/com/scalar/db/common/*.java'
             include '**/com/scalar/db/storage/cassandra/*.java'
         }
         resources.srcDir file('src/integration-test/resources')
@@ -30,6 +32,7 @@ sourceSets {
             compileClasspath += main.output + test.output
             runtimeClasspath += main.output + test.output
             srcDir file('src/integration-test/java')
+            include '**/com/scalar/db/common/*.java'
             include '**/com/scalar/db/storage/cosmos/*.java'
         }
         resources.srcDir file('src/integration-test/resources')
@@ -39,6 +42,7 @@ sourceSets {
             compileClasspath += main.output + test.output
             runtimeClasspath += main.output + test.output
             srcDir file('src/integration-test/java')
+            include '**/com/scalar/db/common/*.java'
             include '**/com/scalar/db/storage/dynamo/*.java'
         }
         resources.srcDir file('src/integration-test/resources')
@@ -48,6 +52,7 @@ sourceSets {
             compileClasspath += main.output + test.output
             runtimeClasspath += main.output + test.output
             srcDir file('src/integration-test/java')
+            include '**/com/scalar/db/common/*.java'
             include '**/com/scalar/db/storage/jdbc/*.java'
             include '**/com/scalar/db/transaction/jdbc/*.java'
         }
@@ -58,7 +63,8 @@ sourceSets {
             compileClasspath += main.output + test.output
             runtimeClasspath += main.output + test.output
             srcDir file('src/integration-test/java')
-            include '**/com/scalar/db/storage/jdbc/*.java'
+            include '**/com/scalar/db/common/*.java'
+            include '**/com/scalar/db/storage/jdbc/JdbcTestUtils.java'
             include '**/com/scalar/db/storage/multistorage/*.java'
         }
         resources.srcDir file('src/integration-test/resources')
@@ -91,7 +97,7 @@ dependencies {
     implementation "org.slf4j:slf4j-simple:${slf4jVersion}"
     implementation 'com.alibaba.fastjson2:fastjson2:2.0.52'
 
-    implementation project(':rpc')
+    // implementation project(':rpc')
     implementation "com.google.guava:guava:${guavaVersion}"
     implementation "com.google.inject:guice:${guiceVersion}"
     implementation "org.slf4j:slf4j-api:${slf4jVersion}"
@@ -102,7 +108,7 @@ dependencies {
     implementation 'software.amazon.awssdk:applicationautoscaling'
     implementation 'software.amazon.awssdk:dynamodb'
     implementation "org.apache.commons:commons-dbcp2:${commonsDbcp2Version}"
-    implementation "mysql:mysql-connector-java:${mysqlDriverVersion}"
+    implementation "com.mysql:mysql-connector-j:${mysqlDriverVersion}"
     implementation "org.postgresql:postgresql:${postgresqlDriverVersion}"
     implementation "com.oracle.database.jdbc:ojdbc8:${oracleDriverVersion}"
     implementation "com.microsoft.sqlserver:mssql-jdbc:${sqlserverDriverVersion}"
@@ -134,7 +140,6 @@ javadoc {
     title = "ScalarDB"
 }
 
-
 task integrationTestCassandra(type: Test) {
     description = 'Runs the integration tests for Cassandra.'
     group = 'verification'
@@ -142,7 +147,7 @@ task integrationTestCassandra(type: Test) {
     classpath = sourceSets.integrationTestCassandra.runtimeClasspath
     outputs.upToDateWhen { false }  // ensures integration tests are run every time when called
     options {
-        systemProperties(System.getProperties())
+        systemProperties(System.getProperties().findAll{it.key.toString().startsWith("scalardb")})
     }
 }
 
@@ -153,10 +158,15 @@ task integrationTestCosmos(type: Test) {
     classpath = sourceSets.integrationTestCosmos.runtimeClasspath
     outputs.upToDateWhen { false }  // ensures integration tests are run every time when called
     options {
-        systemProperties(System.getProperties())
+        systemProperties(System.getProperties().findAll{it.key.toString().startsWith("scalardb")})
     }
-    maxParallelForks = 3
-    jvmArgs '-XX:MaxDirectMemorySize=4g', '-Xmx4g'
+    jvmArgs '-XX:MaxDirectMemorySize=4g', '-Xmx6g',
+            // INFO com.azure.cosmos.implementation.RxDocumentClientImpl - Initializing DocumentClient [3] with serviceEndpoint [https://localhost:8081/], ...
+            '-Dorg.slf4j.simpleLogger.log.com.azure.cosmos.implementation.RxDocumentClientImpl=warn',
+            // INFO com.azure.cosmos.implementation.Configs - AZURE_COSMOS_DISABLE_NON_STREAMING_ORDER_BY property is: null
+            '-Dorg.slf4j.simpleLogger.log.com.azure.cosmos.implementation.Configs=warn',
+            // ERROR com.scalar.db.storage.cosmos.MutateStatementHandler - {"innerErrorMessage":"[\"Encountered exception while executing Javascript. Exception = Error: no mutation...
+            '-Dorg.slf4j.simpleLogger.log.com.scalar.db.storage.cosmos.MutateStatementHandler=off'
 }
 
 task integrationTestDynamo(type: Test) {
@@ -166,7 +176,7 @@ task integrationTestDynamo(type: Test) {
     classpath = sourceSets.integrationTestDynamo.runtimeClasspath
     outputs.upToDateWhen { false }  // ensures integration tests are run every time when called
     options {
-        systemProperties(System.getProperties())
+        systemProperties(System.getProperties().findAll{it.key.toString().startsWith("scalardb")})
     }
     maxParallelForks = 10
 }
@@ -178,7 +188,7 @@ task integrationTestJdbc(type: Test) {
     classpath = sourceSets.integrationTestJdbc.runtimeClasspath
     outputs.upToDateWhen { false }  // ensures integration tests are run every time when called
     options {
-        systemProperties(System.getProperties())
+        systemProperties(System.getProperties().findAll{it.key.toString().startsWith("scalardb")})
     }
 }
 
@@ -189,7 +199,7 @@ task integrationTestMultiStorage(type: Test) {
     classpath = sourceSets.integrationTestMultiStorage.runtimeClasspath
     outputs.upToDateWhen { false }  // ensures integration tests are run every time when called
     options {
-        systemProperties(System.getProperties())
+        systemProperties(System.getProperties().findAll{it.key.toString().startsWith("scalardb")})
     }
 }
 
@@ -235,7 +245,9 @@ check.dependsOn += spotbugsMain
 check.dependsOn += spotbugsTest
 check.dependsOn += spotbugsIntegrationTest
 
-archivesBaseName = "scalardb"
+base {
+    archivesName = "scalardb"
+}
 
 // for archiving and uploading to maven central
 publishing {

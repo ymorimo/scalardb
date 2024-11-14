@@ -72,12 +72,18 @@ public class JdbcAdminTest {
   private static final String COLUMN_1 = "c1";
   private static final ImmutableMap<RdbEngine, RdbEngineStrategy> RDB_ENGINES =
       ImmutableMap.of(
-          RdbEngine.MYSQL, RdbEngineFactory.create("jdbc:mysql:"),
-          RdbEngine.ORACLE, RdbEngineFactory.create("jdbc:oracle:"),
-          RdbEngine.POSTGRESQL, RdbEngineFactory.create("jdbc:postgresql:"),
-          RdbEngine.SQL_SERVER, RdbEngineFactory.create("jdbc:sqlserver:"),
-          RdbEngine.SQLITE, RdbEngineFactory.create("jdbc:sqlite:"),
-          RdbEngine.YUGABYTE, RdbEngineFactory.create("jdbc:yugabytedb:"));
+          RdbEngine.MYSQL,
+          new RdbEngineMysql(),
+          RdbEngine.ORACLE,
+          new RdbEngineOracle(),
+          RdbEngine.POSTGRESQL,
+          new RdbEnginePostgresql(),
+          RdbEngine.SQL_SERVER,
+          new RdbEngineSqlServer(),
+          RdbEngine.SQLITE,
+          new RdbEngineSqlite(),
+          RdbEngine.YUGABYTE,
+          new RdbEngineYugabyte());
 
   @Mock private BasicDataSource dataSource;
   @Mock private Connection connection;
@@ -96,6 +102,16 @@ public class JdbcAdminTest {
     RdbEngineStrategy st = RdbEngine.createRdbEngineStrategy(rdbEngine);
     try (MockedStatic<RdbEngineFactory> mocked = mockStatic(RdbEngineFactory.class)) {
       mocked.when(() -> RdbEngineFactory.create(any(JdbcConfig.class))).thenReturn(st);
+      return new JdbcAdmin(dataSource, config);
+    }
+  }
+
+  private JdbcAdmin createJdbcAdminFor(RdbEngineStrategy rdbEngineStrategy) {
+    // Arrange
+    try (MockedStatic<RdbEngineFactory> mocked = mockStatic(RdbEngineFactory.class)) {
+      mocked
+          .when(() -> RdbEngineFactory.create(any(JdbcConfig.class)))
+          .thenReturn(rdbEngineStrategy);
       return new JdbcAdmin(dataSource, config);
     }
   }
@@ -447,29 +463,38 @@ public class JdbcAdminTest {
   }
 
   @Test
-  public void createTableInternal_ForMysql_ShouldCreateTableAndIndexes()
-      throws ExecutionException, SQLException {
+  public void createTableInternal_ForMysql_ShouldCreateTableAndIndexes() throws SQLException {
     createTableInternal_ForX_CreateTableAndIndexes(
         RdbEngine.MYSQL,
-        "CREATE TABLE `my_ns`.`foo_table`(`c3` BOOLEAN,`c1` VARCHAR(64),`c4` VARBINARY(64),`c2` BIGINT,`c5` INT,`c6` DOUBLE,`c7` DOUBLE, PRIMARY KEY (`c3` ASC,`c1` DESC,`c4` ASC))",
+        "CREATE TABLE `my_ns`.`foo_table`(`c3` BOOLEAN,`c1` VARCHAR(128),`c4` VARBINARY(128),`c2` BIGINT,`c5` INT,`c6` DOUBLE,`c7` REAL, PRIMARY KEY (`c3` ASC,`c1` DESC,`c4` ASC))",
         "CREATE INDEX `index_my_ns_foo_table_c4` ON `my_ns`.`foo_table` (`c4`)",
         "CREATE INDEX `index_my_ns_foo_table_c1` ON `my_ns`.`foo_table` (`c1`)");
   }
 
   @Test
-  public void createTableInternal_ForPostgresql_ShouldCreateTableAndIndexes()
-      throws ExecutionException, SQLException {
+  public void
+      createTableInternal_ForMysqlWithModifiedKeyColumnSize_ShouldCreateTableAndIndexesWithModifiedKeyColumnSize()
+          throws SQLException {
+    when(config.getMysqlVariableKeyColumnSize()).thenReturn(64);
+    createTableInternal_ForX_CreateTableAndIndexes(
+        new RdbEngineMysql(config),
+        "CREATE TABLE `my_ns`.`foo_table`(`c3` BOOLEAN,`c1` VARCHAR(64),`c4` VARBINARY(64),`c2` BIGINT,`c5` INT,`c6` DOUBLE,`c7` REAL, PRIMARY KEY (`c3` ASC,`c1` DESC,`c4` ASC))",
+        "CREATE INDEX `index_my_ns_foo_table_c4` ON `my_ns`.`foo_table` (`c4`)",
+        "CREATE INDEX `index_my_ns_foo_table_c1` ON `my_ns`.`foo_table` (`c1`)");
+  }
+
+  @Test
+  public void createTableInternal_ForPostgresql_ShouldCreateTableAndIndexes() throws SQLException {
     createTableInternal_ForX_CreateTableAndIndexes(
         RdbEngine.POSTGRESQL,
-        "CREATE TABLE \"my_ns\".\"foo_table\"(\"c3\" BOOLEAN,\"c1\" VARCHAR(10485760),\"c4\" BYTEA,\"c2\" BIGINT,\"c5\" INT,\"c6\" DOUBLE PRECISION,\"c7\" FLOAT, PRIMARY KEY (\"c3\",\"c1\",\"c4\"))",
+        "CREATE TABLE \"my_ns\".\"foo_table\"(\"c3\" BOOLEAN,\"c1\" VARCHAR(10485760),\"c4\" BYTEA,\"c2\" BIGINT,\"c5\" INT,\"c6\" DOUBLE PRECISION,\"c7\" REAL, PRIMARY KEY (\"c3\",\"c1\",\"c4\"))",
         "CREATE UNIQUE INDEX \"my_ns.foo_table_clustering_order_idx\" ON \"my_ns\".\"foo_table\" (\"c3\" ASC,\"c1\" DESC,\"c4\" ASC)",
         "CREATE INDEX \"index_my_ns_foo_table_c4\" ON \"my_ns\".\"foo_table\" (\"c4\")",
         "CREATE INDEX \"index_my_ns_foo_table_c1\" ON \"my_ns\".\"foo_table\" (\"c1\")");
   }
 
   @Test
-  public void createTableInternal_ForSqlServer_ShouldCreateTableAndIndexes()
-      throws ExecutionException, SQLException {
+  public void createTableInternal_ForSqlServer_ShouldCreateTableAndIndexes() throws SQLException {
     createTableInternal_ForX_CreateTableAndIndexes(
         RdbEngine.SQL_SERVER,
         "CREATE TABLE [my_ns].[foo_table]([c3] BIT,[c1] VARCHAR(8000),"
@@ -479,11 +504,10 @@ public class JdbcAdminTest {
   }
 
   @Test
-  public void createTableInternal_ForOracle_ShouldCreateTableAndIndexes()
-      throws ExecutionException, SQLException {
+  public void createTableInternal_ForOracle_ShouldCreateTableAndIndexes() throws SQLException {
     createTableInternal_ForX_CreateTableAndIndexes(
         RdbEngine.ORACLE,
-        "CREATE TABLE \"my_ns\".\"foo_table\"(\"c3\" NUMBER(1),\"c1\" VARCHAR2(64),\"c4\" RAW(64),\"c2\" NUMBER(19),\"c5\" INT,\"c6\" BINARY_DOUBLE,\"c7\" BINARY_FLOAT, PRIMARY KEY (\"c3\",\"c1\",\"c4\")) ROWDEPENDENCIES",
+        "CREATE TABLE \"my_ns\".\"foo_table\"(\"c3\" NUMBER(1),\"c1\" VARCHAR2(128),\"c4\" RAW(128),\"c2\" NUMBER(19),\"c5\" NUMBER(10),\"c6\" BINARY_DOUBLE,\"c7\" BINARY_FLOAT, PRIMARY KEY (\"c3\",\"c1\",\"c4\")) ROWDEPENDENCIES",
         "ALTER TABLE \"my_ns\".\"foo_table\" INITRANS 3 MAXTRANS 255",
         "CREATE UNIQUE INDEX \"my_ns.foo_table_clustering_order_idx\" ON \"my_ns\".\"foo_table\" (\"c3\" ASC,\"c1\" DESC,\"c4\" ASC)",
         "CREATE INDEX \"index_my_ns_foo_table_c4\" ON \"my_ns\".\"foo_table\" (\"c4\")",
@@ -491,8 +515,21 @@ public class JdbcAdminTest {
   }
 
   @Test
-  public void createTableInternal_ForSqlite_ShouldCreateTableAndIndexes()
-      throws ExecutionException, SQLException {
+  public void
+      createTableInternal_ForOracleWithModifiedKeyColumnSize_ShouldCreateTableAndIndexesWithModifiedKeyColumnSize()
+          throws SQLException {
+    when(config.getOracleVariableKeyColumnSize()).thenReturn(64);
+    createTableInternal_ForX_CreateTableAndIndexes(
+        new RdbEngineOracle(config),
+        "CREATE TABLE \"my_ns\".\"foo_table\"(\"c3\" NUMBER(1),\"c1\" VARCHAR2(64),\"c4\" RAW(64),\"c2\" NUMBER(19),\"c5\" NUMBER(10),\"c6\" BINARY_DOUBLE,\"c7\" BINARY_FLOAT, PRIMARY KEY (\"c3\",\"c1\",\"c4\")) ROWDEPENDENCIES",
+        "ALTER TABLE \"my_ns\".\"foo_table\" INITRANS 3 MAXTRANS 255",
+        "CREATE UNIQUE INDEX \"my_ns.foo_table_clustering_order_idx\" ON \"my_ns\".\"foo_table\" (\"c3\" ASC,\"c1\" DESC,\"c4\" ASC)",
+        "CREATE INDEX \"index_my_ns_foo_table_c4\" ON \"my_ns\".\"foo_table\" (\"c4\")",
+        "CREATE INDEX \"index_my_ns_foo_table_c1\" ON \"my_ns\".\"foo_table\" (\"c1\")");
+  }
+
+  @Test
+  public void createTableInternal_ForSqlite_ShouldCreateTableAndIndexes() throws SQLException {
     createTableInternal_ForX_CreateTableAndIndexes(
         RdbEngine.SQLITE,
         "CREATE TABLE \"my_ns$foo_table\"(\"c3\" BOOLEAN,\"c1\" TEXT,\"c4\" BLOB,\"c2\" BIGINT,\"c5\" INT,\"c6\" DOUBLE,\"c7\" FLOAT, PRIMARY KEY (\"c3\",\"c1\",\"c4\"))",
@@ -501,8 +538,13 @@ public class JdbcAdminTest {
   }
 
   private void createTableInternal_ForX_CreateTableAndIndexes(
-      RdbEngine rdbEngine, String... expectedSqlStatements)
-      throws SQLException, ExecutionException {
+      RdbEngine rdbEngine, String... expectedSqlStatements) throws SQLException {
+    RdbEngineStrategy rdbEngineStrategy = RdbEngine.createRdbEngineStrategy(rdbEngine);
+    createTableInternal_ForX_CreateTableAndIndexes(rdbEngineStrategy, expectedSqlStatements);
+  }
+
+  private void createTableInternal_ForX_CreateTableAndIndexes(
+      RdbEngineStrategy rdbEngineStrategy, String... expectedSqlStatements) throws SQLException {
     // Arrange
     String namespace = "my_ns";
     String table = "foo_table";
@@ -532,7 +574,7 @@ public class JdbcAdminTest {
             mockedStatements.subList(1, mockedStatements.size()).toArray(new Statement[0]));
     when(dataSource.getConnection()).thenReturn(connection);
 
-    JdbcAdmin admin = createJdbcAdminFor(rdbEngine);
+    JdbcAdmin admin = createJdbcAdminFor(rdbEngineStrategy);
 
     // Act
     admin.createTableInternal(connection, namespace, table, metadata, false);
@@ -545,20 +587,20 @@ public class JdbcAdminTest {
 
   @Test
   public void createTableInternal_IfNotExistsForMysql_ShouldCreateTableAndIndexesIfNotExists()
-      throws ExecutionException, SQLException {
+      throws SQLException {
     createTableInternal_IfNotExistsForX_createTableAndIndexesIfNotExists(
         RdbEngine.MYSQL,
-        "CREATE TABLE IF NOT EXISTS `my_ns`.`foo_table`(`c3` BOOLEAN,`c1` VARCHAR(64),`c4` VARBINARY(64),`c2` BIGINT,`c5` INT,`c6` DOUBLE,`c7` DOUBLE, PRIMARY KEY (`c3` ASC,`c1` DESC,`c4` ASC))",
+        "CREATE TABLE IF NOT EXISTS `my_ns`.`foo_table`(`c3` BOOLEAN,`c1` VARCHAR(128),`c4` VARBINARY(128),`c2` BIGINT,`c5` INT,`c6` DOUBLE,`c7` REAL, PRIMARY KEY (`c3` ASC,`c1` DESC,`c4` ASC))",
         "CREATE INDEX `index_my_ns_foo_table_c4` ON `my_ns`.`foo_table` (`c4`)",
         "CREATE INDEX `index_my_ns_foo_table_c1` ON `my_ns`.`foo_table` (`c1`)");
   }
 
   @Test
   public void createTableInternal_IfNotExistsForPostgresql_ShouldCreateTableAndIndexesIfNotExists()
-      throws ExecutionException, SQLException {
+      throws SQLException {
     createTableInternal_IfNotExistsForX_createTableAndIndexesIfNotExists(
         RdbEngine.POSTGRESQL,
-        "CREATE TABLE IF NOT EXISTS \"my_ns\".\"foo_table\"(\"c3\" BOOLEAN,\"c1\" VARCHAR(10485760),\"c4\" BYTEA,\"c2\" BIGINT,\"c5\" INT,\"c6\" DOUBLE PRECISION,\"c7\" FLOAT, PRIMARY KEY (\"c3\",\"c1\",\"c4\"))",
+        "CREATE TABLE IF NOT EXISTS \"my_ns\".\"foo_table\"(\"c3\" BOOLEAN,\"c1\" VARCHAR(10485760),\"c4\" BYTEA,\"c2\" BIGINT,\"c5\" INT,\"c6\" DOUBLE PRECISION,\"c7\" REAL, PRIMARY KEY (\"c3\",\"c1\",\"c4\"))",
         "CREATE UNIQUE INDEX IF NOT EXISTS \"my_ns.foo_table_clustering_order_idx\" ON \"my_ns\".\"foo_table\" (\"c3\" ASC,\"c1\" DESC,\"c4\" ASC)",
         "CREATE INDEX IF NOT EXISTS \"index_my_ns_foo_table_c4\" ON \"my_ns\".\"foo_table\" (\"c4\")",
         "CREATE INDEX IF NOT EXISTS \"index_my_ns_foo_table_c1\" ON \"my_ns\".\"foo_table\" (\"c1\")");
@@ -566,7 +608,7 @@ public class JdbcAdminTest {
 
   @Test
   public void createTableInternal_IfNotExistsForSqlServer_ShouldCreateTableAndIndexesIfNotExists()
-      throws ExecutionException, SQLException {
+      throws SQLException {
     createTableInternal_IfNotExistsForX_createTableAndIndexesIfNotExists(
         RdbEngine.SQL_SERVER,
         "CREATE TABLE [my_ns].[foo_table]([c3] BIT,[c1] VARCHAR(8000),"
@@ -577,10 +619,10 @@ public class JdbcAdminTest {
 
   @Test
   public void createTableInternal_IfNotExistsForOracle_ShouldCreateTableAndIndexesIfNotExists()
-      throws ExecutionException, SQLException {
+      throws SQLException {
     createTableInternal_IfNotExistsForX_createTableAndIndexesIfNotExists(
         RdbEngine.ORACLE,
-        "CREATE TABLE \"my_ns\".\"foo_table\"(\"c3\" NUMBER(1),\"c1\" VARCHAR2(64),\"c4\" RAW(64),\"c2\" NUMBER(19),\"c5\" INT,\"c6\" BINARY_DOUBLE,\"c7\" BINARY_FLOAT, PRIMARY KEY (\"c3\",\"c1\",\"c4\")) ROWDEPENDENCIES",
+        "CREATE TABLE \"my_ns\".\"foo_table\"(\"c3\" NUMBER(1),\"c1\" VARCHAR2(128),\"c4\" RAW(128),\"c2\" NUMBER(19),\"c5\" NUMBER(10),\"c6\" BINARY_DOUBLE,\"c7\" BINARY_FLOAT, PRIMARY KEY (\"c3\",\"c1\",\"c4\")) ROWDEPENDENCIES",
         "ALTER TABLE \"my_ns\".\"foo_table\" INITRANS 3 MAXTRANS 255",
         "CREATE UNIQUE INDEX \"my_ns.foo_table_clustering_order_idx\" ON \"my_ns\".\"foo_table\" (\"c3\" ASC,\"c1\" DESC,\"c4\" ASC)",
         "CREATE INDEX \"index_my_ns_foo_table_c4\" ON \"my_ns\".\"foo_table\" (\"c4\")",
@@ -589,7 +631,7 @@ public class JdbcAdminTest {
 
   @Test
   public void createTableInternal_IfNotExistsForSqlite_ShouldCreateTableAndIndexesIfNotExists()
-      throws ExecutionException, SQLException {
+      throws SQLException {
     createTableInternal_IfNotExistsForX_createTableAndIndexesIfNotExists(
         RdbEngine.SQLITE,
         "CREATE TABLE IF NOT EXISTS \"my_ns$foo_table\"(\"c3\" BOOLEAN,\"c1\" TEXT,\"c4\" BLOB,\"c2\" BIGINT,\"c5\" INT,\"c6\" DOUBLE,\"c7\" FLOAT, PRIMARY KEY (\"c3\",\"c1\",\"c4\"))",
@@ -598,8 +640,14 @@ public class JdbcAdminTest {
   }
 
   private void createTableInternal_IfNotExistsForX_createTableAndIndexesIfNotExists(
-      RdbEngine rdbEngine, String... expectedSqlStatements)
-      throws SQLException, ExecutionException {
+      RdbEngine rdbEngine, String... expectedSqlStatements) throws SQLException {
+    RdbEngineStrategy strategy = RdbEngine.createRdbEngineStrategy(rdbEngine);
+    createTableInternal_IfNotExistsForX_createTableAndIndexesIfNotExists(
+        strategy, expectedSqlStatements);
+  }
+
+  private void createTableInternal_IfNotExistsForX_createTableAndIndexesIfNotExists(
+      RdbEngineStrategy rdbEngineStrategy, String... expectedSqlStatements) throws SQLException {
     // Arrange
     String namespace = "my_ns";
     String table = "foo_table";
@@ -629,7 +677,7 @@ public class JdbcAdminTest {
             mockedStatements.subList(1, mockedStatements.size()).toArray(new Statement[0]));
     when(dataSource.getConnection()).thenReturn(connection);
 
-    JdbcAdmin admin = createJdbcAdminFor(rdbEngine);
+    JdbcAdmin admin = createJdbcAdminFor(rdbEngineStrategy);
 
     // Act
     admin.createTableInternal(connection, namespace, table, metadata, true);
@@ -2056,7 +2104,7 @@ public class JdbcAdminTest {
         "SELECT `column_name`,`data_type`,`key_type`,`clustering_order`,`indexed` FROM `"
             + METADATA_SCHEMA
             + "`.`metadata` WHERE `full_table_name`=? ORDER BY `ordinal_position` ASC",
-        "ALTER TABLE `my_ns`.`my_tbl` MODIFY`my_column` VARCHAR(64)",
+        "ALTER TABLE `my_ns`.`my_tbl` MODIFY`my_column` VARCHAR(128)",
         "CREATE INDEX `index_my_ns_my_tbl_my_column` ON `my_ns`.`my_tbl` (`my_column`)",
         "UPDATE `"
             + METADATA_SCHEMA
@@ -2088,7 +2136,7 @@ public class JdbcAdminTest {
         "SELECT \"column_name\",\"data_type\",\"key_type\",\"clustering_order\",\"indexed\" FROM \""
             + METADATA_SCHEMA
             + "\".\"metadata\" WHERE \"full_table_name\"=? ORDER BY \"ordinal_position\" ASC",
-        "ALTER TABLE \"my_ns\".\"my_tbl\" MODIFY ( \"my_column\" VARCHAR2(64) )",
+        "ALTER TABLE \"my_ns\".\"my_tbl\" MODIFY ( \"my_column\" VARCHAR2(128) )",
         "CREATE INDEX \"index_my_ns_my_tbl_my_column\" ON \"my_ns\".\"my_tbl\" (\"my_column\")",
         "UPDATE \""
             + METADATA_SCHEMA
@@ -2374,7 +2422,7 @@ public class JdbcAdminTest {
         "SELECT \"column_name\",\"data_type\",\"key_type\",\"clustering_order\",\"indexed\" FROM \""
             + METADATA_SCHEMA
             + "\".\"metadata\" WHERE \"full_table_name\"=? ORDER BY \"ordinal_position\" ASC",
-        "ALTER TABLE \"ns\".\"table\" ADD \"c2\" INT",
+        "ALTER TABLE \"ns\".\"table\" ADD \"c2\" NUMBER(10)",
         "DELETE FROM \""
             + METADATA_SCHEMA
             + "\".\"metadata\" WHERE \"full_table_name\" = 'ns.table'",
@@ -2589,8 +2637,14 @@ public class JdbcAdminTest {
         .thenReturn("");
     when(columnResults.getInt(JDBC_COL_COLUMN_SIZE)).thenReturn(0).thenReturn(0).thenReturn(0);
     when(columnResults.getInt(JDBC_COL_DECIMAL_DIGITS)).thenReturn(0).thenReturn(0).thenReturn(0);
-    when(metadata.getPrimaryKeys(null, NAMESPACE, TABLE)).thenReturn(primaryKeyResults);
-    when(metadata.getColumns(null, NAMESPACE, TABLE, "%")).thenReturn(columnResults);
+    RdbEngineStrategy rdbEngineStrategy = getRdbEngineStrategy(rdbEngine);
+    if (rdbEngineStrategy instanceof RdbEngineMysql) {
+      when(metadata.getPrimaryKeys(NAMESPACE, NAMESPACE, TABLE)).thenReturn(primaryKeyResults);
+      when(metadata.getColumns(NAMESPACE, NAMESPACE, TABLE, "%")).thenReturn(columnResults);
+    } else {
+      when(metadata.getPrimaryKeys(null, NAMESPACE, TABLE)).thenReturn(primaryKeyResults);
+      when(metadata.getColumns(null, NAMESPACE, TABLE, "%")).thenReturn(columnResults);
+    }
 
     Map<String, DataType> expectedColumns = new LinkedHashMap<>();
     expectedColumns.put("pk1", DataType.TEXT);
@@ -2673,7 +2727,13 @@ public class JdbcAdminTest {
     when(connection.createStatement()).thenReturn(checkTableExistStatement);
     when(connection.getMetaData()).thenReturn(metadata);
     when(primaryKeyResults.next()).thenReturn(false);
-    when(metadata.getPrimaryKeys(null, NAMESPACE, TABLE)).thenReturn(primaryKeyResults);
+    RdbEngineStrategy rdbEngineStrategy = getRdbEngineStrategy(rdbEngine);
+    if (rdbEngineStrategy instanceof RdbEngineMysql) {
+      when(metadata.getPrimaryKeys(NAMESPACE, NAMESPACE, TABLE)).thenReturn(primaryKeyResults);
+    } else {
+      when(metadata.getPrimaryKeys(null, NAMESPACE, TABLE)).thenReturn(primaryKeyResults);
+    }
+
     JdbcAdmin admin = createJdbcAdminFor(rdbEngine);
     String description = "database engine specific test failed: " + rdbEngine;
 
@@ -2715,8 +2775,16 @@ public class JdbcAdminTest {
     when(columnResults.getString(JDBC_COL_TYPE_NAME)).thenReturn("timestamp");
     when(columnResults.getInt(JDBC_COL_COLUMN_SIZE)).thenReturn(0);
     when(columnResults.getInt(JDBC_COL_DECIMAL_DIGITS)).thenReturn(0);
-    when(metadata.getPrimaryKeys(null, NAMESPACE, TABLE)).thenReturn(primaryKeyResults);
-    when(metadata.getColumns(null, NAMESPACE, TABLE, "%")).thenReturn(columnResults);
+
+    RdbEngineStrategy rdbEngineStrategy = getRdbEngineStrategy(rdbEngine);
+    if (rdbEngineStrategy instanceof RdbEngineMysql) {
+      when(metadata.getPrimaryKeys(NAMESPACE, NAMESPACE, TABLE)).thenReturn(primaryKeyResults);
+      when(metadata.getColumns(NAMESPACE, NAMESPACE, TABLE, "%")).thenReturn(columnResults);
+    } else {
+      when(metadata.getPrimaryKeys(null, NAMESPACE, TABLE)).thenReturn(primaryKeyResults);
+      when(metadata.getColumns(null, NAMESPACE, TABLE, "%")).thenReturn(columnResults);
+    }
+
     JdbcAdmin admin = createJdbcAdminFor(rdbEngine);
     String description = "database engine specific test failed: " + rdbEngine;
 
@@ -2867,15 +2935,22 @@ public class JdbcAdminTest {
 
   private String prepareSqlForAlterTableAddColumn(RdbEngine rdbEngine, String column) {
     RdbEngineStrategy rdbEngineStrategy = getRdbEngineStrategy(rdbEngine);
+    String intType;
+    if (rdbEngineStrategy instanceof RdbEngineOracle) {
+      intType = "NUMBER(10)";
+    } else {
+      intType = "INT";
+    }
     return "ALTER TABLE "
         + rdbEngineStrategy.encloseFullTableName(NAMESPACE, TABLE)
         + " ADD "
         + rdbEngineStrategy.enclose(column)
-        + " INT";
+        + " "
+        + intType;
   }
 
   private RdbEngineStrategy getRdbEngineStrategy(RdbEngine rdbEngine) {
-    return RDB_ENGINES.getOrDefault(rdbEngine, RdbEngineFactory.create("jdbc:mysql:"));
+    return RDB_ENGINES.getOrDefault(rdbEngine, new RdbEngineMysql());
   }
 
   @Test

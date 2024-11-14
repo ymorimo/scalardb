@@ -1,6 +1,5 @@
 package com.scalar.db.transaction.consensuscommit;
 
-import static com.scalar.db.transaction.consensuscommit.ConsensusCommitConfig.COORDINATOR_GROUP_COMMIT_ENABLED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -43,7 +42,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.condition.DisabledIf;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public abstract class TwoPhaseConsensusCommitSpecificIntegrationTestBase {
@@ -1014,7 +1012,7 @@ public abstract class TwoPhaseConsensusCommitSpecificIntegrationTestBase {
   }
 
   @Test
-  public void getAndScan_CommitHappenedInBetween_ShouldReadRepeatably()
+  public void getThenScanAndGet_CommitHappenedInBetween_OnlyGetShouldReadRepeatably()
       throws TransactionException {
     // Arrange
     TwoPhaseCommitTransaction transaction = manager1.begin();
@@ -1039,7 +1037,8 @@ public abstract class TwoPhaseConsensusCommitSpecificIntegrationTestBase {
 
     // Assert
     assertThat(result1).isPresent();
-    assertThat(result1.get()).isEqualTo(result2);
+    assertThat(result1.get()).isNotEqualTo(result2);
+    assertThat(result2.getInt(BALANCE)).isEqualTo(2);
     assertThat(result1).isEqualTo(result3);
   }
 
@@ -2197,9 +2196,6 @@ public abstract class TwoPhaseConsensusCommitSpecificIntegrationTestBase {
     transaction2.commit();
   }
 
-  // This test doesn't work with the group commit since it puts an ABORTED transaction without any
-  // parent ID.
-  @DisabledIf("isGroupCommitEnabled")
   @Test
   public void
       commit_WriteSkewOnNonExistingRecordsWithSerializableWithExtraWriteAndCommitStatusFailed_ShouldRollbackProperly()
@@ -3196,16 +3192,6 @@ public abstract class TwoPhaseConsensusCommitSpecificIntegrationTestBase {
     Optional<Value<?>> balance = result.getValue(BALANCE);
     assertThat(balance).isPresent();
     return balance.get().getAsInt();
-  }
-
-  @SuppressWarnings("unused")
-  private boolean isGroupCommitEnabled() {
-    return getProperties1(TEST_NAME)
-            .getProperty(COORDINATOR_GROUP_COMMIT_ENABLED, "false")
-            .equals("true")
-        || getProperties2(TEST_NAME)
-            .getProperty(COORDINATOR_GROUP_COMMIT_ENABLED, "false")
-            .equals("true");
   }
 
   private enum SelectionType {

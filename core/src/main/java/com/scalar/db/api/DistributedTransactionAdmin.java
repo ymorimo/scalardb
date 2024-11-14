@@ -8,7 +8,7 @@ import java.util.Map;
  * An administrative interface for distributed transaction implementations. The user can execute
  * administrative operations with it like createNamespace/createTable/getTableMetadata.
  */
-public interface DistributedTransactionAdmin extends Admin, AuthAdmin {
+public interface DistributedTransactionAdmin extends Admin, AuthAdmin, AutoCloseable {
 
   /**
    * Creates coordinator namespace and tables.
@@ -106,7 +106,7 @@ public interface DistributedTransactionAdmin extends Admin, AuthAdmin {
   boolean coordinatorTablesExist() throws ExecutionException;
 
   /**
-   * Repair coordinator tables which may be in an unknown state.
+   * Repairs coordinator tables which may be in an unknown state.
    *
    * @param options options to repair
    * @throws IllegalArgumentException if the coordinator tables do not exist
@@ -115,5 +115,6 @@ public interface DistributedTransactionAdmin extends Admin, AuthAdmin {
   void repairCoordinatorTables(Map<String, String> options) throws ExecutionException;
 
   /** Closes connections to the storage. */
+  @Override
   void close();
 }

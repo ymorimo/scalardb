@@ -1,5 +1,6 @@
 package com.scalar.db.storage.jdbc;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.scalar.db.api.LikeExpression;
 import com.scalar.db.api.TableMetadata;
 import com.scalar.db.common.error.CoreError;
@@ -15,11 +16,22 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import javax.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 class RdbEngineMysql implements RdbEngineStrategy {
   private static final Logger logger = LoggerFactory.getLogger(RdbEngineMysql.class);
+  private final String keyColumnSize;
+
+  RdbEngineMysql(JdbcConfig config) {
+    keyColumnSize = String.valueOf(config.getMysqlVariableKeyColumnSize());
+  }
+
+  @VisibleForTesting
+  RdbEngineMysql() {
+    keyColumnSize = String.valueOf(JdbcConfig.DEFAULT_VARIABLE_KEY_COLUMN_SIZE);
+  }
 
   @Override
   public String[] createSchemaSqls(String fullSchema) {
@@ -184,8 +196,9 @@ class RdbEngineMysql implements RdbEngineStrategy {
       case BOOLEAN:
         return "BOOLEAN";
       case DOUBLE:
-      case FLOAT:
         return "DOUBLE";
+      case FLOAT:
+        return "REAL";
       case INT:
         return "INT";
       case TEXT:
@@ -199,9 +212,9 @@ class RdbEngineMysql implements RdbEngineStrategy {
   public String getDataTypeForKey(DataType dataType) {
     switch (dataType) {
       case TEXT:
-        return "VARCHAR(64)";
+        return "VARCHAR(" + keyColumnSize + ")";
       case BLOB:
-        return "VARBINARY(64)";
+        return "VARBINARY(" + keyColumnSize + ")";
       default:
         return null;
     }
@@ -353,5 +366,20 @@ class RdbEngineMysql implements RdbEngineStrategy {
   @Override
   public String tryAddIfNotExistsToCreateIndexSql(String createIndexSql) {
     return createIndexSql;
+  }
+
+  @Nullable
+  @Override
+  public String getCatalogName(String namespace) {
+    return namespace;
+  }
+
+  @Nullable
+  @Override
+  public String getSchemaName(String namespace) {
+    // This can be null. However, we return the namespace from this method just in case since users
+    // might be able to set `databaseTerm` property to `SCHEMA` so that a return value from this
+    // method is used for filtering.
+    return namespace;
   }
 }

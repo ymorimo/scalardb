@@ -79,7 +79,7 @@ public class QueryBuilderTest {
         queryBuilder
             .select(Arrays.asList("c1", "c2"))
             .from(NAMESPACE, TABLE, TABLE_METADATA)
-            .where(new Key("p1", "p1Value"), Optional.empty())
+            .where(new Key("p1", "p1Value"), Optional.empty(), Collections.emptySet())
             .build();
     assertThat(query.sql()).isEqualTo(encloseSql("SELECT c1,c2 FROM n1.t1 WHERE p1=?", rdbEngine));
     query.bind(preparedStatement);
@@ -90,7 +90,8 @@ public class QueryBuilderTest {
         queryBuilder
             .select(Collections.emptyList())
             .from(NAMESPACE, TABLE, TABLE_METADATA)
-            .where(new Key("p1", "p1Value", "p2", "p2Value"), Optional.empty())
+            .where(
+                new Key("p1", "p1Value", "p2", "p2Value"), Optional.empty(), Collections.emptySet())
             .build();
     assertThat(query.sql())
         .isEqualTo(encloseSql("SELECT * FROM n1.t1 WHERE p1=? AND p2=?", rdbEngine));
@@ -103,7 +104,10 @@ public class QueryBuilderTest {
         queryBuilder
             .select(Arrays.asList("c1", "c2"))
             .from(NAMESPACE, TABLE, TABLE_METADATA)
-            .where(new Key("p1", "p1Value"), Optional.of(new Key("c1", "c1Value")))
+            .where(
+                new Key("p1", "p1Value"),
+                Optional.of(new Key("c1", "c1Value")),
+                Collections.emptySet())
             .build();
     assertThat(query.sql())
         .isEqualTo(encloseSql("SELECT c1,c2 FROM n1.t1 WHERE p1=? AND c1=?", rdbEngine));
@@ -116,7 +120,10 @@ public class QueryBuilderTest {
         queryBuilder
             .select(Arrays.asList("c1", "c2"))
             .from(NAMESPACE, TABLE, TABLE_METADATA)
-            .where(new Key("p1", "p1Value"), Optional.of(new Key("c1", "c1Value", "c2", "c2Value")))
+            .where(
+                new Key("p1", "p1Value"),
+                Optional.of(new Key("c1", "c1Value", "c2", "c2Value")),
+                Collections.emptySet())
             .build();
     assertThat(query.sql())
         .isEqualTo(encloseSql("SELECT c1,c2 FROM n1.t1 WHERE p1=? AND c1=? AND c2=?", rdbEngine));
@@ -132,10 +139,35 @@ public class QueryBuilderTest {
             .from(NAMESPACE, TABLE, TABLE_METADATA)
             .where(
                 new Key("p1", "p1Value"),
+                Optional.of(new Key("c1", "c1Value", "c2", "c2Value")),
+                ImmutableSet.of(
+                    Conjunction.of(ConditionBuilder.column("v1").isEqualToText("value1")),
+                    Conjunction.of(ConditionBuilder.column("v2").isEqualToText("value2"))))
+            .build();
+    assertThat(query.sql())
+        .isEqualTo(
+            encloseSql(
+                "SELECT c1,c2 FROM n1.t1 WHERE (p1=? AND c1=? AND c2=?) AND (v1=? OR v2=?)",
+                rdbEngine));
+    query.bind(preparedStatement);
+    verify(preparedStatement).setString(1, "p1Value");
+    verify(preparedStatement).setString(2, "c1Value");
+    verify(preparedStatement).setString(3, "c2Value");
+    verify(preparedStatement).setString(4, "value1");
+    verify(preparedStatement).setString(5, "value2");
+
+    preparedStatement = mock(PreparedStatement.class);
+    query =
+        queryBuilder
+            .select(Arrays.asList("c1", "c2"))
+            .from(NAMESPACE, TABLE, TABLE_METADATA)
+            .where(
+                new Key("p1", "p1Value"),
                 Optional.of(new Key("c1", "c1StartValue")),
                 true,
                 Optional.of(new Key("c1", "c1EndValue")),
-                true)
+                true,
+                ImmutableSet.of())
             .build();
     assertThat(query.sql())
         .isEqualTo(
@@ -157,7 +189,8 @@ public class QueryBuilderTest {
                 Optional.of(new Key("c1", "c1StartValue")),
                 false,
                 Optional.of(new Key("c1", "c1EndValue")),
-                false)
+                false,
+                ImmutableSet.of())
             .build();
     assertThat(query.sql())
         .isEqualTo(
@@ -179,7 +212,8 @@ public class QueryBuilderTest {
                 Optional.of(new Key("c1", "c1Value", "c2", "c2StartValue")),
                 true,
                 Optional.of(new Key("c1", "c1Value", "c2", "c2EndValue")),
-                false)
+                false,
+                ImmutableSet.of())
             .build();
     assertThat(query.sql())
         .isEqualTo(
@@ -203,7 +237,8 @@ public class QueryBuilderTest {
                 Optional.of(new Key("c1", "c1StartValue")),
                 true,
                 Optional.of(new Key("c1", "c1EndValue")),
-                true)
+                true,
+                ImmutableSet.of())
             .orderBy(Collections.singletonList(new Scan.Ordering("c1", Scan.Ordering.Order.ASC)))
             .build();
     assertThat(query.sql())
@@ -226,7 +261,8 @@ public class QueryBuilderTest {
                 Optional.of(new Key("c1", "c1StartValue")),
                 true,
                 Optional.of(new Key("c1", "c1EndValue")),
-                true)
+                true,
+                ImmutableSet.of())
             .orderBy(
                 Arrays.asList(
                     new Scan.Ordering("c1", Scan.Ordering.Order.ASC),
@@ -252,7 +288,8 @@ public class QueryBuilderTest {
                 Optional.of(new Key("c1", "c1StartValue")),
                 true,
                 Optional.of(new Key("c1", "c1EndValue")),
-                true)
+                true,
+                ImmutableSet.of())
             .orderBy(Collections.singletonList(new Scan.Ordering("c1", Scan.Ordering.Order.DESC)))
             .build();
     assertThat(query.sql())
@@ -275,7 +312,8 @@ public class QueryBuilderTest {
                 Optional.of(new Key("c1", "c1StartValue")),
                 true,
                 Optional.of(new Key("c1", "c1EndValue")),
-                true)
+                true,
+                ImmutableSet.of())
             .orderBy(
                 Arrays.asList(
                     new Scan.Ordering("c1", Scan.Ordering.Order.DESC),
@@ -326,7 +364,8 @@ public class QueryBuilderTest {
                 Optional.of(new Key("c1", "c1StartValue")),
                 true,
                 Optional.of(new Key("c1", "c1EndValue")),
-                true)
+                true,
+                ImmutableSet.of())
             .limit(10)
             .build();
     assertThat(query.sql()).isEqualTo(encloseSql(expectedQuery, rdbEngine));
@@ -334,6 +373,35 @@ public class QueryBuilderTest {
     verify(preparedStatement).setString(1, "p1Value");
     verify(preparedStatement).setString(2, "c1StartValue");
     verify(preparedStatement).setString(3, "c1EndValue");
+
+    preparedStatement = mock(PreparedStatement.class);
+    query =
+        queryBuilder
+            .select(Arrays.asList("c1", "c2"))
+            .from(NAMESPACE, TABLE, TABLE_METADATA)
+            .where(
+                new Key("p1", "p1Value"),
+                Optional.of(new Key("c1", "c1StartValue")),
+                true,
+                Optional.of(new Key("c1", "c1EndValue")),
+                true,
+                ImmutableSet.of(
+                    Conjunction.of(ConditionBuilder.column("v1").isEqualToText("value1")),
+                    Conjunction.of(ConditionBuilder.column("v2").isEqualToText("value2"))))
+            .build();
+    assertThat(query.sql())
+        .isEqualTo(
+            encloseSql(
+                "SELECT c1,c2 FROM n1.t1 "
+                    + "WHERE (p1=? AND c1>=? AND c1<=?) AND (v1=? OR v2=?) "
+                    + "ORDER BY c1 ASC,c2 DESC",
+                rdbEngine));
+    query.bind(preparedStatement);
+    verify(preparedStatement).setString(1, "p1Value");
+    verify(preparedStatement).setString(2, "c1StartValue");
+    verify(preparedStatement).setString(3, "c1EndValue");
+    verify(preparedStatement).setString(4, "value1");
+    verify(preparedStatement).setString(5, "value2");
   }
 
   @ParameterizedTest
@@ -694,7 +762,7 @@ public class QueryBuilderTest {
         queryBuilder
             .select(Arrays.asList("c1", "c2"))
             .from(NAMESPACE, TABLE, TABLE_METADATA)
-            .where(new Key("v1", "v1Value"), Optional.empty())
+            .where(new Key("v1", "v1Value"), Optional.empty(), Collections.emptySet())
             .build();
     assertThat(query.sql()).isEqualTo(encloseSql("SELECT c1,c2 FROM n1.t1 WHERE v1=?", rdbEngine));
     query.bind(preparedStatement);
@@ -705,7 +773,13 @@ public class QueryBuilderTest {
         queryBuilder
             .select(Arrays.asList("c1", "c2"))
             .from(NAMESPACE, TABLE, TABLE_METADATA)
-            .where(new Key("v1", "v1Value"), Optional.empty(), false, Optional.empty(), false)
+            .where(
+                new Key("v1", "v1Value"),
+                Optional.empty(),
+                false,
+                Optional.empty(),
+                false,
+                ImmutableSet.of())
             .build();
     assertThat(query.sql()).isEqualTo(encloseSql("SELECT c1,c2 FROM n1.t1 WHERE v1=?", rdbEngine));
     query.bind(preparedStatement);
@@ -716,7 +790,7 @@ public class QueryBuilderTest {
         queryBuilder
             .select(Arrays.asList("c1", "c2"))
             .from(NAMESPACE, TABLE, TABLE_METADATA)
-            .where(new Key("v2", "v2Value"), Optional.empty())
+            .where(new Key("v2", "v2Value"), Optional.empty(), Collections.emptySet())
             .build();
     assertThat(query.sql()).isEqualTo(encloseSql("SELECT c1,c2 FROM n1.t1 WHERE v2=?", rdbEngine));
     query.bind(preparedStatement);
@@ -727,11 +801,60 @@ public class QueryBuilderTest {
         queryBuilder
             .select(Arrays.asList("c1", "c2"))
             .from(NAMESPACE, TABLE, TABLE_METADATA)
-            .where(new Key("v2", "v2Value"), Optional.empty(), false, Optional.empty(), false)
+            .where(
+                new Key("v2", "v2Value"),
+                Optional.empty(),
+                ImmutableSet.of(
+                    Conjunction.of(ConditionBuilder.column("v1").isEqualToText("value1")),
+                    Conjunction.of(ConditionBuilder.column("v2").isEqualToText("value2"))))
+            .build();
+    assertThat(query.sql())
+        .isEqualTo(
+            encloseSql("SELECT c1,c2 FROM n1.t1 WHERE (v2=?) AND (v1=? OR v2=?)", rdbEngine));
+    query.bind(preparedStatement);
+    verify(preparedStatement).setString(1, "v2Value");
+    verify(preparedStatement).setString(2, "value1");
+    verify(preparedStatement).setString(3, "value2");
+
+    preparedStatement = mock(PreparedStatement.class);
+    query =
+        queryBuilder
+            .select(Arrays.asList("c1", "c2"))
+            .from(NAMESPACE, TABLE, TABLE_METADATA)
+            .where(
+                new Key("v2", "v2Value"),
+                Optional.empty(),
+                false,
+                Optional.empty(),
+                false,
+                ImmutableSet.of())
             .build();
     assertThat(query.sql()).isEqualTo(encloseSql("SELECT c1,c2 FROM n1.t1 WHERE v2=?", rdbEngine));
     query.bind(preparedStatement);
     verify(preparedStatement).setString(1, "v2Value");
+
+    preparedStatement = mock(PreparedStatement.class);
+    query =
+        queryBuilder
+            .select(Arrays.asList("c1", "c2"))
+            .from(NAMESPACE, TABLE, TABLE_METADATA)
+            .where(
+                new Key("v2", "v2Value"),
+                Optional.empty(),
+                false,
+                Optional.empty(),
+                false,
+                ImmutableSet.of(
+                    Conjunction.of(ConditionBuilder.column("v1").isEqualToText("value1")),
+                    Conjunction.of(ConditionBuilder.column("v2").isEqualToText("value2"))))
+            .build();
+    assertThat(query.sql())
+        .isEqualTo(
+            encloseSql("SELECT c1,c2 FROM n1.t1 WHERE (v2=?) AND (v1=? OR v2=?)", rdbEngine));
+    query.bind(preparedStatement);
+    verify(preparedStatement).setString(1, "v2Value");
+    verify(preparedStatement).setString(2, "value1");
+    verify(preparedStatement).setString(3, "value2");
   }
 
   @ParameterizedTest
@@ -760,7 +883,8 @@ public class QueryBuilderTest {
         queryBuilder
             .select(Arrays.asList("c1", "c2"))
             .from(NAMESPACE, TABLE, tableMetadataWithoutClusteringKey)
-            .where(Key.of("p1", "p1Value", "p2", "p2Value"), Optional.empty())
+            .where(
+                Key.of("p1", "p1Value", "p2", "p2Value"), Optional.empty(), Collections.emptySet())
             .build();
     assertThat(query.sql())
         .isEqualTo(encloseSql("SELECT c1,c2 FROM n1.t1 WHERE p1=? AND p2=?", rdbEngine));
@@ -778,7 +902,8 @@ public class QueryBuilderTest {
                 Optional.empty(),
                 false,
                 Optional.empty(),
-                false)
+                false,
+                ImmutableSet.of())
             .build();
     assertThat(query.sql())
         .isEqualTo(encloseSql("SELECT c1,c2 FROM n1.t1 WHERE p1=? AND p2=?", rdbEngine));

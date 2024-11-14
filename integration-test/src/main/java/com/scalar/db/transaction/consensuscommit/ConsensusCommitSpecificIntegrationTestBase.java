@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.junit.jupiter.api.Assertions.assertTimeout;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -15,6 +17,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import com.scalar.db.api.ConditionBuilder;
 import com.scalar.db.api.Consistency;
 import com.scalar.db.api.Delete;
 import com.scalar.db.api.DistributedStorage;
@@ -35,12 +38,14 @@ import com.scalar.db.exception.transaction.CommitConflictException;
 import com.scalar.db.exception.transaction.CommitException;
 import com.scalar.db.exception.transaction.PreparationConflictException;
 import com.scalar.db.exception.transaction.TransactionException;
-import com.scalar.db.exception.transaction.UnknownTransactionStatusException;
 import com.scalar.db.io.DataType;
 import com.scalar.db.io.IntValue;
 import com.scalar.db.io.Key;
 import com.scalar.db.io.Value;
 import com.scalar.db.service.StorageFactory;
+import com.scalar.db.transaction.consensuscommit.CoordinatorGroupCommitter.CoordinatorGroupCommitKeyManipulator;
+import com.scalar.db.util.groupcommit.KeyManipulator.Keys;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -48,10 +53,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 import javax.annotation.Nullable;
 import org.assertj.core.api.Assertions;
@@ -63,6 +64,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.condition.DisabledIf;
 import org.junit.jupiter.api.condition.EnabledIf;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public abstract class ConsensusCommitSpecificIntegrationTestBase {
@@ -320,17 +323,26 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     assertThat(results.size()).isEqualTo(0);
   }
 
+  public enum CommitType {
+    NORMAL_COMMIT,
+    GROUP_COMMIT,
+    DELAYED_GROUP_COMMIT
+  }
+
   private void selection_SelectionGivenForPreparedWhenCoordinatorStateCommitted_ShouldRollforward(
-      Selection s) throws ExecutionException, CoordinatorException, TransactionException {
+      Selection s, CommitType commitType)
+      throws ExecutionException, CoordinatorException, TransactionException {
     // Arrange
     long current = System.currentTimeMillis();
-    populatePreparedRecordAndCoordinatorStateRecord(
-        storage,
-        namespace1,
-        TABLE_1,
-        TransactionState.PREPARED,
-        current,
-        TransactionState.COMMITTED);
+    String ongoingTxId =
+        populatePreparedRecordAndCoordinatorStateRecord(
+            storage,
+            namespace1,
+            TABLE_1,
+            TransactionState.PREPARED,
+            current,
+            TransactionState.COMMITTED,
+            commitType);
     DistributedTransaction transaction = manager.begin();
 
     // Act
@@ -359,32 +371,43 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     }
     transaction.commit();
 
-    assertThat(result.getId()).isEqualTo(ANY_ID_2);
+    assertThat(result.getId()).isEqualTo(ongoingTxId);
     Assertions.assertThat(result.getState()).isEqualTo(TransactionState.COMMITTED);
     assertThat(result.getVersion()).isEqualTo(2);
     assertThat(result.getCommittedAt()).isGreaterThan(0);
   }
 
-  @Test
-  public void get_GetGivenForPreparedWhenCoordinatorStateCommitted_ShouldRollforward()
-      throws ExecutionException, CoordinatorException, TransactionException {
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
+  public void get_GetGivenForPreparedWhenCoordinatorStateCommitted_ShouldRollforward(
+      CommitType commitType) throws ExecutionException, CoordinatorException, TransactionException {
     Get get = prepareGet(0, 0, namespace1, TABLE_1);
-    selection_SelectionGivenForPreparedWhenCoordinatorStateCommitted_ShouldRollforward(get);
+    selection_SelectionGivenForPreparedWhenCoordinatorStateCommitted_ShouldRollforward(
+        get, commitType);
   }
 
-  @Test
-  public void scan_ScanGivenForPreparedWhenCoordinatorStateCommitted_ShouldRollforward()
-      throws ExecutionException, CoordinatorException, TransactionException {
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
+  public void scan_ScanGivenForPreparedWhenCoordinatorStateCommitted_ShouldRollforward(
+      CommitType commitType) throws ExecutionException, CoordinatorException, TransactionException {
     Scan scan = prepareScan(0, 0, 0, namespace1, TABLE_1);
-    selection_SelectionGivenForPreparedWhenCoordinatorStateCommitted_ShouldRollforward(scan);
+    selection_SelectionGivenForPreparedWhenCoordinatorStateCommitted_ShouldRollforward(
+        scan, commitType);
   }
 
   private void selection_SelectionGivenForPreparedWhenCoordinatorStateAborted_ShouldRollback(
-      Selection s) throws ExecutionException, CoordinatorException, TransactionException {
+      Selection s, CommitType commitType)
+      throws ExecutionException, CoordinatorException, TransactionException {
     // Arrange
     long current = System.currentTimeMillis();
     populatePreparedRecordAndCoordinatorStateRecord(
-        storage, namespace1, TABLE_1, TransactionState.PREPARED, current, TransactionState.ABORTED);
+        storage,
+        namespace1,
+        TABLE_1,
+        TransactionState.PREPARED,
+        current,
+        TransactionState.ABORTED,
+        commitType);
     DistributedTransaction transaction = manager.begin();
 
     // Act
@@ -419,27 +442,30 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     assertThat(result.getCommittedAt()).isEqualTo(1);
   }
 
-  @Test
-  public void get_GetGivenForPreparedWhenCoordinatorStateAborted_ShouldRollback()
-      throws TransactionException, ExecutionException, CoordinatorException {
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
+  public void get_GetGivenForPreparedWhenCoordinatorStateAborted_ShouldRollback(
+      CommitType commitType) throws TransactionException, ExecutionException, CoordinatorException {
     Get get = prepareGet(0, 0, namespace1, TABLE_1);
-    selection_SelectionGivenForPreparedWhenCoordinatorStateAborted_ShouldRollback(get);
+    selection_SelectionGivenForPreparedWhenCoordinatorStateAborted_ShouldRollback(get, commitType);
   }
 
-  @Test
-  public void scan_ScanGivenForPreparedWhenCoordinatorStateAborted_ShouldRollback()
-      throws TransactionException, ExecutionException, CoordinatorException {
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
+  public void scan_ScanGivenForPreparedWhenCoordinatorStateAborted_ShouldRollback(
+      CommitType commitType) throws TransactionException, ExecutionException, CoordinatorException {
     Scan scan = prepareScan(0, 0, 0, namespace1, TABLE_1);
-    selection_SelectionGivenForPreparedWhenCoordinatorStateAborted_ShouldRollback(scan);
+    selection_SelectionGivenForPreparedWhenCoordinatorStateAborted_ShouldRollback(scan, commitType);
   }
 
   private void
       selection_SelectionGivenForPreparedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction(
-          Selection s) throws ExecutionException, CoordinatorException, TransactionException {
+          Selection s, CommitType commitType)
+          throws ExecutionException, CoordinatorException, TransactionException {
     // Arrange
     long prepared_at = System.currentTimeMillis();
     populatePreparedRecordAndCoordinatorStateRecord(
-        storage, namespace1, TABLE_1, TransactionState.PREPARED, prepared_at, null);
+        storage, namespace1, TABLE_1, TransactionState.PREPARED, prepared_at, null, commitType);
     DistributedTransaction transaction = manager.begin();
 
     // Act
@@ -461,31 +487,37 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     transaction.commit();
   }
 
-  @Test
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
   public void
-      get_GetGivenForPreparedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction()
+      get_GetGivenForPreparedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     Get get = prepareGet(0, 0, namespace1, TABLE_1);
     selection_SelectionGivenForPreparedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction(
-        get);
+        get, commitType);
   }
 
-  @Test
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
   public void
-      scan_ScanGivenForPreparedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction()
+      scan_ScanGivenForPreparedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     Scan scan = prepareScan(0, 0, 0, namespace1, TABLE_1);
     selection_SelectionGivenForPreparedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction(
-        scan);
+        scan, commitType);
   }
 
   private void
       selection_SelectionGivenForPreparedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction(
-          Selection s) throws ExecutionException, CoordinatorException, TransactionException {
+          Selection s, CommitType commitType)
+          throws ExecutionException, CoordinatorException, TransactionException {
     // Arrange
     long prepared_at = System.currentTimeMillis() - RecoveryHandler.TRANSACTION_LIFETIME_MILLIS;
-    populatePreparedRecordAndCoordinatorStateRecord(
-        storage, namespace1, TABLE_1, TransactionState.PREPARED, prepared_at, null);
+    String ongoingTxId =
+        populatePreparedRecordAndCoordinatorStateRecord(
+            storage, namespace1, TABLE_1, TransactionState.PREPARED, prepared_at, null, commitType);
     DistributedTransaction transaction = manager.begin();
 
     // Act
@@ -501,7 +533,7 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
 
     // Assert
     verify(recovery).recover(any(Selection.class), any(TransactionResult.class));
-    verify(coordinator).putState(new Coordinator.State(ANY_ID_2, TransactionState.ABORTED));
+    verify(coordinator).putState(new Coordinator.State(ongoingTxId, TransactionState.ABORTED));
     verify(recovery).rollbackRecord(any(Selection.class), any(TransactionResult.class));
     TransactionResult result;
     if (s instanceof Get) {
@@ -521,35 +553,41 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     assertThat(result.getCommittedAt()).isEqualTo(1);
   }
 
-  @Test
-  public void get_GetGivenForPreparedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction()
-      throws ExecutionException, CoordinatorException, TransactionException {
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
+  public void get_GetGivenForPreparedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction(
+      CommitType commitType) throws ExecutionException, CoordinatorException, TransactionException {
     Get get = prepareGet(0, 0, namespace1, TABLE_1);
     selection_SelectionGivenForPreparedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction(
-        get);
+        get, commitType);
   }
 
-  @Test
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
   public void
-      scan_ScanGivenForPreparedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction()
+      scan_ScanGivenForPreparedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     Scan scan = prepareScan(0, 0, 0, namespace1, TABLE_1);
     selection_SelectionGivenForPreparedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction(
-        scan);
+        scan, commitType);
   }
 
   private void
       selection_SelectionGivenForPreparedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly(
-          Selection s) throws ExecutionException, CoordinatorException, TransactionException {
+          Selection s, CommitType commitType)
+          throws ExecutionException, CoordinatorException, TransactionException {
     // Arrange
     long current = System.currentTimeMillis();
-    populatePreparedRecordAndCoordinatorStateRecord(
-        storage,
-        namespace1,
-        TABLE_1,
-        TransactionState.PREPARED,
-        current,
-        TransactionState.COMMITTED);
+    String ongoingTxId =
+        populatePreparedRecordAndCoordinatorStateRecord(
+            storage,
+            namespace1,
+            TABLE_1,
+            TransactionState.PREPARED,
+            current,
+            TransactionState.COMMITTED,
+            commitType);
 
     ConsensusCommit transaction =
         (ConsensusCommit)
@@ -596,37 +634,48 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     }
     transaction.commit();
 
-    assertThat(result.getId()).isEqualTo(ANY_ID_2);
+    assertThat(result.getId()).isEqualTo(ongoingTxId);
     Assertions.assertThat(result.getState()).isEqualTo(TransactionState.COMMITTED);
     assertThat(result.getVersion()).isEqualTo(2);
     assertThat(result.getCommittedAt()).isGreaterThan(0);
   }
 
-  @Test
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
   public void
-      get_GetGivenForPreparedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly()
+      get_GetGivenForPreparedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     Get get = prepareGet(0, 0, namespace1, TABLE_1);
     selection_SelectionGivenForPreparedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly(
-        get);
+        get, commitType);
   }
 
-  @Test
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
   public void
-      scan_ScanGivenForPreparedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly()
+      scan_ScanGivenForPreparedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     Scan scan = prepareScan(0, 0, 0, namespace1, TABLE_1);
     selection_SelectionGivenForPreparedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly(
-        scan);
+        scan, commitType);
   }
 
   private void
       selection_SelectionGivenForPreparedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly(
-          Selection s) throws ExecutionException, CoordinatorException, TransactionException {
+          Selection s, CommitType commitType)
+          throws ExecutionException, CoordinatorException, TransactionException {
     // Arrange
     long current = System.currentTimeMillis();
     populatePreparedRecordAndCoordinatorStateRecord(
-        storage, namespace1, TABLE_1, TransactionState.PREPARED, current, TransactionState.ABORTED);
+        storage,
+        namespace1,
+        TABLE_1,
+        TransactionState.PREPARED,
+        current,
+        TransactionState.ABORTED,
+        commitType);
 
     ConsensusCommit transaction =
         (ConsensusCommit)
@@ -679,26 +728,31 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     assertThat(result.getCommittedAt()).isEqualTo(1);
   }
 
-  @Test
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
   public void
-      get_GetGivenForPreparedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly()
+      get_GetGivenForPreparedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     Get get = prepareGet(0, 0, namespace1, TABLE_1);
     selection_SelectionGivenForPreparedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly(
-        get);
+        get, commitType);
   }
 
-  @Test
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
   public void
-      scan_ScanGivenForPreparedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly()
+      scan_ScanGivenForPreparedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     Scan scan = prepareScan(0, 0, 0, namespace1, TABLE_1);
     selection_SelectionGivenForPreparedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly(
-        scan);
+        scan, commitType);
   }
 
   private void selection_SelectionGivenForDeletedWhenCoordinatorStateCommitted_ShouldRollforward(
-      Selection s) throws ExecutionException, CoordinatorException, TransactionException {
+      Selection s, CommitType commitType)
+      throws ExecutionException, CoordinatorException, TransactionException {
     // Arrange
     long current = System.currentTimeMillis();
     populatePreparedRecordAndCoordinatorStateRecord(
@@ -707,7 +761,8 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
         TABLE_1,
         TransactionState.DELETED,
         current,
-        TransactionState.COMMITTED);
+        TransactionState.COMMITTED,
+        commitType);
     DistributedTransaction transaction = manager.begin();
 
     // Act
@@ -733,26 +788,37 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     transaction.commit();
   }
 
-  @Test
-  public void get_GetGivenForDeletedWhenCoordinatorStateCommitted_ShouldRollforward()
-      throws ExecutionException, CoordinatorException, TransactionException {
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
+  public void get_GetGivenForDeletedWhenCoordinatorStateCommitted_ShouldRollforward(
+      CommitType commitType) throws ExecutionException, CoordinatorException, TransactionException {
     Get get = prepareGet(0, 0, namespace1, TABLE_1);
-    selection_SelectionGivenForDeletedWhenCoordinatorStateCommitted_ShouldRollforward(get);
+    selection_SelectionGivenForDeletedWhenCoordinatorStateCommitted_ShouldRollforward(
+        get, commitType);
   }
 
-  @Test
-  public void scan_ScanGivenForDeletedWhenCoordinatorStateCommitted_ShouldRollforward()
-      throws ExecutionException, CoordinatorException, TransactionException {
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
+  public void scan_ScanGivenForDeletedWhenCoordinatorStateCommitted_ShouldRollforward(
+      CommitType commitType) throws ExecutionException, CoordinatorException, TransactionException {
     Scan scan = prepareScan(0, 0, 0, namespace1, TABLE_1);
-    selection_SelectionGivenForDeletedWhenCoordinatorStateCommitted_ShouldRollforward(scan);
+    selection_SelectionGivenForDeletedWhenCoordinatorStateCommitted_ShouldRollforward(
+        scan, commitType);
   }
 
   private void selection_SelectionGivenForDeletedWhenCoordinatorStateAborted_ShouldRollback(
-      Selection s) throws ExecutionException, CoordinatorException, TransactionException {
+      Selection s, CommitType commitType)
+      throws ExecutionException, CoordinatorException, TransactionException {
     // Arrange
     long current = System.currentTimeMillis();
     populatePreparedRecordAndCoordinatorStateRecord(
-        storage, namespace1, TABLE_1, TransactionState.DELETED, current, TransactionState.ABORTED);
+        storage,
+        namespace1,
+        TABLE_1,
+        TransactionState.DELETED,
+        current,
+        TransactionState.ABORTED,
+        commitType);
     DistributedTransaction transaction = manager.begin();
 
     // Act
@@ -787,27 +853,30 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     assertThat(result.getCommittedAt()).isEqualTo(1);
   }
 
-  @Test
-  public void get_GetGivenForDeletedWhenCoordinatorStateAborted_ShouldRollback()
-      throws ExecutionException, CoordinatorException, TransactionException {
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
+  public void get_GetGivenForDeletedWhenCoordinatorStateAborted_ShouldRollback(
+      CommitType commitType) throws ExecutionException, CoordinatorException, TransactionException {
     Get get = prepareGet(0, 0, namespace1, TABLE_1);
-    selection_SelectionGivenForDeletedWhenCoordinatorStateAborted_ShouldRollback(get);
+    selection_SelectionGivenForDeletedWhenCoordinatorStateAborted_ShouldRollback(get, commitType);
   }
 
-  @Test
-  public void scan_ScanGivenForDeletedWhenCoordinatorStateAborted_ShouldRollback()
-      throws ExecutionException, CoordinatorException, TransactionException {
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
+  public void scan_ScanGivenForDeletedWhenCoordinatorStateAborted_ShouldRollback(
+      CommitType commitType) throws ExecutionException, CoordinatorException, TransactionException {
     Scan scan = prepareScan(0, 0, 0, namespace1, TABLE_1);
-    selection_SelectionGivenForDeletedWhenCoordinatorStateAborted_ShouldRollback(scan);
+    selection_SelectionGivenForDeletedWhenCoordinatorStateAborted_ShouldRollback(scan, commitType);
   }
 
   private void
       selection_SelectionGivenForDeletedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction(
-          Selection s) throws ExecutionException, CoordinatorException, TransactionException {
+          Selection s, CommitType commitType)
+          throws ExecutionException, CoordinatorException, TransactionException {
     // Arrange
     long prepared_at = System.currentTimeMillis();
     populatePreparedRecordAndCoordinatorStateRecord(
-        storage, namespace1, TABLE_1, TransactionState.DELETED, prepared_at, null);
+        storage, namespace1, TABLE_1, TransactionState.DELETED, prepared_at, null, commitType);
     DistributedTransaction transaction = manager.begin();
 
     // Act
@@ -829,31 +898,37 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     transaction.commit();
   }
 
-  @Test
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
   public void
-      get_GetGivenForDeletedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction()
+      get_GetGivenForDeletedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     Get get = prepareGet(0, 0, namespace1, TABLE_1);
     selection_SelectionGivenForDeletedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction(
-        get);
+        get, commitType);
   }
 
-  @Test
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
   public void
-      scan_ScanGivenForDeletedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction()
+      scan_ScanGivenForDeletedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     Scan scan = prepareScan(0, 0, 0, namespace1, TABLE_1);
     selection_SelectionGivenForDeletedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction(
-        scan);
+        scan, commitType);
   }
 
   private void
       selection_SelectionGivenForDeletedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction(
-          Selection s) throws ExecutionException, CoordinatorException, TransactionException {
+          Selection s, CommitType commitType)
+          throws ExecutionException, CoordinatorException, TransactionException {
     // Arrange
     long prepared_at = System.currentTimeMillis() - RecoveryHandler.TRANSACTION_LIFETIME_MILLIS;
-    populatePreparedRecordAndCoordinatorStateRecord(
-        storage, namespace1, TABLE_1, TransactionState.DELETED, prepared_at, null);
+    String ongoingTxId =
+        populatePreparedRecordAndCoordinatorStateRecord(
+            storage, namespace1, TABLE_1, TransactionState.DELETED, prepared_at, null, commitType);
     DistributedTransaction transaction = manager.begin();
 
     // Act
@@ -869,7 +944,7 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
 
     // Assert
     verify(recovery).recover(any(Selection.class), any(TransactionResult.class));
-    verify(coordinator).putState(new Coordinator.State(ANY_ID_2, TransactionState.ABORTED));
+    verify(coordinator).putState(new Coordinator.State(ongoingTxId, TransactionState.ABORTED));
     verify(recovery).rollbackRecord(any(Selection.class), any(TransactionResult.class));
     TransactionResult result;
     if (s instanceof Get) {
@@ -889,26 +964,28 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     assertThat(result.getCommittedAt()).isEqualTo(1);
   }
 
-  @Test
-  public void get_GetGivenForDeletedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction()
-      throws ExecutionException, CoordinatorException, TransactionException {
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
+  public void get_GetGivenForDeletedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction(
+      CommitType commitType) throws ExecutionException, CoordinatorException, TransactionException {
     Get get = prepareGet(0, 0, namespace1, TABLE_1);
     selection_SelectionGivenForDeletedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction(
-        get);
+        get, commitType);
   }
 
-  @Test
-  public void
-      scan_ScanGivenForDeletedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction()
-          throws ExecutionException, CoordinatorException, TransactionException {
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
+  public void scan_ScanGivenForDeletedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction(
+      CommitType commitType) throws ExecutionException, CoordinatorException, TransactionException {
     Scan scan = prepareScan(0, 0, 0, namespace1, TABLE_1);
     selection_SelectionGivenForDeletedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction(
-        scan);
+        scan, commitType);
   }
 
   private void
       selection_SelectionGivenForDeletedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly(
-          Selection s) throws ExecutionException, CoordinatorException, TransactionException {
+          Selection s, CommitType commitType)
+          throws ExecutionException, CoordinatorException, TransactionException {
     // Arrange
     long current = System.currentTimeMillis();
     populatePreparedRecordAndCoordinatorStateRecord(
@@ -917,7 +994,8 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
         TABLE_1,
         TransactionState.DELETED,
         current,
-        TransactionState.COMMITTED);
+        TransactionState.COMMITTED,
+        commitType);
 
     ConsensusCommit transaction =
         (ConsensusCommit)
@@ -961,31 +1039,42 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     transaction.commit();
   }
 
-  @Test
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
   public void
-      get_GetGivenForDeletedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly()
+      get_GetGivenForDeletedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     Get get = prepareGet(0, 0, namespace1, TABLE_1);
     selection_SelectionGivenForDeletedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly(
-        get);
+        get, commitType);
   }
 
-  @Test
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
   public void
-      scan_ScanGivenForDeletedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly()
+      scan_ScanGivenForDeletedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     Scan scan = prepareScan(0, 0, 0, namespace1, TABLE_1);
     selection_SelectionGivenForDeletedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly(
-        scan);
+        scan, commitType);
   }
 
   private void
       selection_SelectionGivenForDeletedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly(
-          Selection s) throws ExecutionException, CoordinatorException, TransactionException {
+          Selection s, CommitType commitType)
+          throws ExecutionException, CoordinatorException, TransactionException {
     // Arrange
     long current = System.currentTimeMillis();
     populatePreparedRecordAndCoordinatorStateRecord(
-        storage, namespace1, TABLE_1, TransactionState.DELETED, current, TransactionState.ABORTED);
+        storage,
+        namespace1,
+        TABLE_1,
+        TransactionState.DELETED,
+        current,
+        TransactionState.ABORTED,
+        commitType);
 
     ConsensusCommit transaction =
         (ConsensusCommit)
@@ -1038,26 +1127,30 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     assertThat(result.getCommittedAt()).isEqualTo(1);
   }
 
-  @Test
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
   public void
-      get_GetGivenForDeletedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly()
+      get_GetGivenForDeletedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     Get get = prepareGet(0, 0, namespace1, TABLE_1);
     selection_SelectionGivenForDeletedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly(
-        get);
+        get, commitType);
   }
 
-  @Test
+  @ParameterizedTest()
+  @EnumSource(CommitType.class)
   public void
-      scan_ScanGivenForDeletedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly()
+      scan_ScanGivenForDeletedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     Scan scan = prepareScan(0, 0, 0, namespace1, TABLE_1);
     selection_SelectionGivenForDeletedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly(
-        scan);
+        scan, commitType);
   }
 
   @Test
-  public void getAndScan_CommitHappenedInBetween_ShouldReadRepeatably()
+  public void getThenScanAndGet_CommitHappenedInBetween_OnlyGetShouldReadRepeatably()
       throws TransactionException {
     // Arrange
     DistributedTransaction transaction = manager.begin();
@@ -1079,7 +1172,8 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
 
     // Assert
     assertThat(result1).isPresent();
-    assertThat(result1.get()).isEqualTo(result2);
+    assertThat(result1.get()).isNotEqualTo(result2);
+    assertThat(result2.getInt(BALANCE)).isEqualTo(2);
     assertThat(result1).isEqualTo(result3);
   }
 
@@ -2465,7 +2559,8 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
   }
 
   @Test
-  public void get_PutCalledBefore_ShouldGet() throws TransactionException {
+  public void get_PutThenGetWithoutConjunctionReturnEmptyFromStorage_ShouldReturnResult()
+      throws TransactionException {
     // Arrange
     DistributedTransaction transaction = manager.begin();
 
@@ -2478,6 +2573,93 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     // Assert
     assertThat(result).isPresent();
     assertThat(getBalance(result.get())).isEqualTo(1);
+  }
+
+  @Test
+  public void
+      get_PutThenGetWithConjunctionReturnEmptyFromStorageAndMatchedWithPut_ShouldReturnResult()
+          throws TransactionException {
+    // Arrange
+    DistributedTransaction transaction = manager.begin();
+
+    // Act
+    transaction.put(preparePut(0, 0, namespace1, TABLE_1).withValue(BALANCE, 1));
+    Get get =
+        Get.newBuilder(prepareGet(0, 0, namespace1, TABLE_1))
+            .where(ConditionBuilder.column(BALANCE).isEqualToInt(1))
+            .build();
+    Optional<Result> result = transaction.get(get);
+    assertThatCode(transaction::commit).doesNotThrowAnyException();
+
+    // Assert
+    assertThat(result).isPresent();
+    assertThat(getBalance(result.get())).isEqualTo(1);
+  }
+
+  @Test
+  public void
+      get_PutThenGetWithConjunctionReturnEmptyFromStorageAndUnmatchedWithPut_ShouldReturnEmpty()
+          throws TransactionException {
+    // Arrange
+    DistributedTransaction transaction = manager.begin();
+
+    // Act
+    transaction.put(preparePut(0, 0, namespace1, TABLE_1).withValue(BALANCE, 1));
+    Get get =
+        Get.newBuilder(prepareGet(0, 0, namespace1, TABLE_1))
+            .where(ConditionBuilder.column(BALANCE).isEqualToInt(0))
+            .build();
+    Optional<Result> result = transaction.get(get);
+    assertThatCode(transaction::commit).doesNotThrowAnyException();
+
+    // Assert
+    assertThat(result).isNotPresent();
+  }
+
+  @Test
+  public void
+      get_PutThenGetWithConjunctionReturnResultFromStorageAndMatchedWithPut_ShouldReturnResult()
+          throws TransactionException {
+    // Arrange
+    populateRecords(namespace1, TABLE_1);
+    DistributedTransaction transaction = manager.begin();
+    Put put = preparePut(0, 0, namespace1, TABLE_1).withValue(BALANCE, 1);
+    Get get =
+        Get.newBuilder(prepareGet(0, 0, namespace1, TABLE_1))
+            .where(ConditionBuilder.column(BALANCE).isLessThanOrEqualToInt(INITIAL_BALANCE))
+            .build();
+
+    // Act
+    transaction.put(put);
+    Optional<Result> result = transaction.get(get);
+    assertThatCode(transaction::commit).doesNotThrowAnyException();
+
+    // Assert
+    assertThat(result).isPresent();
+    assertThat(getBalance(result.get())).isEqualTo(1);
+  }
+
+  @Test
+  public void
+      get_PutThenGetWithConjunctionReturnResultFromStorageButUnmatchedWithPut_ShouldReturnEmpty()
+          throws TransactionException {
+    // Arrange
+    populateRecords(namespace1, TABLE_1);
+    DistributedTransaction transaction = manager.begin();
+    Put put = preparePut(0, 0, namespace1, TABLE_1).withValue(BALANCE, 1);
+    Get get =
+        Get.newBuilder(prepareGet(0, 0, namespace1, TABLE_1))
+            .where(ConditionBuilder.column(BALANCE).isEqualToInt(0))
+            .build();
+
+    // Act
+    transaction.put(put);
+    Optional<Result> result = transaction.get(get);
+    assertThat(catchThrowable(transaction::commit)).isInstanceOf(CommitConflictException.class);
+    transaction.rollback();
+
+    // Assert
+    assertThat(result).isNotPresent();
   }
 
   @Test
@@ -2598,6 +2780,98 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
 
   @Test
   public void
+      scan_PutWithOverlappedClusteringKeyAndNonOverlappedConjunctionsGivenBefore_ShouldScan()
+          throws TransactionException {
+    // Arrange
+    DistributedTransaction transaction = manager.begin();
+    transaction.put(preparePut(0, 1, namespace1, TABLE_1).withValue(BALANCE, 1));
+    Scan scan =
+        Scan.newBuilder()
+            .namespace(namespace1)
+            .table(TABLE_1)
+            .partitionKey(Key.ofInt(ACCOUNT_ID, 0))
+            .start(Key.ofInt(ACCOUNT_TYPE, 0))
+            .where(ConditionBuilder.column(BALANCE).isNotEqualToInt(1))
+            .build();
+
+    // Act
+    Throwable thrown = catchThrowable(() -> transaction.scan(scan));
+    transaction.commit();
+
+    // Assert
+    assertThat(thrown).doesNotThrowAnyException();
+  }
+
+  @Test
+  public void
+      scan_NonOverlappingPutGivenButOverlappingPutExists_ShouldThrowIllegalArgumentException()
+          throws TransactionException {
+    // Arrange
+    populateRecords(namespace1, TABLE_1);
+    DistributedTransaction transaction = manager.begin();
+    transaction.put(preparePut(0, 1, namespace1, TABLE_1).withValue(BALANCE, 9999));
+    Scan scan =
+        Scan.newBuilder(prepareScan(0, 1, 1, namespace1, TABLE_1))
+            .where(ConditionBuilder.column(BALANCE).isLessThanOrEqualToInt(INITIAL_BALANCE))
+            .build();
+
+    // Act
+    Throwable thrown = catchThrowable(() -> transaction.scan(scan));
+    transaction.rollback();
+
+    // Assert
+    assertThat(thrown).isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  public void scan_OverlappingPutWithConjunctionsGivenBefore_ShouldThrowIllegalArgumentException()
+      throws TransactionException {
+    // Arrange
+    DistributedTransaction transaction = manager.begin();
+    transaction.put(
+        preparePut(0, 0, namespace1, TABLE_1)
+            .withValue(BALANCE, 999)
+            .withValue(SOME_COLUMN, "aaa"));
+    Scan scan =
+        Scan.newBuilder(prepareScan(0, namespace1, TABLE_1))
+            .where(ConditionBuilder.column(BALANCE).isLessThanInt(1000))
+            .and(ConditionBuilder.column(SOME_COLUMN).isEqualToText("aaa"))
+            .build();
+
+    // Act
+    Throwable thrown = catchThrowable(() -> transaction.scan(scan));
+    transaction.rollback();
+
+    // Assert
+    assertThat(thrown).isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  public void
+      scanWithIndex_PutWithOverlappedIndexKeyAndNonOverlappedConjunctionsGivenBefore_ShouldScan()
+          throws TransactionException {
+    // Arrange
+    DistributedTransaction transaction = manager.begin();
+    transaction.put(
+        Put.newBuilder(preparePut(0, 0, namespace1, TABLE_1))
+            .intValue(BALANCE, 1)
+            .textValue(SOME_COLUMN, "aaa")
+            .build());
+    Scan scan =
+        Scan.newBuilder(prepareScanWithIndex(namespace1, TABLE_1, 1))
+            .where(ConditionBuilder.column(SOME_COLUMN).isGreaterThanText("aaa"))
+            .build();
+
+    // Act
+    Throwable thrown = catchThrowable(() -> transaction.scan(scan));
+    transaction.commit();
+
+    // Assert
+    assertThat(thrown).doesNotThrowAnyException();
+  }
+
+  @Test
+  public void
       scanWithIndex_OverlappingPutWithNonIndexedColumnGivenBefore_ShouldThrowIllegalArgumentException()
           throws TransactionException {
     // Arrange
@@ -2656,6 +2930,30 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
   }
 
   @Test
+  public void
+      scanWithIndex_OverlappingPutWithIndexedColumnAndConjunctionsGivenBefore_ShouldThrowIllegalArgumentException()
+          throws TransactionException {
+    // Arrange
+    DistributedTransaction transaction = manager.begin();
+    transaction.put(
+        preparePut(0, 0, namespace1, TABLE_1)
+            .withValue(BALANCE, 999)
+            .withValue(SOME_COLUMN, "aaa"));
+    Scan scan =
+        Scan.newBuilder(prepareScanWithIndex(namespace1, TABLE_1, 999))
+            .where(ConditionBuilder.column(BALANCE).isLessThanInt(1000))
+            .and(ConditionBuilder.column(SOME_COLUMN).isEqualToText("aaa"))
+            .build();
+
+    // Act
+    Throwable thrown = catchThrowable(() -> transaction.scan(scan));
+    transaction.rollback();
+
+    // Assert
+    assertThat(thrown).isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
   public void scan_DeleteGivenBefore_ShouldScan() throws TransactionException {
     // Arrange
     DistributedTransaction transaction = manager.begin();
@@ -2672,6 +2970,8 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
 
     // Assert
     assertThat(results.size()).isEqualTo(1);
+    assertThat(results.get(0).getInt(ACCOUNT_ID)).isEqualTo(0);
+    assertThat(results.get(0).getInt(ACCOUNT_TYPE)).isEqualTo(1);
   }
 
   @Test
@@ -2787,54 +3087,66 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
         .isEqualTo(TransactionState.COMMITTED);
   }
 
-  @Test
-  public void scanAll_ScanAllGivenForDeletedWhenCoordinatorStateAborted_ShouldRollback()
-      throws ExecutionException, CoordinatorException, TransactionException {
+  @ParameterizedTest
+  @EnumSource(CommitType.class)
+  public void scanAll_ScanAllGivenForDeletedWhenCoordinatorStateAborted_ShouldRollback(
+      CommitType commitType) throws ExecutionException, CoordinatorException, TransactionException {
     ScanAll scanAll = prepareScanAll(namespace1, TABLE_1);
-    selection_SelectionGivenForDeletedWhenCoordinatorStateAborted_ShouldRollback(scanAll);
+    selection_SelectionGivenForDeletedWhenCoordinatorStateAborted_ShouldRollback(
+        scanAll, commitType);
   }
 
-  @Test
+  @ParameterizedTest
+  @EnumSource(CommitType.class)
   public void
-      scanAll_ScanAllGivenForDeletedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly()
+      scanAll_ScanAllGivenForDeletedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     ScanAll scanAll = prepareScanAll(namespace1, TABLE_1);
     selection_SelectionGivenForDeletedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly(
-        scanAll);
+        scanAll, commitType);
   }
 
-  @Test
-  public void scanAll_ScanAllGivenForDeletedWhenCoordinatorStateCommitted_ShouldRollforward()
-      throws ExecutionException, CoordinatorException, TransactionException {
+  @ParameterizedTest
+  @EnumSource(CommitType.class)
+  public void scanAll_ScanAllGivenForDeletedWhenCoordinatorStateCommitted_ShouldRollforward(
+      CommitType commitType) throws ExecutionException, CoordinatorException, TransactionException {
     ScanAll scanAll = prepareScanAll(namespace1, TABLE_1);
-    selection_SelectionGivenForDeletedWhenCoordinatorStateCommitted_ShouldRollforward(scanAll);
+    selection_SelectionGivenForDeletedWhenCoordinatorStateCommitted_ShouldRollforward(
+        scanAll, commitType);
   }
 
-  @Test
+  @ParameterizedTest
+  @EnumSource(CommitType.class)
   public void
-      scanAll_ScanAllGivenForDeletedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly()
+      scanAll_ScanAllGivenForDeletedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     ScanAll scanAll = prepareScanAll(namespace1, TABLE_1);
     selection_SelectionGivenForDeletedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly(
-        scanAll);
+        scanAll, commitType);
   }
 
-  @Test
+  @ParameterizedTest
+  @EnumSource(CommitType.class)
   public void
-      scanAll_ScanAllGivenForDeletedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction()
+      scanAll_ScanAllGivenForDeletedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     ScanAll scanAll = prepareScanAll(namespace1, TABLE_1);
     selection_SelectionGivenForDeletedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction(
-        scanAll);
+        scanAll, commitType);
   }
 
-  @Test
+  @ParameterizedTest
+  @EnumSource(CommitType.class)
   public void
-      scanAll_ScanAllGivenForDeletedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction()
+      scanAll_ScanAllGivenForDeletedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     ScanAll scanAll = prepareScanAll(namespace1, TABLE_1);
     selection_SelectionGivenForDeletedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction(
-        scanAll);
+        scanAll, commitType);
   }
 
   @Test
@@ -2855,77 +3167,222 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     assertThat(results.size()).isEqualTo(0);
   }
 
-  @Test
-  public void scanAll_ScanAllGivenForPreparedWhenCoordinatorStateAborted_ShouldRollback()
-      throws TransactionException, ExecutionException, CoordinatorException {
+  @ParameterizedTest
+  @EnumSource(CommitType.class)
+  public void scanAll_ScanAllGivenForPreparedWhenCoordinatorStateAborted_ShouldRollback(
+      CommitType commitType) throws TransactionException, ExecutionException, CoordinatorException {
     ScanAll scanAll = prepareScanAll(namespace1, TABLE_1);
-    selection_SelectionGivenForPreparedWhenCoordinatorStateAborted_ShouldRollback(scanAll);
+    selection_SelectionGivenForPreparedWhenCoordinatorStateAborted_ShouldRollback(
+        scanAll, commitType);
   }
 
-  @Test
+  @ParameterizedTest
+  @EnumSource(CommitType.class)
   public void
-      scanAll_ScanAllGivenForPreparedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly()
+      scanAll_ScanAllGivenForPreparedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     ScanAll scanAll = prepareScanAll(namespace1, TABLE_1);
     selection_SelectionGivenForPreparedWhenCoordinatorStateAbortedAndRolledBackByAnother_ShouldRollbackProperly(
-        scanAll);
+        scanAll, commitType);
   }
 
-  @Test
-  public void scanAll_ScanAllGivenForPreparedWhenCoordinatorStateCommitted_ShouldRollforward()
-      throws ExecutionException, CoordinatorException, TransactionException {
+  @ParameterizedTest
+  @EnumSource(CommitType.class)
+  public void scanAll_ScanAllGivenForPreparedWhenCoordinatorStateCommitted_ShouldRollforward(
+      CommitType commitType) throws ExecutionException, CoordinatorException, TransactionException {
     ScanAll scanAll = prepareScanAll(namespace1, TABLE_1);
-    selection_SelectionGivenForPreparedWhenCoordinatorStateCommitted_ShouldRollforward(scanAll);
+    selection_SelectionGivenForPreparedWhenCoordinatorStateCommitted_ShouldRollforward(
+        scanAll, commitType);
   }
 
-  @Test
+  @ParameterizedTest
+  @EnumSource(CommitType.class)
   public void
-      scanAll_ScanAllGivenForPreparedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly()
+      scanAll_ScanAllGivenForPreparedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     ScanAll scanAll = prepareScanAll(namespace1, TABLE_1);
     selection_SelectionGivenForPreparedWhenCoordinatorStateCommittedAndRolledForwardByAnother_ShouldRollforwardProperly(
-        scanAll);
+        scanAll, commitType);
   }
 
-  @Test
+  @ParameterizedTest
+  @EnumSource(CommitType.class)
   public void
-      scanAll_ScanAllGivenForPreparedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction()
+      scanAll_ScanAllGivenForPreparedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction(
+          CommitType commitType)
           throws ExecutionException, CoordinatorException, TransactionException {
     ScanAll scanAll = prepareScanAll(namespace1, TABLE_1);
     selection_SelectionGivenForPreparedWhenCoordinatorStateNotExistAndExpired_ShouldAbortTransaction(
-        scanAll);
+        scanAll, commitType);
+  }
+
+  @ParameterizedTest
+  @EnumSource(CommitType.class)
+  public void
+      scanAll_ScanAllGivenForPreparedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction(
+          CommitType commitType)
+          throws ExecutionException, CoordinatorException, TransactionException {
+    ScanAll scanAll = prepareScanAll(namespace1, TABLE_1);
+    selection_SelectionGivenForPreparedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction(
+        scanAll, commitType);
+  }
+
+  @Test
+  public void get_GetWithMatchedConjunctionsGivenForCommittedRecord_ShouldReturnRecord()
+      throws TransactionException {
+    // Arrange
+    populateRecords(namespace1, TABLE_1);
+    DistributedTransaction transaction =
+        manager.begin(Isolation.SERIALIZABLE, SerializableStrategy.EXTRA_READ);
+    Get get =
+        Get.newBuilder(prepareGet(1, 1, namespace1, TABLE_1))
+            .where(ConditionBuilder.column(BALANCE).isEqualToInt(INITIAL_BALANCE))
+            .and(ConditionBuilder.column(SOME_COLUMN).isNullText())
+            .build();
+
+    // Act
+    Optional<Result> result = transaction.get(get);
+    transaction.commit();
+
+    // Assert
+    assertThat(result.isPresent()).isTrue();
+    assertThat(result.get().getInt(ACCOUNT_ID)).isEqualTo(1);
+    assertThat(result.get().getInt(ACCOUNT_TYPE)).isEqualTo(1);
+    assertThat(getBalance(result.get())).isEqualTo(INITIAL_BALANCE);
+    assertThat(result.get().getText(SOME_COLUMN)).isNull();
+  }
+
+  @Test
+  public void get_GetWithUnmatchedConjunctionsGivenForCommittedRecord_ShouldReturnEmpty()
+      throws TransactionException {
+    // Arrange
+    populateRecords(namespace1, TABLE_1);
+    DistributedTransaction transaction =
+        manager.begin(Isolation.SERIALIZABLE, SerializableStrategy.EXTRA_READ);
+    Get get =
+        Get.newBuilder(prepareGet(1, 1, namespace1, TABLE_1))
+            .where(ConditionBuilder.column(BALANCE).isEqualToInt(INITIAL_BALANCE))
+            .and(ConditionBuilder.column(SOME_COLUMN).isEqualToText("aaa"))
+            .build();
+
+    // Act
+    Optional<Result> result = transaction.get(get);
+    transaction.commit();
+
+    // Assert
+    assertThat(result.isPresent()).isFalse();
+  }
+
+  @Test
+  public void scan_CalledTwice_ShouldReturnFromSnapshotInSecondTime()
+      throws TransactionException, ExecutionException {
+    // Arrange
+    populateRecords(namespace1, TABLE_1);
+    DistributedTransaction transaction = manager.begin();
+    Scan scan = prepareScan(0, 0, 0, namespace1, TABLE_1);
+
+    // Act
+    List<Result> result1 = transaction.scan(scan);
+    List<Result> result2 = transaction.scan(scan);
+    transaction.commit();
+
+    // Assert
+    verify(storage).scan(any(Scan.class));
+    assertThat(result1).isEqualTo(result2);
+  }
+
+  @Test
+  public void scan_CalledTwiceWithSameConditionsAndUpdateForHappenedInBetween_ShouldReadRepeatably()
+      throws TransactionException {
+    // Arrange
+    DistributedTransaction transaction = manager.begin();
+    transaction.put(preparePut(0, 0, namespace1, TABLE_1).withValue(BALANCE, 1));
+    transaction.commit();
+
+    DistributedTransaction transaction1 = manager.begin();
+    Scan scan =
+        Scan.newBuilder()
+            .namespace(namespace1)
+            .table(TABLE_1)
+            .partitionKey(Key.ofInt(ACCOUNT_ID, 0))
+            .start(Key.ofInt(ACCOUNT_TYPE, 0))
+            .where(ConditionBuilder.column(BALANCE).isEqualToInt(1))
+            .build();
+    List<Result> result1 = transaction1.scan(scan);
+
+    DistributedTransaction transaction2 = manager.begin();
+    transaction2.get(prepareGet(0, 0, namespace1, TABLE_1));
+    transaction2.put(preparePut(0, 0, namespace1, TABLE_1).withValue(BALANCE, 0));
+    transaction2.commit();
+
+    // Act
+    List<Result> result2 = transaction1.scan(scan);
+    transaction1.commit();
+
+    // Assert
+    assertThat(result1.size()).isEqualTo(1);
+    assertThat(result2.size()).isEqualTo(1);
+    assertThat(result1.get(0)).isEqualTo(result2.get(0));
   }
 
   @Test
   public void
-      scanAll_ScanAllGivenForPreparedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction()
-          throws ExecutionException, CoordinatorException, TransactionException {
-    ScanAll scanAll = prepareScanAll(namespace1, TABLE_1);
-    selection_SelectionGivenForPreparedWhenCoordinatorStateNotExistAndNotExpired_ShouldNotAbortTransaction(
-        scanAll);
+      scan_CalledTwiceWithDifferentConditionsAndUpdateHappenedInBetween_ShouldNotReadRepeatably()
+          throws TransactionException {
+    // Arrange
+    DistributedTransaction transaction = manager.begin();
+    transaction.put(preparePut(0, 0, namespace1, TABLE_1).withValue(BALANCE, 1));
+    transaction.commit();
+
+    DistributedTransaction transaction1 = manager.begin();
+    Scan scan1 =
+        Scan.newBuilder()
+            .namespace(namespace1)
+            .table(TABLE_1)
+            .partitionKey(Key.ofInt(ACCOUNT_ID, 0))
+            .start(Key.ofInt(ACCOUNT_TYPE, 0))
+            .where(ConditionBuilder.column(BALANCE).isEqualToInt(1))
+            .build();
+    Scan scan2 =
+        Scan.newBuilder()
+            .namespace(namespace1)
+            .table(TABLE_1)
+            .partitionKey(Key.ofInt(ACCOUNT_ID, 0))
+            .start(Key.ofInt(ACCOUNT_TYPE, 0))
+            .where(ConditionBuilder.column(BALANCE).isGreaterThanInt(1))
+            .build();
+    List<Result> result1 = transaction1.scan(scan1);
+
+    DistributedTransaction transaction2 = manager.begin();
+    transaction2.get(prepareGet(0, 0, namespace1, TABLE_1));
+    transaction2.put(preparePut(0, 0, namespace1, TABLE_1).withValue(BALANCE, 2));
+    transaction2.commit();
+
+    // Act
+    List<Result> result2 = transaction1.scan(scan2);
+    transaction1.commit();
+
+    // Assert
+    assertThat(result1.size()).isEqualTo(1);
+    assertThat(result2.size()).isEqualTo(1);
+    assertThat(result1.get(0)).isNotEqualTo(result2.get(0));
+    assertThat(result1.get(0).getInt(BALANCE)).isEqualTo(1);
+    assertThat(result2.get(0).getInt(BALANCE)).isEqualTo(2);
   }
 
   @Test
   @EnabledIf("isGroupCommitEnabled")
-  void put_WhenOneOfTransactionsIsDelayed_ShouldBeCommittedWithoutBlocked() throws Exception {
+  void put_WhenTheOtherTransactionsIsDelayed_ShouldBeCommittedWithoutBlocked() throws Exception {
     // Arrange
-    ExecutorService executorService = Executors.newCachedThreadPool();
 
     // Act
     DistributedTransaction slowTxn = manager.begin();
     DistributedTransaction fastTxn = manager.begin();
     fastTxn.put(preparePut(0, 0, namespace1, TABLE_1));
-    Future<?> future =
-        executorService.submit(
-            () -> {
-              try {
-                fastTxn.commit();
-              } catch (CommitException | UnknownTransactionStatusException e) {
-                throw new RuntimeException(e);
-              }
-            });
-    executorService.shutdown();
-    future.get(10, TimeUnit.SECONDS);
+
+    assertTimeout(Duration.ofSeconds(10), fastTxn::commit);
 
     slowTxn.put(preparePut(1, 0, namespace1, TABLE_1));
     slowTxn.commit();
@@ -2944,31 +3401,30 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
 
   @Test
   @EnabledIf("isGroupCommitEnabled")
-  void put_WhenTheOtherTransactionAbortDueToConflict_ShouldBeCommittedWithoutBlocked()
-      throws Exception {
+  void put_WhenTheOtherTransactionsFails_ShouldBeCommittedWithoutBlocked() throws Exception {
     // Arrange
-    ExecutorService executorService = Executors.newCachedThreadPool();
+    doThrow(PreparationConflictException.class).when(commit).prepare(any());
 
     // Act
-    DistributedTransaction failedTxn =
-        manager.begin(Isolation.SERIALIZABLE, SerializableStrategy.EXTRA_READ);
-    DistributedTransaction successTxn =
-        manager.begin(Isolation.SERIALIZABLE, SerializableStrategy.EXTRA_READ);
-    failedTxn.get(prepareGet(1, 0, namespace1, TABLE_1));
-    failedTxn.put(preparePut(0, 0, namespace1, TABLE_1));
+    DistributedTransaction failingTxn = manager.begin();
+    DistributedTransaction successTxn = manager.begin();
+    failingTxn.put(preparePut(0, 0, namespace1, TABLE_1));
     successTxn.put(preparePut(1, 0, namespace1, TABLE_1));
-    Future<?> future =
-        executorService.submit(
-            () -> {
-              try {
-                successTxn.commit();
-              } catch (CommitException | UnknownTransactionStatusException e) {
-                throw new RuntimeException(e);
-              }
-            });
-    executorService.shutdown();
-    assertThat(catchThrowable(failedTxn::commit)).isInstanceOf(CommitConflictException.class);
-    future.get(10, TimeUnit.SECONDS);
+
+    // This transaction will be committed after the other transaction in the same group is removed.
+    assertTimeout(
+        Duration.ofSeconds(10),
+        () -> {
+          try {
+            failingTxn.commit();
+            fail();
+          } catch (CommitConflictException e) {
+            // Expected
+          } finally {
+            reset(commit);
+          }
+        });
+    assertTimeout(Duration.ofSeconds(10), successTxn::commit);
 
     // Assert
     DistributedTransaction validationTxn = manager.begin();
@@ -2976,7 +3432,47 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     assertThat(validationTxn.get(prepareGet(1, 0, namespace1, TABLE_1))).isPresent();
     validationTxn.commit();
 
-    assertThat(coordinator.getState(failedTxn.getId()).get().getState())
+    assertThat(coordinator.getState(failingTxn.getId()).get().getState())
+        .isEqualTo(TransactionState.ABORTED);
+    assertThat(coordinator.getState(successTxn.getId()).get().getState())
+        .isEqualTo(TransactionState.COMMITTED);
+  }
+
+  @Test
+  @EnabledIf("isGroupCommitEnabled")
+  void put_WhenTransactionFailsDueToConflict_ShouldBeAbortedWithoutBlocked() throws Exception {
+    // Arrange
+
+    // Act
+    DistributedTransaction failingTxn =
+        manager.begin(Isolation.SERIALIZABLE, SerializableStrategy.EXTRA_READ);
+    DistributedTransaction successTxn =
+        manager.begin(Isolation.SERIALIZABLE, SerializableStrategy.EXTRA_READ);
+    failingTxn.get(prepareGet(1, 0, namespace1, TABLE_1));
+    failingTxn.put(preparePut(0, 0, namespace1, TABLE_1));
+    successTxn.put(preparePut(1, 0, namespace1, TABLE_1));
+
+    // This transaction will be committed after the other transaction in the same group
+    // is moved to a delayed group.
+    assertTimeout(Duration.ofSeconds(10), successTxn::commit);
+    assertTimeout(
+        Duration.ofSeconds(10),
+        () -> {
+          try {
+            failingTxn.commit();
+            fail();
+          } catch (CommitConflictException e) {
+            // Expected
+          }
+        });
+
+    // Assert
+    DistributedTransaction validationTxn = manager.begin();
+    assertThat(validationTxn.get(prepareGet(0, 0, namespace1, TABLE_1))).isEmpty();
+    assertThat(validationTxn.get(prepareGet(1, 0, namespace1, TABLE_1))).isPresent();
+    validationTxn.commit();
+
+    assertThat(coordinator.getState(failingTxn.getId()).get().getState())
         .isEqualTo(TransactionState.ABORTED);
     assertThat(coordinator.getState(successTxn.getId()).get().getState())
         .isEqualTo(TransactionState.COMMITTED);
@@ -2986,19 +3482,19 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
   @EnabledIf("isGroupCommitEnabled")
   void put_WhenAllTransactionsAbort_ShouldBeAbortedProperly() throws Exception {
     // Act
-    DistributedTransaction failedTxn1 =
+    DistributedTransaction failingTxn1 =
         manager.begin(Isolation.SERIALIZABLE, SerializableStrategy.EXTRA_READ);
-    DistributedTransaction failedTxn2 =
+    DistributedTransaction failingTxn2 =
         manager.begin(Isolation.SERIALIZABLE, SerializableStrategy.EXTRA_READ);
 
     doThrow(PreparationConflictException.class).when(commit).prepare(any());
 
-    failedTxn1.put(preparePut(0, 0, namespace1, TABLE_1));
-    failedTxn2.put(preparePut(1, 0, namespace1, TABLE_1));
+    failingTxn1.put(preparePut(0, 0, namespace1, TABLE_1));
+    failingTxn2.put(preparePut(1, 0, namespace1, TABLE_1));
 
     try {
-      assertThat(catchThrowable(failedTxn1::commit)).isInstanceOf(CommitConflictException.class);
-      assertThat(catchThrowable(failedTxn2::commit)).isInstanceOf(CommitConflictException.class);
+      assertThat(catchThrowable(failingTxn1::commit)).isInstanceOf(CommitConflictException.class);
+      assertThat(catchThrowable(failingTxn2::commit)).isInstanceOf(CommitConflictException.class);
     } finally {
       reset(commit);
     }
@@ -3009,9 +3505,9 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     assertThat(validationTxn.get(prepareGet(1, 0, namespace1, TABLE_1))).isEmpty();
     validationTxn.commit();
 
-    assertThat(coordinator.getState(failedTxn1.getId()).get().getState())
+    assertThat(coordinator.getState(failingTxn1.getId()).get().getState())
         .isEqualTo(TransactionState.ABORTED);
-    assertThat(coordinator.getState(failedTxn2.getId()).get().getState())
+    assertThat(coordinator.getState(failingTxn2.getId()).get().getState())
         .isEqualTo(TransactionState.ABORTED);
   }
 
@@ -3093,22 +3589,33 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     transaction.commit();
   }
 
-  private void populatePreparedRecordAndCoordinatorStateRecord(
+  private String populatePreparedRecordAndCoordinatorStateRecord(
       DistributedStorage storage,
       String namespace,
       String table,
       TransactionState recordState,
       long preparedAt,
-      TransactionState coordinatorState)
+      TransactionState coordinatorState,
+      CommitType commitType)
       throws ExecutionException, CoordinatorException {
     Key partitionKey = new Key(ACCOUNT_ID, 0);
     Key clusteringKey = new Key(ACCOUNT_TYPE, 0);
+
+    String ongoingTxId;
+    CoordinatorGroupCommitKeyManipulator keyManipulator =
+        new CoordinatorGroupCommitKeyManipulator();
+    if (commitType == CommitType.NORMAL_COMMIT) {
+      ongoingTxId = ANY_ID_2;
+    } else {
+      ongoingTxId = keyManipulator.fullKey(keyManipulator.generateParentKey(), ANY_ID_2);
+    }
+
     Put put =
         new Put(partitionKey, clusteringKey)
             .forNamespace(namespace)
             .forTable(table)
             .withValue(BALANCE, NEW_BALANCE)
-            .withValue(Attribute.toIdValue(ANY_ID_2))
+            .withValue(Attribute.toIdValue(ongoingTxId))
             .withValue(Attribute.toStateValue(recordState))
             .withValue(Attribute.toVersionValue(2))
             .withValue(Attribute.toPreparedAtValue(preparedAt))
@@ -3121,10 +3628,28 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     storage.put(put);
 
     if (coordinatorState == null) {
-      return;
+      return ongoingTxId;
     }
-    Coordinator.State state = new Coordinator.State(ANY_ID_2, coordinatorState);
-    coordinator.putState(state);
+
+    switch (commitType) {
+      case NORMAL_COMMIT:
+        Coordinator.State state = new Coordinator.State(ANY_ID_2, coordinatorState);
+        coordinator.putState(state);
+        break;
+      case GROUP_COMMIT:
+        Keys<String, String, String> keys = keyManipulator.keysFromFullKey(ongoingTxId);
+        coordinator.putStateForGroupCommit(
+            keys.parentKey,
+            Collections.singletonList(keys.fullKey),
+            coordinatorState,
+            System.currentTimeMillis());
+        break;
+      case DELAYED_GROUP_COMMIT:
+        coordinator.putState(new Coordinator.State(ongoingTxId, coordinatorState));
+        break;
+    }
+
+    return ongoingTxId;
   }
 
   private Get prepareGet(int id, int type, String namespace, String table) {

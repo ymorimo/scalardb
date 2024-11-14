@@ -3,7 +3,6 @@ package com.scalar.db.api;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Sets;
 import com.scalar.db.api.OperationBuilder.All;
 import com.scalar.db.api.OperationBuilder.And;
 import com.scalar.db.api.OperationBuilder.Buildable;
@@ -36,7 +35,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
-public class ScanBuilder {
+public class ScanBuilder extends SelectionBuilder {
 
   public static class Namespace
       implements OperationBuilder.Namespace<Table>,
@@ -70,7 +69,8 @@ public class ScanBuilder {
     }
   }
 
-  public static class PartitionKeyOrIndexKeyOrAll extends PartitionKeyBuilder<BuildableScan>
+  public static class PartitionKeyOrIndexKeyOrAll
+      extends PartitionKeyBuilder<BuildableScanWithPartitionKey>
       implements IndexKey<BuildableScanWithIndex>, All<BuildableScanAll> {
 
     private PartitionKeyOrIndexKeyOrAll(@Nullable String namespace, String table) {
@@ -78,9 +78,9 @@ public class ScanBuilder {
     }
 
     @Override
-    public BuildableScan partitionKey(Key partitionKey) {
+    public BuildableScanWithPartitionKey partitionKey(Key partitionKey) {
       checkNotNull(partitionKey);
-      return new BuildableScan(namespaceName, tableName, partitionKey);
+      return new BuildableScanWithPartitionKey(namespaceName, tableName, partitionKey);
     }
 
     @Override
@@ -112,6 +112,18 @@ public class ScanBuilder {
 
     private BuildableScan(@Nullable String namespace, String table, Key partitionKey) {
       super(namespace, table, partitionKey);
+    }
+
+    private BuildableScan(BuildableScan buildable) {
+      this(buildable.namespaceName, buildable.tableName, buildable.partitionKey);
+      this.orderings.addAll(buildable.orderings);
+      this.projections.addAll(buildable.projections);
+      this.startClusteringKey = buildable.startClusteringKey;
+      this.startInclusive = buildable.startInclusive;
+      this.endClusteringKey = buildable.endClusteringKey;
+      this.endInclusive = buildable.endInclusive;
+      this.limit = buildable.limit;
+      this.consistency = buildable.consistency;
     }
 
     @Override
@@ -183,31 +195,273 @@ public class ScanBuilder {
 
     @Override
     public Scan build() {
-      Scan scan = new Scan(partitionKey);
-      scan.forNamespace(namespaceName).forTable(tableName).withLimit(limit);
-      orderings.forEach(scan::withOrdering);
-      if (startClusteringKey != null) {
-        scan.withStart(startClusteringKey, startInclusive);
-      }
-      if (endClusteringKey != null) {
-        scan.withEnd(endClusteringKey, endInclusive);
-      }
+      return build(ImmutableSet.of());
+    }
 
-      if (!projections.isEmpty()) {
-        scan.withProjections(projections);
-      }
+    private Scan build(ImmutableSet<Conjunction> conjunctions) {
+      return new Scan(
+          namespaceName,
+          tableName,
+          partitionKey,
+          consistency,
+          projections,
+          conjunctions,
+          startClusteringKey,
+          startInclusive,
+          endClusteringKey,
+          endInclusive,
+          orderings,
+          limit);
+    }
+  }
 
-      if (consistency != null) {
-        scan.withConsistency(consistency);
-      }
+  public static class BuildableScanWithPartitionKey extends BuildableScan
+      implements OperationBuilder.Where<BuildableScanWithOngoingWhere>,
+          WhereAnd<BuildableScanWithOngoingWhereAnd>,
+          WhereOr<BuildableScanWithOngoingWhereOr> {
 
-      return scan;
+    private BuildableScanWithPartitionKey(
+        @Nullable String namespace, String table, Key partitionKey) {
+      super(namespace, table, partitionKey);
+    }
+
+    @Override
+    public BuildableScanWithPartitionKey start(Key clusteringKey, boolean inclusive) {
+      super.start(clusteringKey, inclusive);
+      return this;
+    }
+
+    @Override
+    public BuildableScanWithPartitionKey end(Key clusteringKey, boolean inclusive) {
+      super.end(clusteringKey, inclusive);
+      return this;
+    }
+
+    @Override
+    public BuildableScanWithPartitionKey start(Key clusteringKey) {
+      super.start(clusteringKey);
+      return this;
+    }
+
+    @Override
+    public BuildableScanWithPartitionKey end(Key clusteringKey) {
+      super.end(clusteringKey);
+      return this;
+    }
+
+    @Override
+    public BuildableScanWithPartitionKey projection(String projection) {
+      super.projection(projection);
+      return this;
+    }
+
+    @Override
+    public BuildableScanWithPartitionKey projections(Collection<String> projections) {
+      super.projections(projections);
+      return this;
+    }
+
+    @Override
+    public BuildableScanWithPartitionKey projections(String... projections) {
+      return projections(Arrays.asList(projections));
+    }
+
+    @Override
+    public BuildableScanWithPartitionKey ordering(Scan.Ordering ordering) {
+      super.ordering(ordering);
+      return this;
+    }
+
+    @Override
+    public BuildableScanWithPartitionKey orderings(Collection<Scan.Ordering> orderings) {
+      super.orderings(orderings);
+      return this;
+    }
+
+    @Override
+    public BuildableScanWithPartitionKey orderings(Scan.Ordering... orderings) {
+      return orderings(Arrays.asList(orderings));
+    }
+
+    @Override
+    public BuildableScanWithPartitionKey limit(int limit) {
+      super.limit(limit);
+      return this;
+    }
+
+    @Override
+    public BuildableScanWithPartitionKey consistency(com.scalar.db.api.Consistency consistency) {
+      super.consistency(consistency);
+      return this;
+    }
+
+    @Override
+    public BuildableScanWithOngoingWhere where(ConditionalExpression condition) {
+      checkNotNull(condition);
+      return new BuildableScanWithOngoingWhere(this, condition);
+    }
+
+    @Override
+    public BuildableScanWithOngoingWhereAnd where(OrConditionSet orConditionSet) {
+      checkNotNull(orConditionSet);
+      return new BuildableScanWithOngoingWhereAnd(this, orConditionSet);
+    }
+
+    @Override
+    public BuildableScanWithOngoingWhereOr where(AndConditionSet andConditionSet) {
+      checkNotNull(andConditionSet);
+      return new BuildableScanWithOngoingWhereOr(this, andConditionSet);
+    }
+
+    @Override
+    public BuildableScanWithOngoingWhereAnd whereAnd(Set<OrConditionSet> orConditionSets) {
+      checkNotNull(orConditionSets);
+      return new BuildableScanWithOngoingWhereAnd(this, orConditionSets);
+    }
+
+    @Override
+    public BuildableScanWithOngoingWhereOr whereOr(Set<AndConditionSet> andConditionSets) {
+      checkNotNull(andConditionSets);
+      return new BuildableScanWithOngoingWhereOr(this, andConditionSets);
+    }
+  }
+
+  public static class BuildableScanWithOngoingWhere extends BuildableScanWithWhere
+      implements And<BuildableScanWithOngoingWhereAnd>, Or<BuildableScanWithOngoingWhereOr> {
+
+    private BuildableScanWithOngoingWhere(
+        BuildableScan buildable, ConditionalExpression condition) {
+      super(buildable, condition);
+    }
+
+    @Override
+    public BuildableScanWithOngoingWhereAnd and(ConditionalExpression condition) {
+      checkNotNull(condition);
+      where.and(condition);
+      return new BuildableScanWithOngoingWhereAnd(this);
+    }
+
+    @Override
+    public BuildableScanWithOngoingWhereAnd and(OrConditionSet orConditionSet) {
+      checkNotNull(orConditionSet);
+      where.and(orConditionSet);
+      return new BuildableScanWithOngoingWhereAnd(this);
+    }
+
+    @Override
+    public BuildableScanWithOngoingWhereOr or(ConditionalExpression condition) {
+      checkNotNull(condition);
+      where.or(condition);
+      return new BuildableScanWithOngoingWhereOr(this);
+    }
+
+    @Override
+    public BuildableScanWithOngoingWhereOr or(AndConditionSet andConditionSet) {
+      checkNotNull(andConditionSet);
+      where.or(andConditionSet);
+      return new BuildableScanWithOngoingWhereOr(this);
+    }
+  }
+
+  public static class BuildableScanWithOngoingWhereAnd extends BuildableScanWithWhere
+      implements And<BuildableScanWithOngoingWhereAnd> {
+
+    private BuildableScanWithOngoingWhereAnd(BuildableScanWithOngoingWhere buildable) {
+      super(buildable);
+    }
+
+    private BuildableScanWithOngoingWhereAnd(
+        BuildableScan buildable, OrConditionSet orConditionSet) {
+      super(buildable);
+      where.and(orConditionSet);
+    }
+
+    private BuildableScanWithOngoingWhereAnd(
+        BuildableScan buildable, Set<OrConditionSet> orConditionSets) {
+      super(buildable);
+      where.and(orConditionSets);
+    }
+
+    @Override
+    public BuildableScanWithOngoingWhereAnd and(ConditionalExpression condition) {
+      checkNotNull(condition);
+      where.and(condition);
+      return this;
+    }
+
+    @Override
+    public BuildableScanWithOngoingWhereAnd and(OrConditionSet orConditionSet) {
+      checkNotNull(orConditionSet);
+      where.and(orConditionSet);
+      return this;
+    }
+  }
+
+  public static class BuildableScanWithOngoingWhereOr extends BuildableScanWithWhere
+      implements Or<BuildableScanWithOngoingWhereOr> {
+
+    private BuildableScanWithOngoingWhereOr(BuildableScanWithOngoingWhere buildable) {
+      super(buildable);
+    }
+
+    private BuildableScanWithOngoingWhereOr(
+        BuildableScan buildable, AndConditionSet andConditionSet) {
+      super(buildable);
+      where.or(andConditionSet);
+    }
+
+    private BuildableScanWithOngoingWhereOr(
+        BuildableScan buildable, Set<AndConditionSet> andConditionSets) {
+      super(buildable);
+      where.or(andConditionSets);
+    }
+
+    @Override
+    public BuildableScanWithOngoingWhereOr or(ConditionalExpression condition) {
+      checkNotNull(condition);
+      where.or(condition);
+      return this;
+    }
+
+    @Override
+    public BuildableScanWithOngoingWhereOr or(AndConditionSet andConditionSet) {
+      checkNotNull(andConditionSet);
+      where.or(andConditionSet);
+      return this;
+    }
+  }
+
+  public static class BuildableScanWithWhere extends BuildableScan {
+
+    final Where where;
+
+    private BuildableScanWithWhere(BuildableScan buildable) {
+      this(buildable, null);
+    }
+
+    private BuildableScanWithWhere(
+        BuildableScan buildable, @Nullable ConditionalExpression condition) {
+      super(buildable);
+      this.where = new Where(condition);
+    }
+
+    private BuildableScanWithWhere(BuildableScanWithOngoingWhere buildable) {
+      super(buildable);
+      this.where = buildable.where;
+    }
+
+    @Override
+    public Scan build() {
+      return super.build(getConjunctions(where));
     }
   }
 
   public static class BuildableScanWithIndex
       implements Consistency<BuildableScanWithIndex>,
           Projection<BuildableScanWithIndex>,
+          OperationBuilder.Where<BuildableScanWithIndexOngoingWhere>,
+          WhereAnd<BuildableScanWithIndexOngoingWhereAnd>,
+          WhereOr<BuildableScanWithIndexOngoingWhereOr>,
           Limit<BuildableScanWithIndex> {
     @Nullable private final String namespaceName;
     private final String tableName;
@@ -254,19 +508,206 @@ public class ScanBuilder {
       return this;
     }
 
+    @Override
+    public BuildableScanWithIndexOngoingWhere where(ConditionalExpression condition) {
+      checkNotNull(condition);
+      return new BuildableScanWithIndexOngoingWhere(this, condition);
+    }
+
+    @Override
+    public BuildableScanWithIndexOngoingWhereAnd where(OrConditionSet orConditionSet) {
+      checkNotNull(orConditionSet);
+      return new BuildableScanWithIndexOngoingWhereAnd(this, orConditionSet);
+    }
+
+    @Override
+    public BuildableScanWithIndexOngoingWhereOr where(AndConditionSet andConditionSet) {
+      checkNotNull(andConditionSet);
+      return new BuildableScanWithIndexOngoingWhereOr(this, andConditionSet);
+    }
+
+    @Override
+    public BuildableScanWithIndexOngoingWhereAnd whereAnd(Set<OrConditionSet> orConditionSets) {
+      checkNotNull(orConditionSets);
+      return new BuildableScanWithIndexOngoingWhereAnd(this, orConditionSets);
+    }
+
+    @Override
+    public BuildableScanWithIndexOngoingWhereOr whereOr(Set<AndConditionSet> andConditionSets) {
+      checkNotNull(andConditionSets);
+      return new BuildableScanWithIndexOngoingWhereOr(this, andConditionSets);
+    }
+
     public Scan build() {
-      Scan scan = new ScanWithIndex(indexKey);
-      scan.forNamespace(namespaceName).forTable(tableName).withLimit(limit);
+      return build(ImmutableSet.of());
+    }
 
-      if (!projections.isEmpty()) {
-        scan.withProjections(projections);
-      }
+    private Scan build(ImmutableSet<Conjunction> conjunctions) {
+      return new ScanWithIndex(
+          namespaceName, tableName, indexKey, consistency, projections, conjunctions, limit);
+    }
+  }
 
-      if (consistency != null) {
-        scan.withConsistency(consistency);
-      }
+  public static class BuildableScanWithIndexOngoingWhere extends BuildableScanWithIndexWhere
+      implements And<BuildableScanWithIndexOngoingWhereAnd>,
+          Or<BuildableScanWithIndexOngoingWhereOr> {
 
-      return scan;
+    private BuildableScanWithIndexOngoingWhere(
+        BuildableScanWithIndex buildable, ConditionalExpression condition) {
+      super(buildable, condition);
+    }
+
+    @Override
+    public BuildableScanWithIndexOngoingWhereAnd and(ConditionalExpression condition) {
+      checkNotNull(condition);
+      where.and(condition);
+      return new BuildableScanWithIndexOngoingWhereAnd(this);
+    }
+
+    @Override
+    public BuildableScanWithIndexOngoingWhereAnd and(OrConditionSet orConditionSet) {
+      checkNotNull(orConditionSet);
+      where.and(orConditionSet);
+      return new BuildableScanWithIndexOngoingWhereAnd(this);
+    }
+
+    @Override
+    public BuildableScanWithIndexOngoingWhereOr or(ConditionalExpression condition) {
+      checkNotNull(condition);
+      where.or(condition);
+      return new BuildableScanWithIndexOngoingWhereOr(this);
+    }
+
+    @Override
+    public BuildableScanWithIndexOngoingWhereOr or(AndConditionSet andConditionSet) {
+      checkNotNull(andConditionSet);
+      where.or(andConditionSet);
+      return new BuildableScanWithIndexOngoingWhereOr(this);
+    }
+  }
+
+  public static class BuildableScanWithIndexOngoingWhereAnd extends BuildableScanWithIndexWhere
+      implements And<BuildableScanWithIndexOngoingWhereAnd> {
+
+    private BuildableScanWithIndexOngoingWhereAnd(BuildableScanWithIndexOngoingWhere buildable) {
+      super(buildable);
+    }
+
+    private BuildableScanWithIndexOngoingWhereAnd(
+        BuildableScanWithIndex buildable, OrConditionSet orConditionSet) {
+      super(buildable);
+      where.and(orConditionSet);
+    }
+
+    private BuildableScanWithIndexOngoingWhereAnd(
+        BuildableScanWithIndex buildable, Set<OrConditionSet> orConditionSets) {
+      super(buildable);
+      where.and(orConditionSets);
+    }
+
+    @Override
+    public BuildableScanWithIndexOngoingWhereAnd and(ConditionalExpression condition) {
+      checkNotNull(condition);
+      where.and(condition);
+      return this;
+    }
+
+    @Override
+    public BuildableScanWithIndexOngoingWhereAnd and(OrConditionSet orConditionSet) {
+      checkNotNull(orConditionSet);
+      where.and(orConditionSet);
+      return this;
+    }
+  }
+
+  public static class BuildableScanWithIndexOngoingWhereOr extends BuildableScanWithIndexWhere
+      implements Or<BuildableScanWithIndexOngoingWhereOr> {
+
+    private BuildableScanWithIndexOngoingWhereOr(BuildableScanWithIndexOngoingWhere buildable) {
+      super(buildable);
+    }
+
+    private BuildableScanWithIndexOngoingWhereOr(
+        BuildableScanWithIndex buildable, AndConditionSet andConditionSet) {
+      super(buildable);
+      where.or(andConditionSet);
+    }
+
+    private BuildableScanWithIndexOngoingWhereOr(
+        BuildableScanWithIndex buildable, Set<AndConditionSet> andConditionSets) {
+      super(buildable);
+      where.or(andConditionSets);
+    }
+
+    @Override
+    public BuildableScanWithIndexOngoingWhereOr or(ConditionalExpression condition) {
+      checkNotNull(condition);
+      where.or(condition);
+      return this;
+    }
+
+    @Override
+    public BuildableScanWithIndexOngoingWhereOr or(AndConditionSet andConditionSet) {
+      checkNotNull(andConditionSet);
+      where.or(andConditionSet);
+      return this;
+    }
+  }
+
+  public static class BuildableScanWithIndexWhere
+      implements Consistency<BuildableScanWithIndexWhere>,
+          Projection<BuildableScanWithIndexWhere>,
+          Limit<BuildableScanWithIndexWhere> {
+
+    BuildableScanWithIndex buildableScanWithIndex;
+    final Where where;
+
+    private BuildableScanWithIndexWhere(BuildableScanWithIndex buildable) {
+      this(buildable, null);
+    }
+
+    private BuildableScanWithIndexWhere(
+        BuildableScanWithIndex buildable, @Nullable ConditionalExpression condition) {
+      this.buildableScanWithIndex = buildable;
+      this.where = new Where(condition);
+    }
+
+    private BuildableScanWithIndexWhere(BuildableScanWithIndexOngoingWhere buildable) {
+      this.buildableScanWithIndex = buildable.buildableScanWithIndex;
+      this.where = buildable.where;
+    }
+
+    @Override
+    public BuildableScanWithIndexWhere projection(String projection) {
+      buildableScanWithIndex = buildableScanWithIndex.projections(projection);
+      return this;
+    }
+
+    @Override
+    public BuildableScanWithIndexWhere projections(Collection<String> projections) {
+      buildableScanWithIndex = buildableScanWithIndex.projections(projections);
+      return this;
+    }
+
+    @Override
+    public BuildableScanWithIndexWhere projections(String... projections) {
+      return projections(Arrays.asList(projections));
+    }
+
+    @Override
+    public BuildableScanWithIndexWhere limit(int limit) {
+      buildableScanWithIndex = buildableScanWithIndex.limit(limit);
+      return this;
+    }
+
+    @Override
+    public BuildableScanWithIndexWhere consistency(com.scalar.db.api.Consistency consistency) {
+      buildableScanWithIndex = buildableScanWithIndex.consistency(consistency);
+      return this;
+    }
+
+    public Scan build() {
+      return buildableScanWithIndex.build(getConjunctions(where));
     }
   }
 
@@ -372,19 +813,12 @@ public class ScanBuilder {
     }
 
     public Scan build() {
-      Scan scan = new ScanAll();
-      scan.forNamespace(namespaceName).forTable(tableName).withLimit(limit);
-      orderings.forEach(scan::withOrdering);
+      return build(ImmutableSet.of());
+    }
 
-      if (!projections.isEmpty()) {
-        scan.withProjections(projections);
-      }
-
-      if (consistency != null) {
-        scan.withConsistency(consistency);
-      }
-
-      return scan;
+    private Scan build(ImmutableSet<Conjunction> conjunctions) {
+      return new ScanAll(
+          namespaceName, tableName, consistency, projections, conjunctions, orderings, limit);
     }
   }
 
@@ -564,7 +998,7 @@ public class ScanBuilder {
     }
 
     public Scan build() {
-      return addConjunctionsTo(buildableScanAll.build(), where);
+      return buildableScanAll.build(getConjunctions(where));
     }
   }
 
@@ -585,7 +1019,7 @@ public class ScanBuilder {
     private final boolean isScanWithIndex;
     private final boolean isScanAll;
     private Key indexKey;
-    protected final Set<Set<ConditionalExpression>> conjunctions = new HashSet<>();
+    final Set<Set<ConditionalExpression>> conjunctions = new HashSet<>();
 
     BuildableScanOrScanAllFromExisting(Scan scan) {
       super(scan.forNamespace().orElse(null), scan.forTable().orElse(null), scan.getPartitionKey());
@@ -734,7 +1168,6 @@ public class ScanBuilder {
 
     @Override
     public BuildableScanFromExistingWithOngoingWhere where(ConditionalExpression condition) {
-      checkScanAll();
       checkConditionsEmpty();
       checkNotNull(condition);
       return new BuildableScanFromExistingWithOngoingWhere(this, condition);
@@ -742,7 +1175,6 @@ public class ScanBuilder {
 
     @Override
     public BuildableScanFromExistingWithOngoingWhereAnd where(OrConditionSet orConditionSet) {
-      checkScanAll();
       checkConditionsEmpty();
       checkNotNull(orConditionSet);
       return new BuildableScanFromExistingWithOngoingWhereAnd(this, orConditionSet);
@@ -750,7 +1182,6 @@ public class ScanBuilder {
 
     @Override
     public BuildableScanFromExistingWithOngoingWhereOr where(AndConditionSet andConditionSet) {
-      checkScanAll();
       checkConditionsEmpty();
       checkNotNull(andConditionSet);
       return new BuildableScanFromExistingWithOngoingWhereOr(this, andConditionSet);
@@ -759,7 +1190,6 @@ public class ScanBuilder {
     @Override
     public BuildableScanFromExistingWithOngoingWhereAnd whereAnd(
         Set<OrConditionSet> orConditionSets) {
-      checkScanAll();
       checkConditionsEmpty();
       checkNotNull(orConditionSets);
       return new BuildableScanFromExistingWithOngoingWhereAnd(this, orConditionSets);
@@ -768,7 +1198,6 @@ public class ScanBuilder {
     @Override
     public BuildableScanFromExistingWithOngoingWhereOr whereOr(
         Set<AndConditionSet> andConditionSets) {
-      checkScanAll();
       checkConditionsEmpty();
       checkNotNull(andConditionSets);
       return new BuildableScanFromExistingWithOngoingWhereOr(this, andConditionSets);
@@ -778,6 +1207,7 @@ public class ScanBuilder {
     public BuildableScanOrScanAllFromExisting clearStart() {
       checkNotScanWithIndexOrScanAll();
       this.startClusteringKey = null;
+      this.startInclusive = false;
       return this;
     }
 
@@ -785,6 +1215,7 @@ public class ScanBuilder {
     public BuildableScanOrScanAllFromExisting clearEnd() {
       checkNotScanWithIndexOrScanAll();
       this.endClusteringKey = null;
+      this.endInclusive = false;
       return this;
     }
 
@@ -797,7 +1228,6 @@ public class ScanBuilder {
 
     @Override
     public BuildableScanOrScanAllFromExisting clearConditions() {
-      checkScanAll();
       this.conjunctions.clear();
       return this;
     }
@@ -835,15 +1265,6 @@ public class ScanBuilder {
       }
     }
 
-    private void checkScanAll() {
-      if (!isScanAll) {
-        throw new UnsupportedOperationException(
-            CoreError
-                .SCAN_BUILD_ERROR_OPERATION_SUPPORTED_ONLY_WHEN_SCANNING_ALL_RECORDS_OF_DATABASE
-                .buildMessage());
-      }
-    }
-
     private void checkConditionsEmpty() {
       if (!conjunctions.isEmpty()) {
         throw new IllegalStateException(
@@ -854,43 +1275,41 @@ public class ScanBuilder {
 
     @Override
     public Scan build() {
-      Scan scan;
+      return build(
+          conjunctions.stream().map(Conjunction::of).collect(ImmutableSet.toImmutableSet()));
+    }
 
+    private Scan build(ImmutableSet<Conjunction> conjunctions) {
       if (isScanWithIndex) {
-        scan = new ScanWithIndex(indexKey);
+        return new ScanWithIndex(
+            namespaceName, tableName, indexKey, consistency, projections, conjunctions, limit);
       } else if (isScanAll) {
-        scan = new ScanAll();
-        orderings.forEach(scan::withOrdering);
-        if (!conjunctions.isEmpty()) {
-          scan.withConjunctions(
-              conjunctions.stream().map(Conjunction::of).collect(Collectors.toSet()));
-        }
+        return new ScanAll(
+            namespaceName, tableName, consistency, projections, conjunctions, orderings, limit);
       } else {
-        scan = new Scan(partitionKey);
-        orderings.forEach(scan::withOrdering);
-        if (startClusteringKey != null) {
-          scan.withStart(startClusteringKey, startInclusive);
-        }
-        if (endClusteringKey != null) {
-          scan.withEnd(endClusteringKey, endInclusive);
-        }
+        return new Scan(
+            namespaceName,
+            tableName,
+            partitionKey,
+            consistency,
+            projections,
+            conjunctions,
+            startClusteringKey,
+            startInclusive,
+            endClusteringKey,
+            endInclusive,
+            orderings,
+            limit);
       }
-
-      scan.forNamespace(namespaceName)
-          .forTable(tableName)
-          .withLimit(limit)
-          .withConsistency(consistency);
-      if (!projections.isEmpty()) {
-        scan.withProjections(projections);
-      }
-
-      return scan;
     }
   }
 
   public static class BuildableScanFromExistingWithWhere
       implements OperationBuilder.Namespace<BuildableScanFromExistingWithWhere>,
           OperationBuilder.Table<BuildableScanFromExistingWithWhere>,
+          PartitionKey<BuildableScanFromExistingWithWhere>,
+          ClusteringKeyFiltering<BuildableScanFromExistingWithWhere>,
+          IndexKey<BuildableScanFromExistingWithWhere>,
           Consistency<BuildableScanFromExistingWithWhere>,
           Projection<BuildableScanFromExistingWithWhere>,
           Ordering<BuildableScanFromExistingWithWhere>,
@@ -926,6 +1345,30 @@ public class ScanBuilder {
     @Override
     public BuildableScanFromExistingWithWhere table(String tableName) {
       buildableScanFromExisting.table(tableName);
+      return this;
+    }
+
+    @Override
+    public BuildableScanFromExistingWithWhere partitionKey(Key partitionKey) {
+      buildableScanFromExisting.partitionKey(partitionKey);
+      return this;
+    }
+
+    @Override
+    public BuildableScanFromExistingWithWhere start(Key clusteringKey, boolean inclusive) {
+      buildableScanFromExisting.start(clusteringKey, inclusive);
+      return this;
+    }
+
+    @Override
+    public BuildableScanFromExistingWithWhere end(Key clusteringKey, boolean inclusive) {
+      buildableScanFromExisting.end(clusteringKey, inclusive);
+      return this;
+    }
+
+    @Override
+    public BuildableScanFromExistingWithWhere indexKey(Key indexKey) {
+      buildableScanFromExisting.indexKey(indexKey);
       return this;
     }
 
@@ -995,7 +1438,7 @@ public class ScanBuilder {
     }
 
     public Scan build() {
-      return addConjunctionsTo(buildableScanFromExisting.build(), where);
+      return buildableScanFromExisting.build(getConjunctions(where));
     }
   }
 
@@ -1118,84 +1561,5 @@ public class ScanBuilder {
       where.and(orConditionSet);
       return this;
     }
-  }
-
-  private static class Where {
-
-    @Nullable private ConditionalExpression condition;
-    private final Set<Set<ConditionalExpression>> conjunctions = new HashSet<>();
-    private final Set<Set<ConditionalExpression>> disjunctions = new HashSet<>();
-
-    private Where(ConditionalExpression condition) {
-      this.condition = condition;
-    }
-
-    private void and(ConditionalExpression condition) {
-      checkNotNull(condition);
-      if (this.condition != null) {
-        disjunctions.add(ImmutableSet.of(this.condition));
-        this.condition = null;
-      }
-      disjunctions.add(ImmutableSet.of(condition));
-    }
-
-    private void and(OrConditionSet orConditionSet) {
-      checkNotNull(orConditionSet);
-      if (this.condition != null) {
-        disjunctions.add(ImmutableSet.of(this.condition));
-        this.condition = null;
-      }
-      disjunctions.add(orConditionSet.getConditions());
-    }
-
-    private void and(Set<OrConditionSet> orConditionSets) {
-      disjunctions.addAll(
-          orConditionSets.stream().map(OrConditionSet::getConditions).collect(Collectors.toSet()));
-    }
-
-    private void or(ConditionalExpression condition) {
-      if (this.condition != null) {
-        conjunctions.add(ImmutableSet.of(this.condition));
-        this.condition = null;
-      }
-      conjunctions.add(ImmutableSet.of(condition));
-    }
-
-    private void or(AndConditionSet andConditionSet) {
-      if (this.condition != null) {
-        conjunctions.add(ImmutableSet.of(this.condition));
-        this.condition = null;
-      }
-      conjunctions.add(andConditionSet.getConditions());
-    }
-
-    private void or(Set<AndConditionSet> andConditionSets) {
-      conjunctions.addAll(
-          andConditionSets.stream()
-              .map(AndConditionSet::getConditions)
-              .collect(Collectors.toSet()));
-    }
-  }
-
-  private static Scan addConjunctionsTo(Scan scan, Where where) {
-
-    if (where.condition != null) {
-      assert where.conjunctions.isEmpty() && where.disjunctions.isEmpty();
-      scan.withConjunctions(ImmutableSet.of(Conjunction.of(where.condition)));
-    } else if (where.conjunctions.isEmpty()) {
-      scan.withConjunctions(
-          Sets.cartesianProduct(new ArrayList<>(where.disjunctions)).stream()
-              .filter(conditions -> conditions.size() > 0)
-              .map(Conjunction::of)
-              .collect(Collectors.toSet()));
-    } else {
-      scan.withConjunctions(
-          where.conjunctions.stream()
-              .filter(conditions -> conditions.size() > 0)
-              .map(Conjunction::of)
-              .collect(Collectors.toSet()));
-    }
-
-    return scan;
   }
 }
