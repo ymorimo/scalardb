@@ -2,27 +2,31 @@ package com.scalar.db.io;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.*;
 
+import java.time.Clock;
+import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 
-public class IntColumnTest {
+class DateColumnTest {
+  private static final LocalDate ANY_DATE = LocalDate.now(Clock.systemUTC());
 
   @Test
   public void of_ProperValueGiven_ShouldReturnWhatsSet() {
     // Arrange
 
     // Act
-    IntColumn column = IntColumn.of("col", 10);
+    DateColumn column = DateColumn.of("col", ANY_DATE);
 
     // Assert
     assertThat(column.getName()).isEqualTo("col");
     assertThat(column.getValue()).isPresent();
-    assertThat(column.getValue().get()).isEqualTo(10);
-    assertThat(column.getIntValue()).isEqualTo(10);
-    assertThat(column.getDataType()).isEqualTo(DataType.INT);
+    assertThat(column.getValue().get()).isEqualTo(ANY_DATE);
+    assertThat(column.getDateValue()).isEqualTo(ANY_DATE);
+    assertThat(column.getDataType()).isEqualTo(DataType.DATE);
     assertThat(column.hasNullValue()).isFalse();
-    assertThat(column.getValueAsObject()).isEqualTo(10);
-    assertThatThrownBy(column::getBooleanValue).isInstanceOf(UnsupportedOperationException.class);
+    assertThat(column.getValueAsObject()).isEqualTo(ANY_DATE);
+    assertThatThrownBy(column::getIntValue).isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getBigIntValue).isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getFloatValue).isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getDoubleValue).isInstanceOf(UnsupportedOperationException.class);
@@ -32,7 +36,6 @@ public class IntColumnTest {
         .isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getBlobValueAsBytes)
         .isInstanceOf(UnsupportedOperationException.class);
-    assertThatThrownBy(column::getDateValue).isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getTimeValue).isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getTimestampValue).isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getTimestampTZValue)
@@ -44,16 +47,16 @@ public class IntColumnTest {
     // Arrange
 
     // Act
-    IntColumn column = IntColumn.ofNull("col");
+    DateColumn column = DateColumn.ofNull("col");
 
     // Assert
     assertThat(column.getName()).isEqualTo("col");
     assertThat(column.getValue()).isNotPresent();
-    assertThat(column.getIntValue()).isEqualTo(0);
-    assertThat(column.getDataType()).isEqualTo(DataType.INT);
+    assertThat(column.getDateValue()).isNull();
+    assertThat(column.getDataType()).isEqualTo(DataType.DATE);
     assertThat(column.hasNullValue()).isTrue();
     assertThat(column.getValueAsObject()).isNull();
-    assertThatThrownBy(column::getBooleanValue).isInstanceOf(UnsupportedOperationException.class);
+    assertThatThrownBy(column::getIntValue).isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getBigIntValue).isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getFloatValue).isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getDoubleValue).isInstanceOf(UnsupportedOperationException.class);
@@ -63,7 +66,6 @@ public class IntColumnTest {
         .isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getBlobValueAsBytes)
         .isInstanceOf(UnsupportedOperationException.class);
-    assertThatThrownBy(column::getDateValue).isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getTimeValue).isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getTimestampValue).isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getTimestampTZValue)
@@ -75,17 +77,17 @@ public class IntColumnTest {
     // Arrange
 
     // Act
-    IntColumn column = IntColumn.of("col", 10).copyWith("col2");
+    DateColumn column = DateColumn.of("col", ANY_DATE).copyWith("col2");
 
     // Assert
     assertThat(column.getName()).isEqualTo("col2");
     assertThat(column.getValue()).isPresent();
-    assertThat(column.getValue().get()).isEqualTo(10);
-    assertThat(column.getIntValue()).isEqualTo(10);
-    assertThat(column.getDataType()).isEqualTo(DataType.INT);
+    assertThat(column.getValue().get()).isEqualTo(ANY_DATE);
+    assertThat(column.getDateValue()).isEqualTo(ANY_DATE);
+    assertThat(column.getDataType()).isEqualTo(DataType.DATE);
     assertThat(column.hasNullValue()).isFalse();
-    assertThat(column.getValueAsObject()).isEqualTo(10);
-    assertThatThrownBy(column::getBooleanValue).isInstanceOf(UnsupportedOperationException.class);
+    assertThat(column.getValueAsObject()).isEqualTo(ANY_DATE);
+    assertThatThrownBy(column::getIntValue).isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getBigIntValue).isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getFloatValue).isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getDoubleValue).isInstanceOf(UnsupportedOperationException.class);
@@ -95,7 +97,6 @@ public class IntColumnTest {
         .isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getBlobValueAsBytes)
         .isInstanceOf(UnsupportedOperationException.class);
-    assertThatThrownBy(column::getDateValue).isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getTimeValue).isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getTimestampValue).isInstanceOf(UnsupportedOperationException.class);
     assertThatThrownBy(column::getTimestampTZValue)
@@ -105,12 +106,12 @@ public class IntColumnTest {
   @Test
   public void compareTo_ShouldReturnProperResults() {
     // Arrange
-    IntColumn column = IntColumn.of("col", 100);
+    DateColumn column = DateColumn.of("col", ANY_DATE);
 
     // Act Assert
-    assertThat(column.compareTo(IntColumn.of("col", 100))).isEqualTo(0);
-    assertThat(column.compareTo(IntColumn.of("col", 200))).isLessThan(0);
-    assertThat(column.compareTo(IntColumn.of("col", 0))).isGreaterThan(0);
-    assertThat(column.compareTo(IntColumn.ofNull("col"))).isGreaterThan(0);
+    assertThat(column.compareTo(DateColumn.of("col", ANY_DATE))).isEqualTo(0);
+    assertThat(column.compareTo(DateColumn.of("col", ANY_DATE.minusDays(1)))).isGreaterThan(0);
+    assertThat(column.compareTo(DateColumn.of("col", ANY_DATE.plusDays(1)))).isLessThan(0);
+    assertThat(column.compareTo(DateColumn.ofNull("col"))).isGreaterThan(0);
   }
 }

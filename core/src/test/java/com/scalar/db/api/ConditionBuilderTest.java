@@ -7,15 +7,30 @@ import com.scalar.db.api.ConditionalExpression.Operator;
 import com.scalar.db.io.BigIntColumn;
 import com.scalar.db.io.BlobColumn;
 import com.scalar.db.io.BooleanColumn;
+import com.scalar.db.io.DateColumn;
 import com.scalar.db.io.DoubleColumn;
 import com.scalar.db.io.FloatColumn;
 import com.scalar.db.io.IntColumn;
 import com.scalar.db.io.TextColumn;
+import com.scalar.db.io.TimeColumn;
+import com.scalar.db.io.TimestampColumn;
+import com.scalar.db.io.TimestampTZColumn;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 
 public class ConditionBuilderTest {
+  private static final LocalDate ANY_DATE = LocalDate.now(Clock.systemUTC());
+  private static final LocalTime ANY_TIME = LocalTime.now(Clock.systemUTC());
+  private static final LocalDateTime ANY_TIMESTAMP = LocalDateTime.now(Clock.systemUTC());
+  private static final Instant ANY_TIMESTAMPTZ =
+      ANY_TIMESTAMP.plusHours(1).toInstant(ZoneOffset.UTC);
 
   @Test
   public void putIf_WithIsEqualToConditions_ShouldBuildProperly() {
@@ -35,10 +50,14 @@ public class ConditionBuilderTest {
             .and(
                 ConditionBuilder.column("col8")
                     .isEqualToBlob(ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8))))
+            .and(ConditionBuilder.column("col9").isEqualToDate(ANY_DATE))
+            .and(ConditionBuilder.column("col10").isEqualToTime(ANY_TIME))
+            .and(ConditionBuilder.column("col11").isEqualToTimestamp(ANY_TIMESTAMP))
+            .and(ConditionBuilder.column("col12").isEqualToTimestampTZ(ANY_TIMESTAMPTZ))
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(8);
+    assertThat(actual.getExpressions().size()).isEqualTo(12);
     assertThat(actual.getExpressions().get(0))
         .isEqualTo(new ConditionalExpression("col1", true, Operator.EQ));
     assertThat(actual.getExpressions().get(1))
@@ -59,6 +78,16 @@ public class ConditionBuilderTest {
         .isEqualTo(
             new ConditionalExpression(
                 "col8", ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8)), Operator.EQ));
+    assertThat(actual.getExpressions().get(8))
+        .isEqualTo(new ConditionalExpression(DateColumn.of("col9", ANY_DATE), Operator.EQ));
+    assertThat(actual.getExpressions().get(9))
+        .isEqualTo(new ConditionalExpression(TimeColumn.of("col10", ANY_TIME), Operator.EQ));
+    assertThat(actual.getExpressions().get(10))
+        .isEqualTo(
+            new ConditionalExpression(TimestampColumn.of("col11", ANY_TIMESTAMP), Operator.EQ));
+    assertThat(actual.getExpressions().get(11))
+        .isEqualTo(
+            new ConditionalExpression(TimestampTZColumn.of("col12", ANY_TIMESTAMPTZ), Operator.EQ));
   }
 
   @Test
@@ -79,10 +108,14 @@ public class ConditionBuilderTest {
             .and(
                 ConditionBuilder.column("col8")
                     .isNotEqualToBlob(ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8))))
+            .and(ConditionBuilder.column("col9").isNotEqualToDate(ANY_DATE))
+            .and(ConditionBuilder.column("col10").isNotEqualToTime(ANY_TIME))
+            .and(ConditionBuilder.column("col11").isNotEqualToTimestamp(ANY_TIMESTAMP))
+            .and(ConditionBuilder.column("col12").isNotEqualToTimestampTZ(ANY_TIMESTAMPTZ))
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(8);
+    assertThat(actual.getExpressions().size()).isEqualTo(12);
     assertThat(actual.getExpressions().get(0))
         .isEqualTo(new ConditionalExpression("col1", true, Operator.NE));
     assertThat(actual.getExpressions().get(1))
@@ -103,6 +136,16 @@ public class ConditionBuilderTest {
         .isEqualTo(
             new ConditionalExpression(
                 "col8", ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8)), Operator.NE));
+    assertThat(actual.getExpressions().get(8))
+        .isEqualTo(new ConditionalExpression(DateColumn.of("col9", ANY_DATE), Operator.NE));
+    assertThat(actual.getExpressions().get(9))
+        .isEqualTo(new ConditionalExpression(TimeColumn.of("col10", ANY_TIME), Operator.NE));
+    assertThat(actual.getExpressions().get(10))
+        .isEqualTo(
+            new ConditionalExpression(TimestampColumn.of("col11", ANY_TIMESTAMP), Operator.NE));
+    assertThat(actual.getExpressions().get(11))
+        .isEqualTo(
+            new ConditionalExpression(TimestampTZColumn.of("col12", ANY_TIMESTAMPTZ), Operator.NE));
   }
 
   @Test
@@ -123,10 +166,14 @@ public class ConditionBuilderTest {
             .and(
                 ConditionBuilder.column("col8")
                     .isGreaterThanBlob(ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8))))
+            .and(ConditionBuilder.column("col9").isGreaterThanDate(ANY_DATE))
+            .and(ConditionBuilder.column("col10").isGreaterThanTime(ANY_TIME))
+            .and(ConditionBuilder.column("col11").isGreaterThanTimestamp(ANY_TIMESTAMP))
+            .and(ConditionBuilder.column("col12").isGreaterThanTimestampTZ(ANY_TIMESTAMPTZ))
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(8);
+    assertThat(actual.getExpressions().size()).isEqualTo(12);
     assertThat(actual.getExpressions().get(0))
         .isEqualTo(new ConditionalExpression("col1", true, Operator.GT));
     assertThat(actual.getExpressions().get(1))
@@ -147,6 +194,16 @@ public class ConditionBuilderTest {
         .isEqualTo(
             new ConditionalExpression(
                 "col8", ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8)), Operator.GT));
+    assertThat(actual.getExpressions().get(8))
+        .isEqualTo(new ConditionalExpression(DateColumn.of("col9", ANY_DATE), Operator.GT));
+    assertThat(actual.getExpressions().get(9))
+        .isEqualTo(new ConditionalExpression(TimeColumn.of("col10", ANY_TIME), Operator.GT));
+    assertThat(actual.getExpressions().get(10))
+        .isEqualTo(
+            new ConditionalExpression(TimestampColumn.of("col11", ANY_TIMESTAMP), Operator.GT));
+    assertThat(actual.getExpressions().get(11))
+        .isEqualTo(
+            new ConditionalExpression(TimestampTZColumn.of("col12", ANY_TIMESTAMPTZ), Operator.GT));
   }
 
   @Test
@@ -168,10 +225,15 @@ public class ConditionBuilderTest {
                 ConditionBuilder.column("col8")
                     .isGreaterThanOrEqualToBlob(
                         ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8))))
+            .and(ConditionBuilder.column("col9").isGreaterThanOrEqualToDate(ANY_DATE))
+            .and(ConditionBuilder.column("col10").isGreaterThanOrEqualToTime(ANY_TIME))
+            .and(ConditionBuilder.column("col11").isGreaterThanOrEqualToTimestamp(ANY_TIMESTAMP))
+            .and(
+                ConditionBuilder.column("col12").isGreaterThanOrEqualToTimestampTZ(ANY_TIMESTAMPTZ))
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(8);
+    assertThat(actual.getExpressions().size()).isEqualTo(12);
     assertThat(actual.getExpressions().get(0))
         .isEqualTo(new ConditionalExpression("col1", true, Operator.GTE));
     assertThat(actual.getExpressions().get(1))
@@ -192,6 +254,17 @@ public class ConditionBuilderTest {
         .isEqualTo(
             new ConditionalExpression(
                 "col8", ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8)), Operator.GTE));
+    assertThat(actual.getExpressions().get(8))
+        .isEqualTo(new ConditionalExpression(DateColumn.of("col9", ANY_DATE), Operator.GTE));
+    assertThat(actual.getExpressions().get(9))
+        .isEqualTo(new ConditionalExpression(TimeColumn.of("col10", ANY_TIME), Operator.GTE));
+    assertThat(actual.getExpressions().get(10))
+        .isEqualTo(
+            new ConditionalExpression(TimestampColumn.of("col11", ANY_TIMESTAMP), Operator.GTE));
+    assertThat(actual.getExpressions().get(11))
+        .isEqualTo(
+            new ConditionalExpression(
+                TimestampTZColumn.of("col12", ANY_TIMESTAMPTZ), Operator.GTE));
   }
 
   @Test
@@ -212,10 +285,14 @@ public class ConditionBuilderTest {
             .and(
                 ConditionBuilder.column("col8")
                     .isLessThanBlob(ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8))))
+            .and(ConditionBuilder.column("col9").isLessThanDate(ANY_DATE))
+            .and(ConditionBuilder.column("col10").isLessThanTime(ANY_TIME))
+            .and(ConditionBuilder.column("col11").isLessThanTimestamp(ANY_TIMESTAMP))
+            .and(ConditionBuilder.column("col12").isLessThanTimestampTZ(ANY_TIMESTAMPTZ))
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(8);
+    assertThat(actual.getExpressions().size()).isEqualTo(12);
     assertThat(actual.getExpressions().get(0))
         .isEqualTo(new ConditionalExpression("col1", true, Operator.LT));
     assertThat(actual.getExpressions().get(1))
@@ -236,6 +313,16 @@ public class ConditionBuilderTest {
         .isEqualTo(
             new ConditionalExpression(
                 "col8", ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8)), Operator.LT));
+    assertThat(actual.getExpressions().get(8))
+        .isEqualTo(new ConditionalExpression(DateColumn.of("col9", ANY_DATE), Operator.LT));
+    assertThat(actual.getExpressions().get(9))
+        .isEqualTo(new ConditionalExpression(TimeColumn.of("col10", ANY_TIME), Operator.LT));
+    assertThat(actual.getExpressions().get(10))
+        .isEqualTo(
+            new ConditionalExpression(TimestampColumn.of("col11", ANY_TIMESTAMP), Operator.LT));
+    assertThat(actual.getExpressions().get(11))
+        .isEqualTo(
+            new ConditionalExpression(TimestampTZColumn.of("col12", ANY_TIMESTAMPTZ), Operator.LT));
   }
 
   @Test
@@ -257,10 +344,14 @@ public class ConditionBuilderTest {
                 ConditionBuilder.column("col8")
                     .isLessThanOrEqualToBlob(
                         ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8))))
+            .and(ConditionBuilder.column("col9").isLessThanOrEqualToDate(ANY_DATE))
+            .and(ConditionBuilder.column("col10").isLessThanOrEqualToTime(ANY_TIME))
+            .and(ConditionBuilder.column("col11").isLessThanOrEqualToTimestamp(ANY_TIMESTAMP))
+            .and(ConditionBuilder.column("col12").isLessThanOrEqualToTimestampTZ(ANY_TIMESTAMPTZ))
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(8);
+    assertThat(actual.getExpressions().size()).isEqualTo(12);
     assertThat(actual.getExpressions().get(0))
         .isEqualTo(new ConditionalExpression("col1", true, Operator.LTE));
     assertThat(actual.getExpressions().get(1))
@@ -281,6 +372,17 @@ public class ConditionBuilderTest {
         .isEqualTo(
             new ConditionalExpression(
                 "col8", ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8)), Operator.LTE));
+    assertThat(actual.getExpressions().get(8))
+        .isEqualTo(new ConditionalExpression(DateColumn.of("col9", ANY_DATE), Operator.LTE));
+    assertThat(actual.getExpressions().get(9))
+        .isEqualTo(new ConditionalExpression(TimeColumn.of("col10", ANY_TIME), Operator.LTE));
+    assertThat(actual.getExpressions().get(10))
+        .isEqualTo(
+            new ConditionalExpression(TimestampColumn.of("col11", ANY_TIMESTAMP), Operator.LTE));
+    assertThat(actual.getExpressions().get(11))
+        .isEqualTo(
+            new ConditionalExpression(
+                TimestampTZColumn.of("col12", ANY_TIMESTAMPTZ), Operator.LTE));
   }
 
   @Test
@@ -296,10 +398,14 @@ public class ConditionBuilderTest {
             .and(ConditionBuilder.column("col5").isNullDouble())
             .and(ConditionBuilder.column("col6").isNullText())
             .and(ConditionBuilder.column("col7").isNullBlob())
+            .and(ConditionBuilder.column("col8").isNullDate())
+            .and(ConditionBuilder.column("col9").isNullTime())
+            .and(ConditionBuilder.column("col10").isNullTimestamp())
+            .and(ConditionBuilder.column("col11").isNullTimestampTZ())
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(7);
+    assertThat(actual.getExpressions().size()).isEqualTo(11);
     assertThat(actual.getExpressions().get(0).getColumn()).isEqualTo(BooleanColumn.ofNull("col1"));
     assertThat(actual.getExpressions().get(0).getOperator()).isEqualTo(Operator.IS_NULL);
     assertThat(actual.getExpressions().get(1).getColumn()).isEqualTo(IntColumn.ofNull("col2"));
@@ -314,6 +420,16 @@ public class ConditionBuilderTest {
     assertThat(actual.getExpressions().get(5).getOperator()).isEqualTo(Operator.IS_NULL);
     assertThat(actual.getExpressions().get(6).getColumn()).isEqualTo(BlobColumn.ofNull("col7"));
     assertThat(actual.getExpressions().get(6).getOperator()).isEqualTo(Operator.IS_NULL);
+    assertThat(actual.getExpressions().get(7).getColumn()).isEqualTo(DateColumn.ofNull("col8"));
+    assertThat(actual.getExpressions().get(7).getOperator()).isEqualTo(Operator.IS_NULL);
+    assertThat(actual.getExpressions().get(8).getColumn()).isEqualTo(TimeColumn.ofNull("col9"));
+    assertThat(actual.getExpressions().get(8).getOperator()).isEqualTo(Operator.IS_NULL);
+    assertThat(actual.getExpressions().get(9).getColumn())
+        .isEqualTo(TimestampColumn.ofNull("col10"));
+    assertThat(actual.getExpressions().get(9).getOperator()).isEqualTo(Operator.IS_NULL);
+    assertThat(actual.getExpressions().get(10).getColumn())
+        .isEqualTo(TimestampTZColumn.ofNull("col11"));
+    assertThat(actual.getExpressions().get(10).getOperator()).isEqualTo(Operator.IS_NULL);
   }
 
   @Test
@@ -329,10 +445,14 @@ public class ConditionBuilderTest {
             .and(ConditionBuilder.column("col5").isNotNullDouble())
             .and(ConditionBuilder.column("col6").isNotNullText())
             .and(ConditionBuilder.column("col7").isNotNullBlob())
+            .and(ConditionBuilder.column("col8").isNotNullDate())
+            .and(ConditionBuilder.column("col9").isNotNullTime())
+            .and(ConditionBuilder.column("col10").isNotNullTimestamp())
+            .and(ConditionBuilder.column("col11").isNotNullTimestampTZ())
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(7);
+    assertThat(actual.getExpressions().size()).isEqualTo(11);
     assertThat(actual.getExpressions().get(0).getColumn()).isEqualTo(BooleanColumn.ofNull("col1"));
     assertThat(actual.getExpressions().get(0).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
     assertThat(actual.getExpressions().get(1).getColumn()).isEqualTo(IntColumn.ofNull("col2"));
@@ -347,6 +467,16 @@ public class ConditionBuilderTest {
     assertThat(actual.getExpressions().get(5).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
     assertThat(actual.getExpressions().get(6).getColumn()).isEqualTo(BlobColumn.ofNull("col7"));
     assertThat(actual.getExpressions().get(6).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
+    assertThat(actual.getExpressions().get(7).getColumn()).isEqualTo(DateColumn.ofNull("col8"));
+    assertThat(actual.getExpressions().get(7).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
+    assertThat(actual.getExpressions().get(8).getColumn()).isEqualTo(TimeColumn.ofNull("col9"));
+    assertThat(actual.getExpressions().get(8).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
+    assertThat(actual.getExpressions().get(9).getColumn())
+        .isEqualTo(TimestampColumn.ofNull("col10"));
+    assertThat(actual.getExpressions().get(9).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
+    assertThat(actual.getExpressions().get(10).getColumn())
+        .isEqualTo(TimestampTZColumn.ofNull("col11"));
+    assertThat(actual.getExpressions().get(10).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
   }
 
   @Test
@@ -389,10 +519,14 @@ public class ConditionBuilderTest {
             .and(
                 ConditionBuilder.column("col8")
                     .isEqualToBlob(ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8))))
+            .and(ConditionBuilder.column("col9").isEqualToDate(ANY_DATE))
+            .and(ConditionBuilder.column("col10").isEqualToTime(ANY_TIME))
+            .and(ConditionBuilder.column("col11").isEqualToTimestamp(ANY_TIMESTAMP))
+            .and(ConditionBuilder.column("col12").isEqualToTimestampTZ(ANY_TIMESTAMPTZ))
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(8);
+    assertThat(actual.getExpressions().size()).isEqualTo(12);
     assertThat(actual.getExpressions().get(0))
         .isEqualTo(new ConditionalExpression("col1", true, Operator.EQ));
     assertThat(actual.getExpressions().get(1))
@@ -413,6 +547,16 @@ public class ConditionBuilderTest {
         .isEqualTo(
             new ConditionalExpression(
                 "col8", ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8)), Operator.EQ));
+    assertThat(actual.getExpressions().get(8))
+        .isEqualTo(new ConditionalExpression(DateColumn.of("col9", ANY_DATE), Operator.EQ));
+    assertThat(actual.getExpressions().get(9))
+        .isEqualTo(new ConditionalExpression(TimeColumn.of("col10", ANY_TIME), Operator.EQ));
+    assertThat(actual.getExpressions().get(10))
+        .isEqualTo(
+            new ConditionalExpression(TimestampColumn.of("col11", ANY_TIMESTAMP), Operator.EQ));
+    assertThat(actual.getExpressions().get(11))
+        .isEqualTo(
+            new ConditionalExpression(TimestampTZColumn.of("col12", ANY_TIMESTAMPTZ), Operator.EQ));
   }
 
   @Test
@@ -433,10 +577,14 @@ public class ConditionBuilderTest {
             .and(
                 ConditionBuilder.column("col8")
                     .isNotEqualToBlob(ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8))))
+            .and(ConditionBuilder.column("col9").isNotEqualToDate(ANY_DATE))
+            .and(ConditionBuilder.column("col10").isNotEqualToTime(ANY_TIME))
+            .and(ConditionBuilder.column("col11").isNotEqualToTimestamp(ANY_TIMESTAMP))
+            .and(ConditionBuilder.column("col12").isNotEqualToTimestampTZ(ANY_TIMESTAMPTZ))
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(8);
+    assertThat(actual.getExpressions().size()).isEqualTo(12);
     assertThat(actual.getExpressions().get(0))
         .isEqualTo(new ConditionalExpression("col1", true, Operator.NE));
     assertThat(actual.getExpressions().get(1))
@@ -457,6 +605,16 @@ public class ConditionBuilderTest {
         .isEqualTo(
             new ConditionalExpression(
                 "col8", ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8)), Operator.NE));
+    assertThat(actual.getExpressions().get(8))
+        .isEqualTo(new ConditionalExpression(DateColumn.of("col9", ANY_DATE), Operator.NE));
+    assertThat(actual.getExpressions().get(9))
+        .isEqualTo(new ConditionalExpression(TimeColumn.of("col10", ANY_TIME), Operator.NE));
+    assertThat(actual.getExpressions().get(10))
+        .isEqualTo(
+            new ConditionalExpression(TimestampColumn.of("col11", ANY_TIMESTAMP), Operator.NE));
+    assertThat(actual.getExpressions().get(11))
+        .isEqualTo(
+            new ConditionalExpression(TimestampTZColumn.of("col12", ANY_TIMESTAMPTZ), Operator.NE));
   }
 
   @Test
@@ -477,10 +635,14 @@ public class ConditionBuilderTest {
             .and(
                 ConditionBuilder.column("col8")
                     .isGreaterThanBlob(ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8))))
+            .and(ConditionBuilder.column("col9").isGreaterThanDate(ANY_DATE))
+            .and(ConditionBuilder.column("col10").isGreaterThanTime(ANY_TIME))
+            .and(ConditionBuilder.column("col11").isGreaterThanTimestamp(ANY_TIMESTAMP))
+            .and(ConditionBuilder.column("col12").isGreaterThanTimestampTZ(ANY_TIMESTAMPTZ))
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(8);
+    assertThat(actual.getExpressions().size()).isEqualTo(12);
     assertThat(actual.getExpressions().get(0))
         .isEqualTo(new ConditionalExpression("col1", true, Operator.GT));
     assertThat(actual.getExpressions().get(1))
@@ -501,6 +663,16 @@ public class ConditionBuilderTest {
         .isEqualTo(
             new ConditionalExpression(
                 "col8", ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8)), Operator.GT));
+    assertThat(actual.getExpressions().get(8))
+        .isEqualTo(new ConditionalExpression(DateColumn.of("col9", ANY_DATE), Operator.GT));
+    assertThat(actual.getExpressions().get(9))
+        .isEqualTo(new ConditionalExpression(TimeColumn.of("col10", ANY_TIME), Operator.GT));
+    assertThat(actual.getExpressions().get(10))
+        .isEqualTo(
+            new ConditionalExpression(TimestampColumn.of("col11", ANY_TIMESTAMP), Operator.GT));
+    assertThat(actual.getExpressions().get(11))
+        .isEqualTo(
+            new ConditionalExpression(TimestampTZColumn.of("col12", ANY_TIMESTAMPTZ), Operator.GT));
   }
 
   @Test
@@ -523,10 +695,15 @@ public class ConditionBuilderTest {
                 ConditionBuilder.column("col8")
                     .isGreaterThanOrEqualToBlob(
                         ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8))))
+            .and(ConditionBuilder.column("col9").isGreaterThanOrEqualToDate(ANY_DATE))
+            .and(ConditionBuilder.column("col10").isGreaterThanOrEqualToTime(ANY_TIME))
+            .and(ConditionBuilder.column("col11").isGreaterThanOrEqualToTimestamp(ANY_TIMESTAMP))
+            .and(
+                ConditionBuilder.column("col12").isGreaterThanOrEqualToTimestampTZ(ANY_TIMESTAMPTZ))
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(8);
+    assertThat(actual.getExpressions().size()).isEqualTo(12);
     assertThat(actual.getExpressions().get(0))
         .isEqualTo(new ConditionalExpression("col1", true, Operator.GTE));
     assertThat(actual.getExpressions().get(1))
@@ -547,6 +724,17 @@ public class ConditionBuilderTest {
         .isEqualTo(
             new ConditionalExpression(
                 "col8", ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8)), Operator.GTE));
+    assertThat(actual.getExpressions().get(8))
+        .isEqualTo(new ConditionalExpression(DateColumn.of("col9", ANY_DATE), Operator.GTE));
+    assertThat(actual.getExpressions().get(9))
+        .isEqualTo(new ConditionalExpression(TimeColumn.of("col10", ANY_TIME), Operator.GTE));
+    assertThat(actual.getExpressions().get(10))
+        .isEqualTo(
+            new ConditionalExpression(TimestampColumn.of("col11", ANY_TIMESTAMP), Operator.GTE));
+    assertThat(actual.getExpressions().get(11))
+        .isEqualTo(
+            new ConditionalExpression(
+                TimestampTZColumn.of("col12", ANY_TIMESTAMPTZ), Operator.GTE));
   }
 
   @Test
@@ -567,10 +755,14 @@ public class ConditionBuilderTest {
             .and(
                 ConditionBuilder.column("col8")
                     .isLessThanBlob(ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8))))
+            .and(ConditionBuilder.column("col9").isLessThanDate(ANY_DATE))
+            .and(ConditionBuilder.column("col10").isLessThanTime(ANY_TIME))
+            .and(ConditionBuilder.column("col11").isLessThanTimestamp(ANY_TIMESTAMP))
+            .and(ConditionBuilder.column("col12").isLessThanTimestampTZ(ANY_TIMESTAMPTZ))
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(8);
+    assertThat(actual.getExpressions().size()).isEqualTo(12);
     assertThat(actual.getExpressions().get(0))
         .isEqualTo(new ConditionalExpression("col1", true, Operator.LT));
     assertThat(actual.getExpressions().get(1))
@@ -591,6 +783,16 @@ public class ConditionBuilderTest {
         .isEqualTo(
             new ConditionalExpression(
                 "col8", ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8)), Operator.LT));
+    assertThat(actual.getExpressions().get(8))
+        .isEqualTo(new ConditionalExpression(DateColumn.of("col9", ANY_DATE), Operator.LT));
+    assertThat(actual.getExpressions().get(9))
+        .isEqualTo(new ConditionalExpression(TimeColumn.of("col10", ANY_TIME), Operator.LT));
+    assertThat(actual.getExpressions().get(10))
+        .isEqualTo(
+            new ConditionalExpression(TimestampColumn.of("col11", ANY_TIMESTAMP), Operator.LT));
+    assertThat(actual.getExpressions().get(11))
+        .isEqualTo(
+            new ConditionalExpression(TimestampTZColumn.of("col12", ANY_TIMESTAMPTZ), Operator.LT));
   }
 
   @Test
@@ -612,10 +814,14 @@ public class ConditionBuilderTest {
                 ConditionBuilder.column("col8")
                     .isLessThanOrEqualToBlob(
                         ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8))))
+            .and(ConditionBuilder.column("col9").isLessThanOrEqualToDate(ANY_DATE))
+            .and(ConditionBuilder.column("col10").isLessThanOrEqualToTime(ANY_TIME))
+            .and(ConditionBuilder.column("col11").isLessThanOrEqualToTimestamp(ANY_TIMESTAMP))
+            .and(ConditionBuilder.column("col12").isLessThanOrEqualToTimestampTZ(ANY_TIMESTAMPTZ))
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(8);
+    assertThat(actual.getExpressions().size()).isEqualTo(12);
     assertThat(actual.getExpressions().get(0))
         .isEqualTo(new ConditionalExpression("col1", true, Operator.LTE));
     assertThat(actual.getExpressions().get(1))
@@ -636,6 +842,17 @@ public class ConditionBuilderTest {
         .isEqualTo(
             new ConditionalExpression(
                 "col8", ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8)), Operator.LTE));
+    assertThat(actual.getExpressions().get(8))
+        .isEqualTo(new ConditionalExpression(DateColumn.of("col9", ANY_DATE), Operator.LTE));
+    assertThat(actual.getExpressions().get(9))
+        .isEqualTo(new ConditionalExpression(TimeColumn.of("col10", ANY_TIME), Operator.LTE));
+    assertThat(actual.getExpressions().get(10))
+        .isEqualTo(
+            new ConditionalExpression(TimestampColumn.of("col11", ANY_TIMESTAMP), Operator.LTE));
+    assertThat(actual.getExpressions().get(11))
+        .isEqualTo(
+            new ConditionalExpression(
+                TimestampTZColumn.of("col12", ANY_TIMESTAMPTZ), Operator.LTE));
   }
 
   @Test
@@ -651,10 +868,14 @@ public class ConditionBuilderTest {
             .and(ConditionBuilder.column("col5").isNullDouble())
             .and(ConditionBuilder.column("col6").isNullText())
             .and(ConditionBuilder.column("col7").isNullBlob())
+            .and(ConditionBuilder.column("col8").isNullDate())
+            .and(ConditionBuilder.column("col9").isNullTime())
+            .and(ConditionBuilder.column("col10").isNullTimestamp())
+            .and(ConditionBuilder.column("col11").isNullTimestampTZ())
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(7);
+    assertThat(actual.getExpressions().size()).isEqualTo(11);
     assertThat(actual.getExpressions().get(0).getColumn()).isEqualTo(BooleanColumn.ofNull("col1"));
     assertThat(actual.getExpressions().get(0).getOperator()).isEqualTo(Operator.IS_NULL);
     assertThat(actual.getExpressions().get(1).getColumn()).isEqualTo(IntColumn.ofNull("col2"));
@@ -669,6 +890,16 @@ public class ConditionBuilderTest {
     assertThat(actual.getExpressions().get(5).getOperator()).isEqualTo(Operator.IS_NULL);
     assertThat(actual.getExpressions().get(6).getColumn()).isEqualTo(BlobColumn.ofNull("col7"));
     assertThat(actual.getExpressions().get(6).getOperator()).isEqualTo(Operator.IS_NULL);
+    assertThat(actual.getExpressions().get(7).getColumn()).isEqualTo(DateColumn.ofNull("col8"));
+    assertThat(actual.getExpressions().get(7).getOperator()).isEqualTo(Operator.IS_NULL);
+    assertThat(actual.getExpressions().get(8).getColumn()).isEqualTo(TimeColumn.ofNull("col9"));
+    assertThat(actual.getExpressions().get(8).getOperator()).isEqualTo(Operator.IS_NULL);
+    assertThat(actual.getExpressions().get(9).getColumn())
+        .isEqualTo(TimestampColumn.ofNull("col10"));
+    assertThat(actual.getExpressions().get(9).getOperator()).isEqualTo(Operator.IS_NULL);
+    assertThat(actual.getExpressions().get(10).getColumn())
+        .isEqualTo(TimestampTZColumn.ofNull("col11"));
+    assertThat(actual.getExpressions().get(10).getOperator()).isEqualTo(Operator.IS_NULL);
   }
 
   @Test
@@ -684,10 +915,14 @@ public class ConditionBuilderTest {
             .and(ConditionBuilder.column("col5").isNotNullDouble())
             .and(ConditionBuilder.column("col6").isNotNullText())
             .and(ConditionBuilder.column("col7").isNotNullBlob())
+            .and(ConditionBuilder.column("col8").isNotNullDate())
+            .and(ConditionBuilder.column("col9").isNotNullTime())
+            .and(ConditionBuilder.column("col10").isNotNullTimestamp())
+            .and(ConditionBuilder.column("col11").isNotNullTimestampTZ())
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(7);
+    assertThat(actual.getExpressions().size()).isEqualTo(11);
     assertThat(actual.getExpressions().get(0).getColumn()).isEqualTo(BooleanColumn.ofNull("col1"));
     assertThat(actual.getExpressions().get(0).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
     assertThat(actual.getExpressions().get(1).getColumn()).isEqualTo(IntColumn.ofNull("col2"));
@@ -702,6 +937,16 @@ public class ConditionBuilderTest {
     assertThat(actual.getExpressions().get(5).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
     assertThat(actual.getExpressions().get(6).getColumn()).isEqualTo(BlobColumn.ofNull("col7"));
     assertThat(actual.getExpressions().get(6).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
+    assertThat(actual.getExpressions().get(7).getColumn()).isEqualTo(DateColumn.ofNull("col8"));
+    assertThat(actual.getExpressions().get(7).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
+    assertThat(actual.getExpressions().get(8).getColumn()).isEqualTo(TimeColumn.ofNull("col9"));
+    assertThat(actual.getExpressions().get(8).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
+    assertThat(actual.getExpressions().get(9).getColumn())
+        .isEqualTo(TimestampColumn.ofNull("col10"));
+    assertThat(actual.getExpressions().get(9).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
+    assertThat(actual.getExpressions().get(10).getColumn())
+        .isEqualTo(TimestampTZColumn.ofNull("col11"));
+    assertThat(actual.getExpressions().get(10).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
   }
 
   @Test
@@ -800,10 +1045,14 @@ public class ConditionBuilderTest {
             .and(
                 ConditionBuilder.column("col8")
                     .isEqualToBlob(ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8))))
+            .and(ConditionBuilder.column("col9").isEqualToDate(ANY_DATE))
+            .and(ConditionBuilder.column("col10").isEqualToTime(ANY_TIME))
+            .and(ConditionBuilder.column("col11").isEqualToTimestamp(ANY_TIMESTAMP))
+            .and(ConditionBuilder.column("col12").isEqualToTimestampTZ(ANY_TIMESTAMPTZ))
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(8);
+    assertThat(actual.getExpressions().size()).isEqualTo(12);
     assertThat(actual.getExpressions().get(0))
         .isEqualTo(new ConditionalExpression("col1", true, Operator.EQ));
     assertThat(actual.getExpressions().get(1))
@@ -824,6 +1073,16 @@ public class ConditionBuilderTest {
         .isEqualTo(
             new ConditionalExpression(
                 "col8", ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8)), Operator.EQ));
+    assertThat(actual.getExpressions().get(8))
+        .isEqualTo(new ConditionalExpression(DateColumn.of("col9", ANY_DATE), Operator.EQ));
+    assertThat(actual.getExpressions().get(9))
+        .isEqualTo(new ConditionalExpression(TimeColumn.of("col10", ANY_TIME), Operator.EQ));
+    assertThat(actual.getExpressions().get(10))
+        .isEqualTo(
+            new ConditionalExpression(TimestampColumn.of("col11", ANY_TIMESTAMP), Operator.EQ));
+    assertThat(actual.getExpressions().get(11))
+        .isEqualTo(
+            new ConditionalExpression(TimestampTZColumn.of("col12", ANY_TIMESTAMPTZ), Operator.EQ));
   }
 
   @Test
@@ -844,10 +1103,14 @@ public class ConditionBuilderTest {
             .and(
                 ConditionBuilder.column("col8")
                     .isNotEqualToBlob(ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8))))
+            .and(ConditionBuilder.column("col9").isNotEqualToDate(ANY_DATE))
+            .and(ConditionBuilder.column("col10").isNotEqualToTime(ANY_TIME))
+            .and(ConditionBuilder.column("col11").isNotEqualToTimestamp(ANY_TIMESTAMP))
+            .and(ConditionBuilder.column("col12").isNotEqualToTimestampTZ(ANY_TIMESTAMPTZ))
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(8);
+    assertThat(actual.getExpressions().size()).isEqualTo(12);
     assertThat(actual.getExpressions().get(0))
         .isEqualTo(new ConditionalExpression("col1", true, Operator.NE));
     assertThat(actual.getExpressions().get(1))
@@ -868,6 +1131,16 @@ public class ConditionBuilderTest {
         .isEqualTo(
             new ConditionalExpression(
                 "col8", ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8)), Operator.NE));
+    assertThat(actual.getExpressions().get(8))
+        .isEqualTo(new ConditionalExpression(DateColumn.of("col9", ANY_DATE), Operator.NE));
+    assertThat(actual.getExpressions().get(9))
+        .isEqualTo(new ConditionalExpression(TimeColumn.of("col10", ANY_TIME), Operator.NE));
+    assertThat(actual.getExpressions().get(10))
+        .isEqualTo(
+            new ConditionalExpression(TimestampColumn.of("col11", ANY_TIMESTAMP), Operator.NE));
+    assertThat(actual.getExpressions().get(11))
+        .isEqualTo(
+            new ConditionalExpression(TimestampTZColumn.of("col12", ANY_TIMESTAMPTZ), Operator.NE));
   }
 
   @Test
@@ -888,10 +1161,14 @@ public class ConditionBuilderTest {
             .and(
                 ConditionBuilder.column("col8")
                     .isGreaterThanBlob(ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8))))
+            .and(ConditionBuilder.column("col9").isGreaterThanDate(ANY_DATE))
+            .and(ConditionBuilder.column("col10").isGreaterThanTime(ANY_TIME))
+            .and(ConditionBuilder.column("col11").isGreaterThanTimestamp(ANY_TIMESTAMP))
+            .and(ConditionBuilder.column("col12").isGreaterThanTimestampTZ(ANY_TIMESTAMPTZ))
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(8);
+    assertThat(actual.getExpressions().size()).isEqualTo(12);
     assertThat(actual.getExpressions().get(0))
         .isEqualTo(new ConditionalExpression("col1", true, Operator.GT));
     assertThat(actual.getExpressions().get(1))
@@ -912,6 +1189,16 @@ public class ConditionBuilderTest {
         .isEqualTo(
             new ConditionalExpression(
                 "col8", ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8)), Operator.GT));
+    assertThat(actual.getExpressions().get(8))
+        .isEqualTo(new ConditionalExpression(DateColumn.of("col9", ANY_DATE), Operator.GT));
+    assertThat(actual.getExpressions().get(9))
+        .isEqualTo(new ConditionalExpression(TimeColumn.of("col10", ANY_TIME), Operator.GT));
+    assertThat(actual.getExpressions().get(10))
+        .isEqualTo(
+            new ConditionalExpression(TimestampColumn.of("col11", ANY_TIMESTAMP), Operator.GT));
+    assertThat(actual.getExpressions().get(11))
+        .isEqualTo(
+            new ConditionalExpression(TimestampTZColumn.of("col12", ANY_TIMESTAMPTZ), Operator.GT));
   }
 
   @Test
@@ -934,10 +1221,15 @@ public class ConditionBuilderTest {
                 ConditionBuilder.column("col8")
                     .isGreaterThanOrEqualToBlob(
                         ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8))))
+            .and(ConditionBuilder.column("col9").isGreaterThanOrEqualToDate(ANY_DATE))
+            .and(ConditionBuilder.column("col10").isGreaterThanOrEqualToTime(ANY_TIME))
+            .and(ConditionBuilder.column("col11").isGreaterThanOrEqualToTimestamp(ANY_TIMESTAMP))
+            .and(
+                ConditionBuilder.column("col12").isGreaterThanOrEqualToTimestampTZ(ANY_TIMESTAMPTZ))
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(8);
+    assertThat(actual.getExpressions().size()).isEqualTo(12);
     assertThat(actual.getExpressions().get(0))
         .isEqualTo(new ConditionalExpression("col1", true, Operator.GTE));
     assertThat(actual.getExpressions().get(1))
@@ -958,6 +1250,17 @@ public class ConditionBuilderTest {
         .isEqualTo(
             new ConditionalExpression(
                 "col8", ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8)), Operator.GTE));
+    assertThat(actual.getExpressions().get(8))
+        .isEqualTo(new ConditionalExpression(DateColumn.of("col9", ANY_DATE), Operator.GTE));
+    assertThat(actual.getExpressions().get(9))
+        .isEqualTo(new ConditionalExpression(TimeColumn.of("col10", ANY_TIME), Operator.GTE));
+    assertThat(actual.getExpressions().get(10))
+        .isEqualTo(
+            new ConditionalExpression(TimestampColumn.of("col11", ANY_TIMESTAMP), Operator.GTE));
+    assertThat(actual.getExpressions().get(11))
+        .isEqualTo(
+            new ConditionalExpression(
+                TimestampTZColumn.of("col12", ANY_TIMESTAMPTZ), Operator.GTE));
   }
 
   @Test
@@ -978,10 +1281,14 @@ public class ConditionBuilderTest {
             .and(
                 ConditionBuilder.column("col8")
                     .isLessThanBlob(ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8))))
+            .and(ConditionBuilder.column("col9").isLessThanDate(ANY_DATE))
+            .and(ConditionBuilder.column("col10").isLessThanTime(ANY_TIME))
+            .and(ConditionBuilder.column("col11").isLessThanTimestamp(ANY_TIMESTAMP))
+            .and(ConditionBuilder.column("col12").isLessThanTimestampTZ(ANY_TIMESTAMPTZ))
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(8);
+    assertThat(actual.getExpressions().size()).isEqualTo(12);
     assertThat(actual.getExpressions().get(0))
         .isEqualTo(new ConditionalExpression("col1", true, Operator.LT));
     assertThat(actual.getExpressions().get(1))
@@ -1002,6 +1309,16 @@ public class ConditionBuilderTest {
         .isEqualTo(
             new ConditionalExpression(
                 "col8", ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8)), Operator.LT));
+    assertThat(actual.getExpressions().get(8))
+        .isEqualTo(new ConditionalExpression(DateColumn.of("col9", ANY_DATE), Operator.LT));
+    assertThat(actual.getExpressions().get(9))
+        .isEqualTo(new ConditionalExpression(TimeColumn.of("col10", ANY_TIME), Operator.LT));
+    assertThat(actual.getExpressions().get(10))
+        .isEqualTo(
+            new ConditionalExpression(TimestampColumn.of("col11", ANY_TIMESTAMP), Operator.LT));
+    assertThat(actual.getExpressions().get(11))
+        .isEqualTo(
+            new ConditionalExpression(TimestampTZColumn.of("col12", ANY_TIMESTAMPTZ), Operator.LT));
   }
 
   @Test
@@ -1023,10 +1340,14 @@ public class ConditionBuilderTest {
                 ConditionBuilder.column("col8")
                     .isLessThanOrEqualToBlob(
                         ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8))))
+            .and(ConditionBuilder.column("col9").isLessThanOrEqualToDate(ANY_DATE))
+            .and(ConditionBuilder.column("col10").isLessThanOrEqualToTime(ANY_TIME))
+            .and(ConditionBuilder.column("col11").isLessThanOrEqualToTimestamp(ANY_TIMESTAMP))
+            .and(ConditionBuilder.column("col12").isLessThanOrEqualToTimestampTZ(ANY_TIMESTAMPTZ))
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(8);
+    assertThat(actual.getExpressions().size()).isEqualTo(12);
     assertThat(actual.getExpressions().get(0))
         .isEqualTo(new ConditionalExpression("col1", true, Operator.LTE));
     assertThat(actual.getExpressions().get(1))
@@ -1047,6 +1368,17 @@ public class ConditionBuilderTest {
         .isEqualTo(
             new ConditionalExpression(
                 "col8", ByteBuffer.wrap("blob2".getBytes(StandardCharsets.UTF_8)), Operator.LTE));
+    assertThat(actual.getExpressions().get(8))
+        .isEqualTo(new ConditionalExpression(DateColumn.of("col9", ANY_DATE), Operator.LTE));
+    assertThat(actual.getExpressions().get(9))
+        .isEqualTo(new ConditionalExpression(TimeColumn.of("col10", ANY_TIME), Operator.LTE));
+    assertThat(actual.getExpressions().get(10))
+        .isEqualTo(
+            new ConditionalExpression(TimestampColumn.of("col11", ANY_TIMESTAMP), Operator.LTE));
+    assertThat(actual.getExpressions().get(11))
+        .isEqualTo(
+            new ConditionalExpression(
+                TimestampTZColumn.of("col12", ANY_TIMESTAMPTZ), Operator.LTE));
   }
 
   @Test
@@ -1062,10 +1394,14 @@ public class ConditionBuilderTest {
             .and(ConditionBuilder.column("col5").isNullDouble())
             .and(ConditionBuilder.column("col6").isNullText())
             .and(ConditionBuilder.column("col7").isNullBlob())
+            .and(ConditionBuilder.column("col8").isNullDate())
+            .and(ConditionBuilder.column("col9").isNullTime())
+            .and(ConditionBuilder.column("col10").isNullTimestamp())
+            .and(ConditionBuilder.column("col11").isNullTimestampTZ())
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(7);
+    assertThat(actual.getExpressions().size()).isEqualTo(11);
     assertThat(actual.getExpressions().get(0).getColumn()).isEqualTo(BooleanColumn.ofNull("col1"));
     assertThat(actual.getExpressions().get(0).getOperator()).isEqualTo(Operator.IS_NULL);
     assertThat(actual.getExpressions().get(1).getColumn()).isEqualTo(IntColumn.ofNull("col2"));
@@ -1080,6 +1416,16 @@ public class ConditionBuilderTest {
     assertThat(actual.getExpressions().get(5).getOperator()).isEqualTo(Operator.IS_NULL);
     assertThat(actual.getExpressions().get(6).getColumn()).isEqualTo(BlobColumn.ofNull("col7"));
     assertThat(actual.getExpressions().get(6).getOperator()).isEqualTo(Operator.IS_NULL);
+    assertThat(actual.getExpressions().get(7).getColumn()).isEqualTo(DateColumn.ofNull("col8"));
+    assertThat(actual.getExpressions().get(7).getOperator()).isEqualTo(Operator.IS_NULL);
+    assertThat(actual.getExpressions().get(8).getColumn()).isEqualTo(TimeColumn.ofNull("col9"));
+    assertThat(actual.getExpressions().get(8).getOperator()).isEqualTo(Operator.IS_NULL);
+    assertThat(actual.getExpressions().get(9).getColumn())
+        .isEqualTo(TimestampColumn.ofNull("col10"));
+    assertThat(actual.getExpressions().get(9).getOperator()).isEqualTo(Operator.IS_NULL);
+    assertThat(actual.getExpressions().get(10).getColumn())
+        .isEqualTo(TimestampTZColumn.ofNull("col11"));
+    assertThat(actual.getExpressions().get(10).getOperator()).isEqualTo(Operator.IS_NULL);
   }
 
   @Test
@@ -1095,10 +1441,14 @@ public class ConditionBuilderTest {
             .and(ConditionBuilder.column("col5").isNotNullDouble())
             .and(ConditionBuilder.column("col6").isNotNullText())
             .and(ConditionBuilder.column("col7").isNotNullBlob())
+            .and(ConditionBuilder.column("col8").isNotNullDate())
+            .and(ConditionBuilder.column("col9").isNotNullTime())
+            .and(ConditionBuilder.column("col10").isNotNullTimestamp())
+            .and(ConditionBuilder.column("col11").isNotNullTimestampTZ())
             .build();
 
     // Assert
-    assertThat(actual.getExpressions().size()).isEqualTo(7);
+    assertThat(actual.getExpressions().size()).isEqualTo(11);
     assertThat(actual.getExpressions().get(0).getColumn()).isEqualTo(BooleanColumn.ofNull("col1"));
     assertThat(actual.getExpressions().get(0).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
     assertThat(actual.getExpressions().get(1).getColumn()).isEqualTo(IntColumn.ofNull("col2"));
@@ -1113,5 +1463,15 @@ public class ConditionBuilderTest {
     assertThat(actual.getExpressions().get(5).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
     assertThat(actual.getExpressions().get(6).getColumn()).isEqualTo(BlobColumn.ofNull("col7"));
     assertThat(actual.getExpressions().get(6).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
+    assertThat(actual.getExpressions().get(7).getColumn()).isEqualTo(DateColumn.ofNull("col8"));
+    assertThat(actual.getExpressions().get(7).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
+    assertThat(actual.getExpressions().get(8).getColumn()).isEqualTo(TimeColumn.ofNull("col9"));
+    assertThat(actual.getExpressions().get(8).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
+    assertThat(actual.getExpressions().get(9).getColumn())
+        .isEqualTo(TimestampColumn.ofNull("col10"));
+    assertThat(actual.getExpressions().get(9).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
+    assertThat(actual.getExpressions().get(10).getColumn())
+        .isEqualTo(TimestampTZColumn.ofNull("col11"));
+    assertThat(actual.getExpressions().get(10).getOperator()).isEqualTo(Operator.IS_NOT_NULL);
   }
 }

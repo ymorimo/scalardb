@@ -316,15 +316,20 @@ class RdbEngineMysql implements RdbEngineStrategy {
       case INT:
         return Types.INTEGER;
       case BIGINT:
+      case DATE:
+      case TIME:
         return Types.BIGINT;
       case FLOAT:
         return Types.FLOAT;
       case DOUBLE:
         return Types.DOUBLE;
       case TEXT:
+      case TIMESTAMP:
+      case TIMESTAMPTZ:
         return Types.VARCHAR;
       case BLOB:
         return Types.BLOB;
+        // TODO check utility
       default:
         throw new AssertionError();
     }
