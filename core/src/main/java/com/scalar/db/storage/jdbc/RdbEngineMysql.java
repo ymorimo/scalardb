@@ -317,10 +317,10 @@ class RdbEngineMysql
         }
         return DataType.BLOB;
       case DATE:
-        if (typeName.equalsIgnoreCase("YEAR")){
-                  throw new IllegalArgumentException(
-            CoreError.JDBC_IMPORT_DATA_TYPE_NOT_SUPPORTED.buildMessage(
-                typeName, columnDescription));
+        if (typeName.equalsIgnoreCase("YEAR")) {
+          throw new IllegalArgumentException(
+              CoreError.JDBC_IMPORT_DATA_TYPE_NOT_SUPPORTED.buildMessage(
+                  typeName, columnDescription));
         }
         return DataType.DATE;
       case TIME:
@@ -333,7 +333,7 @@ class RdbEngineMysql
               digits);
         }
         return DataType.TIME;
-        //Both MySQL TIMESTAMP and DATETIME data types are mapped to the TIMESTAMP JDBC type
+        // Both MySQL TIMESTAMP and DATETIME data types are mapped to the TIMESTAMP JDBC type
       case TIMESTAMP:
         if (overrideDataType == DataType.TIMESTAMPTZ || typeName.equalsIgnoreCase("TIMESTAMP")) {
           return DataType.TIMESTAMPTZ;

@@ -8,6 +8,7 @@ import com.scalar.db.io.Column;
 import com.scalar.db.io.DataType;
 import com.scalar.db.io.Key;
 import com.scalar.db.service.StorageFactory;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -91,14 +92,15 @@ public abstract class DistributedStorageAdminImportTableIntegrationTestBase {
   @AfterAll
   protected void afterAll() throws Exception {}
 
-  protected abstract List<TestData> createExistingDatabaseWithAllDataTypes() throws Exception;
+  protected abstract List<TestData> createExistingDatabaseWithAllDataTypes(
+      boolean createUnsupportedTables) throws SQLException;
 
   protected abstract void dropNonImportableTable(String table) throws Exception;
 
   @Test
   public void importTable_ShouldWorkProperly() throws Exception {
     // Arrange
-    testDataList.addAll(createExistingDatabaseWithAllDataTypes());
+    testDataList.addAll(createExistingDatabaseWithAllDataTypes(true));
 
     // Act Assert
     for (TestData testData : testDataList) {
@@ -138,7 +140,7 @@ public abstract class DistributedStorageAdminImportTableIntegrationTestBase {
 
   private void importTable_ForNonImportableTable_ShouldThrowIllegalArgumentException(String table) {
     // Act Assert
-    if (table.equalsIgnoreCase("bad_table8")){
+    if (table.equalsIgnoreCase("bad_table8")) {
       System.out.println("bad_table8");
     }
     assertThatThrownBy(
@@ -153,18 +155,35 @@ public abstract class DistributedStorageAdminImportTableIntegrationTestBase {
             () -> admin.importTable(getNamespace(), "non-existing-table", Collections.emptyMap()))
         .isInstanceOf(IllegalArgumentException.class);
   }
+    private void importTable_ForImportedTable_ShouldInsertThenGetCorrectly(
+       String table, Map<String, DataType> overrideColumnsType,TableMetadata metadata, List<Column<?>> insertColumns )
+      throws ExecutionException {
+    // Arrange
+    admin.importTable(getNamespace(), table, Collections.emptyMap(), overrideColumnsType);
+    Insert insert = Insert.newBuilder().namespace(getNamespace()).table(table).partitionKey(Key.of()).build();
+    // Act
+
+
+    // Assert
+    assertThat(admin.namespaceExists(getNamespace())).isTrue();
+    assertThat(admin.tableExists(getNamespace(), table)).isTrue();
+    assertThat(admin.getTableMetadata(getNamespace(), table)).isEqualTo(metadata);
+  }
+
 
   public static class TestData {
     private final String tableName;
     private final Map<String, DataType> overrideColumnsType;
     private final @Nullable TableMetadata expectedTableMetadata;
+    private final @Nullable List<Column<?>> insertColumns;
     public TestData(
         String tableName,
         Map<String, DataType> overrideColumnsType,
-        @Nullable TableMetadata expectedTableMetadata) {
+        @Nullable TableMetadata expectedTableMetadata, @Nullable List<Column<?>> columns) {
       this.tableName = tableName;
       this.overrideColumnsType = overrideColumnsType;
       this.expectedTableMetadata = expectedTableMetadata;
+      this.insertColumns = columns;
     }
 
     public String getTableName() {
@@ -175,10 +194,14 @@ public abstract class DistributedStorageAdminImportTableIntegrationTestBase {
       return overrideColumnsType;
     }
 
+    @Nullable
     public TableMetadata getExpectedTableMetadata() {
       return expectedTableMetadata;
     }
 
-
+    @Nullable
+    public List<Column<?>> getInsertColumns() {
+      return insertColumns;
+    }
   }
 }
