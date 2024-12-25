@@ -4,12 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.scalar.db.exception.storage.ExecutionException;
+import com.scalar.db.io.Column;
+import com.scalar.db.io.DataType;
+import com.scalar.db.io.Key;
 import com.scalar.db.service.StorageFactory;
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Properties;
+import javax.annotation.Nullable;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -26,8 +30,7 @@ public abstract class DistributedStorageAdminImportTableIntegrationTestBase {
 
   private static final String TEST_NAME = "storage_admin_import_table";
   private static final String NAMESPACE = "int_test_" + TEST_NAME;
-  private final Map<String, TableMetadata> tables = new HashMap<>();
-
+  private final List<TestData> testDataList = new ArrayList<>();
   protected DistributedStorageAdmin admin;
 
   @BeforeAll
@@ -48,13 +51,11 @@ public abstract class DistributedStorageAdminImportTableIntegrationTestBase {
   }
 
   private void dropTable() throws Exception {
-    for (Entry<String, TableMetadata> entry : tables.entrySet()) {
-      String table = entry.getKey();
-      TableMetadata metadata = entry.getValue();
-      if (metadata == null) {
-        dropNonImportableTable(table);
+    for (TestData testData : testDataList) {
+      if (testData.getExpectedTableMetadata() == null) {
+        dropNonImportableTable(testData.getTableName());
       } else {
-        admin.dropTable(getNamespace(), table);
+        admin.dropTable(getNamespace(), testData.getTableName());
       }
     }
     if (!admin.namespaceExists(getNamespace())) {
@@ -90,24 +91,25 @@ public abstract class DistributedStorageAdminImportTableIntegrationTestBase {
   @AfterAll
   protected void afterAll() throws Exception {}
 
-  protected abstract Map<String, TableMetadata> createExistingDatabaseWithAllDataTypes()
-      throws Exception;
+  protected abstract List<TestData> createExistingDatabaseWithAllDataTypes() throws Exception;
 
   protected abstract void dropNonImportableTable(String table) throws Exception;
 
   @Test
   public void importTable_ShouldWorkProperly() throws Exception {
     // Arrange
-    tables.putAll(createExistingDatabaseWithAllDataTypes());
+    testDataList.addAll(createExistingDatabaseWithAllDataTypes());
 
     // Act Assert
-    for (Entry<String, TableMetadata> entry : tables.entrySet()) {
-      String table = entry.getKey();
-      TableMetadata metadata = entry.getValue();
-      if (metadata == null) {
-        importTable_ForNonImportableTable_ShouldThrowIllegalArgumentException(table);
+    for (TestData testData : testDataList) {
+      if (testData.getExpectedTableMetadata() == null) {
+        importTable_ForNonImportableTable_ShouldThrowIllegalArgumentException(
+            testData.getTableName());
       } else {
-        importTable_ForImportableTable_ShouldImportProperly(table, metadata);
+        importTable_ForImportableTable_ShouldImportProperly(
+            testData.getTableName(),
+            testData.getOverrideColumnsType(),
+            testData.getExpectedTableMetadata());
       }
     }
     importTable_ForNonExistingTable_ShouldThrowIllegalArgumentException();
@@ -123,9 +125,10 @@ public abstract class DistributedStorageAdminImportTableIntegrationTestBase {
   }
 
   private void importTable_ForImportableTable_ShouldImportProperly(
-      String table, TableMetadata metadata) throws ExecutionException {
+      String table, Map<String, DataType> overrideColumnsType, TableMetadata metadata)
+      throws ExecutionException {
     // Act
-    admin.importTable(getNamespace(), table, Collections.emptyMap());
+    admin.importTable(getNamespace(), table, Collections.emptyMap(), overrideColumnsType);
 
     // Assert
     assertThat(admin.namespaceExists(getNamespace())).isTrue();
@@ -135,6 +138,9 @@ public abstract class DistributedStorageAdminImportTableIntegrationTestBase {
 
   private void importTable_ForNonImportableTable_ShouldThrowIllegalArgumentException(String table) {
     // Act Assert
+    if (table.equalsIgnoreCase("bad_table8")){
+      System.out.println("bad_table8");
+    }
     assertThatThrownBy(
             () -> admin.importTable(getNamespace(), table, Collections.emptyMap()),
             "non-importable data type test failed: " + table)
@@ -146,5 +152,33 @@ public abstract class DistributedStorageAdminImportTableIntegrationTestBase {
     assertThatThrownBy(
             () -> admin.importTable(getNamespace(), "non-existing-table", Collections.emptyMap()))
         .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  public static class TestData {
+    private final String tableName;
+    private final Map<String, DataType> overrideColumnsType;
+    private final @Nullable TableMetadata expectedTableMetadata;
+    public TestData(
+        String tableName,
+        Map<String, DataType> overrideColumnsType,
+        @Nullable TableMetadata expectedTableMetadata) {
+      this.tableName = tableName;
+      this.overrideColumnsType = overrideColumnsType;
+      this.expectedTableMetadata = expectedTableMetadata;
+    }
+
+    public String getTableName() {
+      return tableName;
+    }
+
+    public Map<String, DataType> getOverrideColumnsType() {
+      return overrideColumnsType;
+    }
+
+    public TableMetadata getExpectedTableMetadata() {
+      return expectedTableMetadata;
+    }
+
+
   }
 }

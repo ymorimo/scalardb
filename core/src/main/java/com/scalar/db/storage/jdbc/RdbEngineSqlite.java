@@ -148,7 +148,12 @@ class RdbEngineSqlite implements RdbEngineStrategy<Long, Long, Long, Long> {
 
   @Override
   public DataType getDataTypeForScalarDb(
-      JDBCType type, String typeName, int columnSize, int digits, String columnDescription) {
+      JDBCType type,
+      String typeName,
+      int columnSize,
+      int digits,
+      String columnDescription,
+      DataType overrideDataType) {
     throw new AssertionError("SQLite is not supported");
   }
 

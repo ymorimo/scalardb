@@ -1075,7 +1075,8 @@ public class CosmosAdminTest {
     String column = "col";
 
     // Act
-    Throwable thrown1 = catchThrowable(() -> admin.getImportTableMetadata(namespace, table));
+    Throwable thrown1 =
+        catchThrowable(() -> admin.getImportTableMetadata(namespace, table, ImmutableMap.of()));
     Throwable thrown2 =
         catchThrowable(() -> admin.addRawColumnToTable(namespace, table, column, DataType.INT));
     Throwable thrown3 =

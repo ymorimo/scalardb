@@ -1,5 +1,7 @@
 package com.scalar.db.storage.jdbc;
 
+import com.google.common.collect.ImmutableMap;
+import com.scalar.db.api.DistributedStorageAdminImportTableIntegrationTestBase.TestData;
 import com.scalar.db.api.TableMetadata;
 import com.scalar.db.config.DatabaseConfig;
 import com.scalar.db.io.DataType;
@@ -24,16 +26,12 @@ public class JdbcAdminImportTestUtils {
       Arrays.asList(
           "BIGINT UNSIGNED",
           "BIT(8)",
-          "DATE",
-          "DATETIME",
           "DECIMAL(8,2)",
           "ENUM('a','b')",
           "SET('a','b')",
           "GEOMETRY",
           "JSON", // we remove this for MariaDB because it is an alias of a supported type, LONGTEXT
           "NUMERIC",
-          "TIME",
-          "TIMESTAMP",
           "YEAR");
   static final List<String> UNSUPPORTED_DATA_TYPES_PGSQL =
       Arrays.asList(
@@ -43,7 +41,6 @@ public class JdbcAdminImportTestUtils {
           "box",
           "cidr",
           "circle",
-          "date",
           "inet",
           "interval",
           "json",
@@ -60,10 +57,7 @@ public class JdbcAdminImportTestUtils {
           "polygon",
           "serial",
           "smallserial",
-          "time",
           "time with time zone",
-          "timestamp",
-          "timestamp with time zone",
           "tsquery",
           "tsvector",
           "txid_snapshot",
@@ -74,25 +68,17 @@ public class JdbcAdminImportTestUtils {
   static final List<String> UNSUPPORTED_DATA_TYPES_ORACLE =
       Arrays.asList(
           "BFILE",
-          "DATE",
           "FLOAT(54)",
           "INT",
           "INTERVAL YEAR(3) TO MONTH",
           "INTERVAL DAY(2) TO SECOND",
           "NUMBER(16,0)",
           "ROWID",
-          "TIMESTAMP",
-          "TIMESTAMP WITH TIME ZONE",
-          "TIMESTAMP WITH LOCAL TIME ZONE",
           "UROWID");
   static final List<String> UNSUPPORTED_DATA_TYPES_ORACLE_V20_OR_LATER =
       Collections.singletonList("JSON");
   static final List<String> UNSUPPORTED_DATA_TYPES_MSSQL =
       Arrays.asList(
-          "date",
-          "datetime",
-          "datetime2",
-          "datetimeoffset",
           "decimal(8,2)",
           "hierarchyid",
           "money",
@@ -101,7 +87,6 @@ public class JdbcAdminImportTestUtils {
           "smalldatetime",
           "smallmoney",
           "sql_variant",
-          "time",
           "uniqueidentifier",
           "xml",
           "geometry",
@@ -122,7 +107,7 @@ public class JdbcAdminImportTestUtils {
   @Override
   protected final void finalize() {}
 
-  public Map<String, TableMetadata> createExistingDatabaseWithAllDataTypes(String namespace)
+  public List<TestData> createExistingDatabaseWithAllDataTypes(String namespace)
       throws SQLException {
     execute(rdbEngine.createSchemaSqls(namespace));
     if (JdbcTestUtils.isMysql(rdbEngine)) {
@@ -180,8 +165,13 @@ public class JdbcAdminImportTestUtils {
     columns.put("col19", "MEDIUMBLOB");
     columns.put("col20", "LONGBLOB");
     columns.put("col21", "BINARY(255)");
+    columns.put("col22", "DATE");
+    columns.put("col23", "TIME");
+    columns.put("col24", "DATETIME");
+    columns.put("col25", "DATETIME"); // override to TIMESTAMPTZ
+    columns.put("col26", "TIMESTAMP");
     if (isMariaDB()) {
-      columns.put("col22", "JSON");
+      columns.put("col27", "JSON");
     }
     return columns;
   }
@@ -212,12 +202,21 @@ public class JdbcAdminImportTestUtils {
             .addColumn("col19", DataType.BLOB)
             .addColumn("col20", DataType.BLOB)
             .addColumn("col21", DataType.BLOB)
+            .addColumn("col22", DataType.DATE)
+            .addColumn("col23", DataType.TIME)
+            .addColumn("col24", DataType.TIMESTAMP)
+            .addColumn("col25", DataType.TIMESTAMPTZ)
+            .addColumn("col26", DataType.TIMESTAMPTZ)
             .addPartitionKey("pk1")
             .addPartitionKey("pk2");
     if (isMariaDB()) {
-      builder.addColumn("col22", DataType.TEXT);
+      builder.addColumn("col27", DataType.TEXT);
     }
     return builder.build();
+  }
+
+  private Map<String, DataType> prepareOverrideColumnsTypeForMysql() {
+    return ImmutableMap.of("col25", DataType.TIMESTAMPTZ);
   }
 
   private LinkedHashMap<String, String> prepareColumnsForPostgresql() {
@@ -234,6 +233,10 @@ public class JdbcAdminImportTestUtils {
     columns.put("col08", "varchar(512)");
     columns.put("col09", "text");
     columns.put("col10", "bytea");
+    columns.put("col11", "date");
+    columns.put("col12", "time");
+    columns.put("col13", "timestamp");
+    columns.put("col14", "timestamp with time zone");
     return columns;
   }
 
@@ -251,6 +254,10 @@ public class JdbcAdminImportTestUtils {
         .addColumn("col08", DataType.TEXT)
         .addColumn("col09", DataType.TEXT)
         .addColumn("col10", DataType.BLOB)
+        .addColumn("col11", DataType.DATE)
+        .addColumn("col12", DataType.TIME)
+        .addColumn("col13", DataType.TIMESTAMP)
+        .addColumn("col14", DataType.TIMESTAMPTZ)
         .addPartitionKey("pk1")
         .addPartitionKey("pk2")
         .build();
@@ -274,7 +281,19 @@ public class JdbcAdminImportTestUtils {
     columns.put("col12", "LONG");
     columns.put("col13", "BLOB");
     columns.put("col14", "RAW(1024)");
+    columns.put("col15", "DATE");
+    columns.put("col16", "DATE"); // override to TIME
+    columns.put("col17", "DATE"); // override to TIMESTAMP
+    columns.put("col18", "TIMESTAMP");
+    columns.put("col19", "TIMESTAMP"); // override to TIME
+    columns.put("col20", "TIMESTAMP WITH TIME ZONE");
+    columns.put("col21", "TIMESTAMP WITH LOCAL TIME ZONE");
     return columns;
+  }
+
+  private Map<String, DataType> prepareOverrideColumnsTypeForOracle() {
+    return ImmutableMap.of(
+        "col16", DataType.TIME, "col17", DataType.TIMESTAMP, "col19", DataType.TIME);
   }
 
   private TableMetadata prepareTableMetadataForOracle() {
@@ -295,6 +314,13 @@ public class JdbcAdminImportTestUtils {
         .addColumn("col12", DataType.TEXT)
         .addColumn("col13", DataType.BLOB)
         .addColumn("col14", DataType.BLOB)
+        .addColumn("col15", DataType.DATE)
+        .addColumn("col16", DataType.TIME)
+        .addColumn("col17", DataType.TIMESTAMP)
+        .addColumn("col18", DataType.TIMESTAMP)
+        .addColumn("col19", DataType.TIME)
+        .addColumn("col20", DataType.TIMESTAMPTZ)
+        .addColumn("col21", DataType.TIMESTAMPTZ)
         .addPartitionKey("pk1")
         .addPartitionKey("pk2")
         .build();
@@ -338,6 +364,13 @@ public class JdbcAdminImportTestUtils {
     columns.put("col14", "binary");
     columns.put("col15", "varbinary");
     columns.put("col16", "image");
+    columns.put("col17", "date");
+    columns.put("col18", "time");
+    columns.put("col19", "datetime");
+    columns.put("col20", "datetime2");
+    columns.put("col21", "smalldatetime");
+    columns.put("col22", "datetimeoffset");
+
     return columns;
   }
 
@@ -361,6 +394,12 @@ public class JdbcAdminImportTestUtils {
         .addColumn("col14", DataType.BLOB)
         .addColumn("col15", DataType.BLOB)
         .addColumn("col16", DataType.BLOB)
+        .addColumn("col17", DataType.DATE)
+        .addColumn("col18", DataType.TIME)
+        .addColumn("col19", DataType.TIMESTAMP)
+        .addColumn("col20", DataType.TIMESTAMP)
+        .addColumn("col21", DataType.TIMESTAMP)
+        .addColumn("col22", DataType.TIMESTAMPTZ)
         .addPartitionKey("pk1")
         .addPartitionKey("pk2")
         .build();
@@ -400,7 +439,7 @@ public class JdbcAdminImportTestUtils {
         + "))";
   }
 
-  private Map<String, TableMetadata> createExistingMysqlDatabaseWithAllDataTypes(String namespace)
+  private List<TestData> createExistingMysqlDatabaseWithAllDataTypes(String namespace)
       throws SQLException {
     TableMetadata tableMetadata = prepareTableMetadataForMysql();
     Map<String, String> supportedTables =
@@ -426,12 +465,14 @@ public class JdbcAdminImportTestUtils {
       unsupportedTables =
           prepareCreateNonImportableTableSql(namespace, UNSUPPORTED_DATA_TYPES_MYSQL);
     }
+    Map<String, TableMetadata> tablesMetadata =
+        executeCreateTableSql(supportedTables, supportedTableMetadata, unsupportedTables);
 
-    return executeCreateTableSql(supportedTables, supportedTableMetadata, unsupportedTables);
+    return prepareTestData(tablesMetadata, prepareOverrideColumnsTypeForMysql());
   }
 
-  private Map<String, TableMetadata> createExistingPostgresDatabaseWithAllDataTypes(
-      String namespace) throws SQLException {
+  private List<TestData> createExistingPostgresDatabaseWithAllDataTypes(String namespace)
+      throws SQLException {
     TableMetadata tableMetadata = prepareTableMetadataForPostgresql();
     Map<String, String> supportedTables =
         Collections.singletonMap(
@@ -453,11 +494,13 @@ public class JdbcAdminImportTestUtils {
                         UNSUPPORTED_DATA_TYPES_PGSQL_V13_OR_LATER.stream())
                     .collect(Collectors.toList())
                 : UNSUPPORTED_DATA_TYPES_PGSQL);
+    Map<String, TableMetadata> tablesMetadata =
+        executeCreateTableSql(supportedTables, supportedTableMetadata, unsupportedTables);
 
-    return executeCreateTableSql(supportedTables, supportedTableMetadata, unsupportedTables);
+    return prepareTestData(tablesMetadata, Collections.emptyMap());
   }
 
-  private Map<String, TableMetadata> createExistingOracleDatabaseWithAllDataTypes(String namespace)
+  private List<TestData> createExistingOracleDatabaseWithAllDataTypes(String namespace)
       throws SQLException {
     Map<String, String> supportedTables = new HashMap<>();
     Map<String, TableMetadata> supportedTableMetadata = new HashMap<>();
@@ -492,12 +535,14 @@ public class JdbcAdminImportTestUtils {
                         UNSUPPORTED_DATA_TYPES_ORACLE_V20_OR_LATER.stream())
                     .collect(Collectors.toList())
                 : UNSUPPORTED_DATA_TYPES_ORACLE);
+    Map<String, TableMetadata> tablesMetadata =
+        executeCreateTableSql(supportedTables, supportedTableMetadata, unsupportedTables);
 
-    return executeCreateTableSql(supportedTables, supportedTableMetadata, unsupportedTables);
+    return prepareTestData(tablesMetadata, prepareOverrideColumnsTypeForOracle());
   }
 
-  private Map<String, TableMetadata> createExistingSqlServerDatabaseWithAllDataTypes(
-      String namespace) throws SQLException {
+  private List<TestData> createExistingSqlServerDatabaseWithAllDataTypes(String namespace)
+      throws SQLException {
     TableMetadata tableMetadata = prepareTableMetadataForSqlServer();
     Map<String, String> supportedTables =
         Collections.singletonMap(
@@ -513,7 +558,26 @@ public class JdbcAdminImportTestUtils {
     Map<String, String> unsupportedTables =
         prepareCreateNonImportableTableSql(namespace, UNSUPPORTED_DATA_TYPES_MSSQL);
 
-    return executeCreateTableSql(supportedTables, supportedTableMetadata, unsupportedTables);
+    Map<String, TableMetadata> tablesMetadata =
+        executeCreateTableSql(supportedTables, supportedTableMetadata, unsupportedTables);
+
+    return prepareTestData(tablesMetadata, Collections.emptyMap());
+  }
+
+  private List<TestData> prepareTestData(
+      Map<String, TableMetadata> tableMetadataMap,
+      Map<String, DataType> overideColumnsTypeMapForSupportedTable) {
+    return tableMetadataMap.entrySet().stream()
+        .map(
+            entry -> {
+              return new TestData(
+                  entry.getKey(),
+                  entry.getKey().equals(SUPPORTED_TABLE_NAME)
+                      ? overideColumnsTypeMapForSupportedTable
+                      : Collections.emptyMap(),
+                  entry.getValue());
+            })
+        .collect(Collectors.toList());
   }
 
   private Map<String, TableMetadata> executeCreateTableSql(

@@ -248,7 +248,12 @@ class RdbEngineOracle
 
   @Override
   public DataType getDataTypeForScalarDb(
-      JDBCType type, String typeName, int columnSize, int digits, String columnDescription) {
+      JDBCType type,
+      String typeName,
+      int columnSize,
+      int digits,
+      String columnDescription,
+      DataType overrideDataType) {
     String numericTypeDescription = String.format("%s(%d, %d)", typeName, columnSize, digits);
     switch (type) {
       case NUMERIC:
@@ -312,6 +317,21 @@ class RdbEngineOracle
             columnDescription,
             typeName);
         return DataType.BLOB;
+      case DATE:
+        if (overrideDataType == DataType.TIME) {
+          return DataType.TIME;
+        }
+        if (overrideDataType == DataType.TIMESTAMP) {
+          return DataType.TIMESTAMP;
+        }
+        return DataType.DATE;
+      case TIMESTAMP:
+        if (overrideDataType == DataType.TIME) {
+          return DataType.TIME;
+        }
+        return DataType.TIMESTAMP;
+      case TIMESTAMP_WITH_TIMEZONE:
+        return DataType.TIMESTAMPTZ;
       default:
         throw new IllegalArgumentException(
             CoreError.JDBC_IMPORT_DATA_TYPE_NOT_SUPPORTED.buildMessage(

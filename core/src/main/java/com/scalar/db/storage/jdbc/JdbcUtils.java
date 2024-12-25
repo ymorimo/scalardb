@@ -5,8 +5,12 @@ import java.sql.Connection;
 import java.sql.JDBCType;
 import java.util.Map.Entry;
 import org.apache.commons.dbcp2.BasicDataSource;
+import org.slf4j.LoggerFactory;
 
 public final class JdbcUtils {
+
+  private static final org.slf4j.Logger log = LoggerFactory.getLogger(JdbcUtils.class);
+
   private JdbcUtils() {}
 
   public static BasicDataSource initDataSource(

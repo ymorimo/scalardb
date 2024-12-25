@@ -1595,7 +1595,8 @@ public abstract class DynamoAdminTestBase {
   @Test
   public void unsupportedOperations_ShouldThrowUnsupportedException() {
     // Arrange Act
-    Throwable thrown1 = catchThrowable(() -> admin.getImportTableMetadata(NAMESPACE, TABLE));
+    Throwable thrown1 =
+        catchThrowable(() -> admin.getImportTableMetadata(NAMESPACE, TABLE, ImmutableMap.of()));
     Throwable thrown2 =
         catchThrowable(() -> admin.addRawColumnToTable(NAMESPACE, TABLE, "c1", DataType.INT));
     Throwable thrown3 =

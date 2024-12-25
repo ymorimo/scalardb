@@ -2,18 +2,23 @@ package com.scalar.db.schemaloader;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.scalar.db.common.error.CoreError;
+import com.scalar.db.io.DataType;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import javax.annotation.concurrent.Immutable;
 
 @Immutable
 public class ImportTableSchema {
+  private final String OVERRIDE_COLUMNS_TYPE = "override-columns-type";
   private final String namespace;
   private final String tableName;
   private final boolean isTransactionTable;
   private final ImmutableMap<String, String> options;
+  private final ImmutableMap<String, DataType> columns;
 
   public ImportTableSchema(
       String tableFullName, JsonObject tableDefinition, Map<String, String> options) {
@@ -30,6 +35,22 @@ public class ImportTableSchema {
     } else {
       isTransactionTable = true;
     }
+    JsonObject columns = tableDefinition.get(OVERRIDE_COLUMNS_TYPE).getAsJsonObject();
+    ImmutableMap.Builder<String, DataType> columnsBuilder = ImmutableMap.builder();
+    for (Entry<String, JsonElement> column : columns.entrySet()) {
+      String columnName = column.getKey();
+
+      String columnDataType = column.getValue().getAsString().trim();
+
+      DataType dataType = TableSchema.DATA_MAP_TYPE.get(columnDataType.toUpperCase());
+      if (dataType == null) {
+        throw new IllegalArgumentException(
+            CoreError.SCHEMA_LOADER_PARSE_ERROR_INVALID_COLUMN_TYPE.buildMessage(
+                tableFullName, columnName, column.getValue().getAsString()));
+      }
+      columnsBuilder.put(columnName, dataType);
+    }
+    this.columns = columnsBuilder.buildKeepingLast();
     this.options = buildOptions(tableDefinition, options);
   }
 
@@ -69,5 +90,9 @@ public class ImportTableSchema {
 
   public Map<String, String> getOptions() {
     return options;
+  }
+
+  public Map<String, DataType> getColumns() {
+    return columns;
   }
 }

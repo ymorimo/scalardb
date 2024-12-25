@@ -879,7 +879,8 @@ public class CassandraAdminTest {
 
     // Act
     Throwable thrown1 =
-        catchThrowable(() -> cassandraAdmin.getImportTableMetadata(namespace, table));
+        catchThrowable(
+            () -> cassandraAdmin.getImportTableMetadata(namespace, table, ImmutableMap.of()));
     Throwable thrown2 =
         catchThrowable(
             () -> cassandraAdmin.addRawColumnToTable(namespace, table, column, DataType.INT));
