@@ -726,6 +726,12 @@ public enum CoreError implements ScalarDbError {
       "This TimestampTZ column value precision cannot be smaller than a millisecond. Value: %s",
       "",
       ""),
+  JDBC_IMPORT_DATA_TYPE_OVERRIDE_NOT_SUPPORTED(
+      Category.USER_ERROR,
+      "0158",
+      "Data type %s is not supported as ScalarDB %s data type: %s",
+      "",
+      ""),
 
   //
   // Errors for the concurrency error category

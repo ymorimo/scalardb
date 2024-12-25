@@ -12,6 +12,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.description;
 import static org.mockito.Mockito.doAnswer;
@@ -2705,7 +2706,8 @@ public class JdbcAdminTest {
     String description = "database engine specific test failed: " + rdbEngine;
 
     // Act
-    TableMetadata actual = admin.getImportTableMetadata(NAMESPACE, TABLE);
+    // TODO Check this change
+    TableMetadata actual = admin.getImportTableMetadata(NAMESPACE, TABLE, Collections.emptyMap());
 
     // Assert
     verify(checkTableExistStatement, description(description))
@@ -2720,7 +2722,8 @@ public class JdbcAdminTest {
     JdbcAdmin admin = createJdbcAdminFor(rdbEngine);
 
     // Act Assert
-    assertThatThrownBy(() -> admin.getImportTableMetadata(NAMESPACE, TABLE))
+    // TODO Check this change
+    assertThatThrownBy(() -> admin.getImportTableMetadata(NAMESPACE, TABLE, Collections.emptyMap()))
         .isInstanceOf(UnsupportedOperationException.class);
   }
 
@@ -2759,7 +2762,8 @@ public class JdbcAdminTest {
     when(checkTableExistStatement.execute(any())).thenThrow(sqlException);
 
     // Act Assert
-    assertThatThrownBy(() -> admin.getImportTableMetadata(NAMESPACE, TABLE))
+    // TODO Check this change
+    assertThatThrownBy(() -> admin.getImportTableMetadata(NAMESPACE, TABLE, Collections.emptyMap()))
         .isInstanceOf(IllegalArgumentException.class);
     verify(
             checkTableExistStatement,
@@ -2788,7 +2792,9 @@ public class JdbcAdminTest {
     String description = "database engine specific test failed: " + rdbEngine;
 
     // Act
-    Throwable thrown = catchThrowable(() -> admin.getImportTableMetadata(NAMESPACE, TABLE));
+    Throwable thrown =
+        catchThrowable(
+            () -> admin.getImportTableMetadata(NAMESPACE, TABLE, Collections.emptyMap()));
 
     // Assert
     verify(checkTableExistStatement, description(description))
@@ -2839,7 +2845,8 @@ public class JdbcAdminTest {
     String description = "database engine specific test failed: " + rdbEngine;
 
     // Act
-    Throwable thrown = catchThrowable(() -> admin.getImportTableMetadata(NAMESPACE, TABLE));
+    // TODO Check this change
+    Throwable thrown = catchThrowable(() -> admin.getImportTableMetadata(NAMESPACE, TABLE, null));
 
     // Assert
     verify(checkTableExistStatement, description(description))
@@ -2931,7 +2938,10 @@ public class JdbcAdminTest {
 
     when(dataSource.getConnection()).thenReturn(connection);
     TableMetadata importedTableMetadata = mock(TableMetadata.class);
-    doReturn(importedTableMetadata).when(adminSpy).getImportTableMetadata(anyString(), anyString());
+    // TODO Check this change
+    doReturn(importedTableMetadata)
+        .when(adminSpy)
+        .getImportTableMetadata(anyString(), anyString(), anyMap());
     doNothing().when(adminSpy).createNamespacesTableIfNotExists(connection);
     doNothing().when(adminSpy).upsertIntoNamespacesTable(any(), anyString());
     doNothing()
@@ -2942,7 +2952,8 @@ public class JdbcAdminTest {
     adminSpy.importTable(NAMESPACE, TABLE, Collections.emptyMap());
 
     // Assert
-    verify(adminSpy).getImportTableMetadata(NAMESPACE, TABLE);
+    // TODO Check this change
+    verify(adminSpy).getImportTableMetadata(NAMESPACE, TABLE, Collections.emptyMap());
     verify(adminSpy).createNamespacesTableIfNotExists(connection);
     verify(adminSpy).upsertIntoNamespacesTable(connection, NAMESPACE);
     verify(adminSpy)

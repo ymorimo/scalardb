@@ -208,7 +208,12 @@ class RdbEngineSqlServer implements RdbEngineStrategy<String, LocalTime, String,
 
   @Override
   public DataType getDataTypeForScalarDb(
-      JDBCType type, String typeName, int columnSize, int digits, String columnDescription) {
+      JDBCType type,
+      String typeName,
+      int columnSize,
+      int digits,
+      String columnDescription,
+      DataType overrideDataType) {
     switch (type) {
       case BIT:
         if (columnSize != 1) {
@@ -274,6 +279,19 @@ class RdbEngineSqlServer implements RdbEngineStrategy<String, LocalTime, String,
         return DataType.BLOB;
       case LONGVARBINARY:
         return DataType.BLOB;
+      case DATE:
+        return DataType.DATE;
+      case TIME:
+        return DataType.TIME;
+      case TIMESTAMP:
+        return DataType.TIMESTAMP;
+      case OTHER:
+        if (!typeName.equalsIgnoreCase("datetimeoffset")) {
+          throw new IllegalArgumentException(
+              CoreError.JDBC_IMPORT_DATA_TYPE_NOT_SUPPORTED.buildMessage(
+                  typeName, columnDescription));
+        }
+        return DataType.TIMESTAMPTZ;
       default:
         throw new IllegalArgumentException(
             CoreError.JDBC_IMPORT_DATA_TYPE_NOT_SUPPORTED.buildMessage(
@@ -305,7 +323,7 @@ class RdbEngineSqlServer implements RdbEngineStrategy<String, LocalTime, String,
       case TIMESTAMP:
         return Types.TIMESTAMP;
       case TIMESTAMPTZ:
-        return Types.TIMESTAMP_WITH_TIMEZONE;
+        return microsoft.sql.Types.DATETIMEOFFSET;
       default:
         throw new AssertionError();
     }

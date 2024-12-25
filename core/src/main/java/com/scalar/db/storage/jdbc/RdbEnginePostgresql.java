@@ -231,7 +231,12 @@ class RdbEnginePostgresql
 
   @Override
   public DataType getDataTypeForScalarDb(
-      JDBCType type, String typeName, int columnSize, int digits, String columnDescription) {
+      JDBCType type,
+      String typeName,
+      int columnSize,
+      int digits,
+      String columnDescription,
+      DataType overrideDataType) {
     switch (type) {
       case BIT:
         if (columnSize != 1) {
@@ -289,6 +294,20 @@ class RdbEnginePostgresql
         return DataType.TEXT;
       case BINARY:
         return DataType.BLOB;
+      case DATE:
+        return DataType.DATE;
+      case TIME:
+        if (typeName.equalsIgnoreCase("timetz")) {
+          throw new IllegalArgumentException(
+              CoreError.JDBC_IMPORT_DATA_TYPE_NOT_SUPPORTED.buildMessage(
+                  typeName, columnDescription));
+        }
+        return DataType.TIME;
+      case TIMESTAMP:
+        if (typeName.equalsIgnoreCase("timestamptz")) {
+          return DataType.TIMESTAMPTZ;
+        }
+        return DataType.TIMESTAMP;
       default:
         throw new IllegalArgumentException(
             CoreError.JDBC_IMPORT_DATA_TYPE_NOT_SUPPORTED.buildMessage(

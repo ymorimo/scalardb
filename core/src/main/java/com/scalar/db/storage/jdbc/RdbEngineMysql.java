@@ -239,7 +239,12 @@ class RdbEngineMysql
 
   @Override
   public DataType getDataTypeForScalarDb(
-      JDBCType type, String typeName, int columnSize, int digits, String columnDescription) {
+      JDBCType type,
+      String typeName,
+      int columnSize,
+      int digits,
+      String columnDescription,
+      DataType overrideDataType) {
     switch (type) {
       case BIT:
         if (columnSize != 1) {
@@ -311,6 +316,29 @@ class RdbEngineMysql
               typeName);
         }
         return DataType.BLOB;
+      case DATE:
+        if (typeName.equalsIgnoreCase("YEAR")) {
+          throw new IllegalArgumentException(
+              CoreError.JDBC_IMPORT_DATA_TYPE_NOT_SUPPORTED.buildMessage(
+                  typeName, columnDescription));
+        }
+        return DataType.DATE;
+      case TIME:
+        if (digits != 6) {
+          logger.info(
+              "Data type is {} precise than that of underlying database is assigned: {} ({} has {} precision while TIME has 6 digits precision)",
+              digits > 6 ? "more" : "less",
+              columnDescription,
+              typeName,
+              digits);
+        }
+        return DataType.TIME;
+        // Both MySQL TIMESTAMP and DATETIME data types are mapped to the TIMESTAMP JDBC type
+      case TIMESTAMP:
+        if (overrideDataType == DataType.TIMESTAMPTZ || typeName.equalsIgnoreCase("TIMESTAMP")) {
+          return DataType.TIMESTAMPTZ;
+        }
+        return DataType.TIMESTAMP;
       default:
         throw new IllegalArgumentException(
             CoreError.JDBC_IMPORT_DATA_TYPE_NOT_SUPPORTED.buildMessage(
