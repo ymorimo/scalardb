@@ -90,7 +90,7 @@ public class Column<T> {
         }
       case BLOB:
         if (column.value == null) {
-          return BooleanColumn.ofNull(column.name);
+          return BlobColumn.ofNull(column.name);
         } else {
           return BlobColumn.of(column.name, (byte[]) column.value);
         }
