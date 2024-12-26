@@ -10,6 +10,7 @@ import com.scalar.db.io.DoubleColumn;
 import com.scalar.db.io.FloatColumn;
 import com.scalar.db.io.IntColumn;
 import com.scalar.db.io.TextColumn;
+import java.math.BigDecimal;
 import java.util.Objects;
 import javax.annotation.Nullable;
 
@@ -80,6 +81,9 @@ public class Column<T> {
         if (column.value == null) {
           return DoubleColumn.ofNull(column.name);
         } else {
+          if (column.value instanceof BigDecimal) {
+            return DoubleColumn.of(column.name, ((BigDecimal) column.value).doubleValue());
+          }
           return DoubleColumn.of(column.name, (double) column.value);
         }
       case TEXT:
