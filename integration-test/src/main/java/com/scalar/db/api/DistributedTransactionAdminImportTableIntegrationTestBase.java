@@ -5,13 +5,19 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.scalar.db.api.DistributedStorageAdminImportTableIntegrationTestBase.TestData;
 import com.scalar.db.exception.storage.ExecutionException;
+import com.scalar.db.exception.transaction.TransactionException;
+import com.scalar.db.io.Column;
 import com.scalar.db.io.DataType;
 import com.scalar.db.service.TransactionFactory;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -31,6 +37,7 @@ public abstract class DistributedTransactionAdminImportTableIntegrationTestBase 
   private final List<TestData> testDataList = new ArrayList<>();
 
   protected DistributedTransactionAdmin admin;
+  protected DistributedTransactionManager manager;
 
   @BeforeAll
   public void beforeAll() throws Exception {
@@ -51,7 +58,7 @@ public abstract class DistributedTransactionAdminImportTableIntegrationTestBase 
 
   private void dropTable() throws Exception {
     for (TestData testData : testDataList) {
-      if (testData.getExpectedTableMetadata() == null) {
+      if (testData.getTableMetadata() == null) {
         dropNonImportableTable(testData.getTableName());
       } else {
         admin.dropTable(getNamespace(), testData.getTableName());
@@ -62,12 +69,15 @@ public abstract class DistributedTransactionAdminImportTableIntegrationTestBase 
       admin.repairNamespace(getNamespace(), getCreationOptions());
     }
     admin.dropNamespace(getNamespace());
+    admin.dropCoordinatorTables();
   }
 
   @BeforeEach
   protected void setUp() throws Exception {
     TransactionFactory factory = TransactionFactory.create(getProperties(TEST_NAME));
     admin = factory.getTransactionAdmin();
+    manager = factory.getTransactionManager();
+    admin.createCoordinatorTables(true);
   }
 
   @AfterEach
@@ -101,17 +111,18 @@ public abstract class DistributedTransactionAdminImportTableIntegrationTestBase 
 
     // Act Assert
     for (TestData testData : testDataList) {
-      if (testData.getExpectedTableMetadata() == null) {
+      if (testData.getTableMetadata() == null) {
         importTable_ForNonImportableTable_ShouldThrowIllegalArgumentException(
             testData.getTableName());
       } else {
         importTable_ForImportableTable_ShouldImportProperly(
             testData.getTableName(),
             testData.getOverrideColumnsType(),
-            testData.getExpectedTableMetadata());
+            testData.getTableMetadata());
       }
     }
     importTable_ForNonExistingTable_ShouldThrowIllegalArgumentException();
+    importTable_ForImportedTable_ShouldInsertThenGetCorrectly();
   }
 
   @Test
@@ -146,5 +157,61 @@ public abstract class DistributedTransactionAdminImportTableIntegrationTestBase 
     assertThatThrownBy(
             () -> admin.importTable(getNamespace(), "non-existing-table", Collections.emptyMap()))
         .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  public void importTable_ForImportedTable_ShouldInsertThenGetCorrectly()
+      throws TransactionException {
+    // Arrange
+    List<Insert> inserts =
+        testDataList.stream()
+            .filter(TestData::isSupportedTable)
+            .map(td -> td.getInsert(getNamespace(), td.getTableName()))
+            .collect(Collectors.toList());
+    List<Get> gets =
+        testDataList.stream()
+            .filter(TestData::isSupportedTable)
+            .map(td -> td.getGet(getNamespace(), td.getTableName()))
+            .collect(Collectors.toList());
+
+    // Act
+    DistributedTransaction tx = manager.start();
+    for (Insert insert : inserts) {
+      tx.insert(insert);
+    }
+    tx.commit();
+
+    List<Optional<Result>> results = new ArrayList<>();
+    tx = manager.start();
+    for (Get get : gets) {
+      results.add(tx.get(get));
+    }
+    tx.commit();
+
+    // Assert
+    for (int i = 0; i < results.size(); i++) {
+      Insert insert = inserts.get(i);
+      Optional<Result> optResult = results.get(i);
+
+      assertThat(optResult).isPresent();
+      Result result = optResult.get();
+      Set<String> actualColumnNamesWithoutKeys = new HashSet<>(result.getContainedColumnNames());
+      actualColumnNamesWithoutKeys.removeAll(
+          insert.getPartitionKey().getColumns().stream()
+              .map(Column::getName)
+              .collect(Collectors.toSet()));
+
+      assertThat(actualColumnNamesWithoutKeys)
+          .containsExactlyInAnyOrderElementsOf(insert.getColumns().keySet());
+      result.getColumns().entrySet().stream()
+          .filter(
+              e -> {
+                // Filter partition key columns
+                return !insert.getPartitionKey().getColumns().contains(e.getValue());
+              })
+          .forEach(
+              entry ->
+                  // Assert each result column is equal to the column inserted with the put
+                  assertThat(entry.getValue()).isEqualTo(insert.getColumns().get(entry.getKey())));
+    }
   }
 }

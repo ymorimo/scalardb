@@ -1,9 +1,6 @@
 package com.scalar.db.transaction.consensuscommit;
 
-import com.scalar.db.api.DistributedStorageAdminImportTableIntegrationTestBase.TestData;
 import com.scalar.db.api.DistributedTransactionAdminImportTableIntegrationTestBase;
-import java.sql.SQLException;
-import java.util.List;
 import java.util.Properties;
 
 public abstract class ConsensusCommitAdminImportTableIntegrationTestBase
@@ -21,7 +18,4 @@ public abstract class ConsensusCommitAdminImportTableIntegrationTestBase
   }
 
   protected abstract Properties getProps(String testName);
-
-  protected abstract List<TestData> createExistingDatabaseWithAllDataTypes(
-      boolean createUnsupportedTables) throws SQLException;
 }

@@ -43,8 +43,8 @@ public class JdbcAdminImportTableIntegrationTest
   }
 
   @Override
-  protected List<TestData> createExistingDatabaseWithAllDataTypes(boolean createUnsupportedTables) throws SQLException {
-    return testUtils.createExistingDatabaseWithAllDataTypes(getNamespace(), createUnsupportedTables);
+  protected List<TestData> createExistingDatabaseWithAllDataTypes() throws SQLException {
+    return testUtils.createExistingDatabaseWithAllDataTypes(getNamespace());
   }
 
   @Override

@@ -317,21 +317,29 @@ class RdbEngineOracle
             columnDescription,
             typeName);
         return DataType.BLOB;
-      case DATE:
-        if (overrideDataType == DataType.TIME) {
-          return DataType.TIME;
-        }
-        if (overrideDataType == DataType.TIMESTAMP) {
-          return DataType.TIMESTAMP;
-        }
-        return DataType.DATE;
       case TIMESTAMP:
+        // handles "date" type
+        if (typeName.equalsIgnoreCase("date")) {
+          if (overrideDataType == DataType.TIME) {
+            return DataType.TIME;
+          }
+          if (overrideDataType == DataType.TIMESTAMP) {
+            return DataType.TIMESTAMP;
+          }
+          return DataType.DATE;
+        }
+        // handles "timestamp" type
         if (overrideDataType == DataType.TIME) {
           return DataType.TIME;
         }
         return DataType.TIMESTAMP;
-      case TIMESTAMP_WITH_TIMEZONE:
-        return DataType.TIMESTAMPTZ;
+      case OTHER:
+        if (typeName.toLowerCase().endsWith("time zone")) {
+          return DataType.TIMESTAMPTZ;
+        }
+        throw new IllegalArgumentException(
+            CoreError.JDBC_IMPORT_DATA_TYPE_NOT_SUPPORTED.buildMessage(
+                typeName, columnDescription));
       default:
         throw new IllegalArgumentException(
             CoreError.JDBC_IMPORT_DATA_TYPE_NOT_SUPPORTED.buildMessage(

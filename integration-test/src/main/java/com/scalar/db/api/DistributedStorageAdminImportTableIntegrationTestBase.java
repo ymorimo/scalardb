@@ -6,15 +6,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.scalar.db.exception.storage.ExecutionException;
 import com.scalar.db.io.Column;
 import com.scalar.db.io.DataType;
-import com.scalar.db.io.Key;
 import com.scalar.db.service.StorageFactory;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
-import javax.annotation.Nullable;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -33,6 +35,7 @@ public abstract class DistributedStorageAdminImportTableIntegrationTestBase {
   private static final String NAMESPACE = "int_test_" + TEST_NAME;
   private final List<TestData> testDataList = new ArrayList<>();
   protected DistributedStorageAdmin admin;
+  protected DistributedStorage storage;
 
   @BeforeAll
   public void beforeAll() throws Exception {
@@ -53,7 +56,7 @@ public abstract class DistributedStorageAdminImportTableIntegrationTestBase {
 
   private void dropTable() throws Exception {
     for (TestData testData : testDataList) {
-      if (testData.getExpectedTableMetadata() == null) {
+      if (!testData.isSupportedTable()) {
         dropNonImportableTable(testData.getTableName());
       } else {
         admin.dropTable(getNamespace(), testData.getTableName());
@@ -70,6 +73,7 @@ public abstract class DistributedStorageAdminImportTableIntegrationTestBase {
   protected void setUp() throws Exception {
     StorageFactory factory = StorageFactory.create(getProperties(TEST_NAME));
     admin = factory.getStorageAdmin();
+    storage = factory.getStorage();
   }
 
   @AfterEach
@@ -92,29 +96,29 @@ public abstract class DistributedStorageAdminImportTableIntegrationTestBase {
   @AfterAll
   protected void afterAll() throws Exception {}
 
-  protected abstract List<TestData> createExistingDatabaseWithAllDataTypes(
-      boolean createUnsupportedTables) throws SQLException;
+  protected abstract List<TestData> createExistingDatabaseWithAllDataTypes() throws SQLException;
 
   protected abstract void dropNonImportableTable(String table) throws Exception;
 
   @Test
   public void importTable_ShouldWorkProperly() throws Exception {
     // Arrange
-    testDataList.addAll(createExistingDatabaseWithAllDataTypes(true));
+    testDataList.addAll(createExistingDatabaseWithAllDataTypes());
 
     // Act Assert
     for (TestData testData : testDataList) {
-      if (testData.getExpectedTableMetadata() == null) {
+      if (!testData.isSupportedTable()) {
         importTable_ForNonImportableTable_ShouldThrowIllegalArgumentException(
             testData.getTableName());
       } else {
         importTable_ForImportableTable_ShouldImportProperly(
             testData.getTableName(),
             testData.getOverrideColumnsType(),
-            testData.getExpectedTableMetadata());
+            testData.getTableMetadata());
       }
     }
     importTable_ForNonExistingTable_ShouldThrowIllegalArgumentException();
+    importTable_ForImportedTable_ShouldPutThenGetCorrectly();
   }
 
   @Test
@@ -140,9 +144,6 @@ public abstract class DistributedStorageAdminImportTableIntegrationTestBase {
 
   private void importTable_ForNonImportableTable_ShouldThrowIllegalArgumentException(String table) {
     // Act Assert
-    if (table.equalsIgnoreCase("bad_table8")) {
-      System.out.println("bad_table8");
-    }
     assertThatThrownBy(
             () -> admin.importTable(getNamespace(), table, Collections.emptyMap()),
             "non-importable data type test failed: " + table)
@@ -155,53 +156,70 @@ public abstract class DistributedStorageAdminImportTableIntegrationTestBase {
             () -> admin.importTable(getNamespace(), "non-existing-table", Collections.emptyMap()))
         .isInstanceOf(IllegalArgumentException.class);
   }
-    private void importTable_ForImportedTable_ShouldInsertThenGetCorrectly(
-       String table, Map<String, DataType> overrideColumnsType,TableMetadata metadata, List<Column<?>> insertColumns )
-      throws ExecutionException {
-    // Arrange
-    admin.importTable(getNamespace(), table, Collections.emptyMap(), overrideColumnsType);
-    Insert insert = Insert.newBuilder().namespace(getNamespace()).table(table).partitionKey(Key.of()).build();
-    // Act
 
+  public void importTable_ForImportedTable_ShouldPutThenGetCorrectly() throws ExecutionException {
+    // Arrange
+    List<Put> puts =
+        testDataList.stream()
+            .filter(TestData::isSupportedTable)
+            .map(td -> td.getPut(getNamespace(), td.getTableName()))
+            .collect(Collectors.toList());
+    List<Get> gets =
+        testDataList.stream()
+            .filter(TestData::isSupportedTable)
+            .map(td -> td.getGet(getNamespace(), td.getTableName()))
+            .collect(Collectors.toList());
+
+    // Act
+    for (Put put : puts) {
+      storage.put(put);
+    }
+    List<Optional<Result>> results = new ArrayList<>();
+    for (Get get : gets) {
+      results.add(storage.get(get));
+    }
 
     // Assert
-    assertThat(admin.namespaceExists(getNamespace())).isTrue();
-    assertThat(admin.tableExists(getNamespace(), table)).isTrue();
-    assertThat(admin.getTableMetadata(getNamespace(), table)).isEqualTo(metadata);
+    for (int i = 0; i < results.size(); i++) {
+      Put put = puts.get(i);
+      Optional<Result> optResult = results.get(i);
+
+      assertThat(optResult).isPresent();
+      Result result = optResult.get();
+      Set<String> actualColumnNamesWithoutKeys = new HashSet<>(result.getContainedColumnNames());
+      actualColumnNamesWithoutKeys.removeAll(
+          put.getPartitionKey().getColumns().stream()
+              .map(Column::getName)
+              .collect(Collectors.toSet()));
+
+      assertThat(actualColumnNamesWithoutKeys)
+          .containsExactlyInAnyOrderElementsOf(put.getContainedColumnNames());
+      result.getColumns().entrySet().stream()
+          .filter(
+              e -> {
+                // Filter partition key columns
+                return !put.getPartitionKey().getColumns().contains(e.getValue());
+              })
+          .forEach(
+              entry ->
+                  // Assert each result column is equal to the column inserted with the put
+                  assertThat(entry.getValue()).isEqualTo(put.getColumns().get(entry.getKey())));
+    }
   }
 
+  public interface TestData {
+    boolean isSupportedTable();
 
-  public static class TestData {
-    private final String tableName;
-    private final Map<String, DataType> overrideColumnsType;
-    private final @Nullable TableMetadata expectedTableMetadata;
-    private final @Nullable List<Column<?>> insertColumns;
-    public TestData(
-        String tableName,
-        Map<String, DataType> overrideColumnsType,
-        @Nullable TableMetadata expectedTableMetadata, @Nullable List<Column<?>> columns) {
-      this.tableName = tableName;
-      this.overrideColumnsType = overrideColumnsType;
-      this.expectedTableMetadata = expectedTableMetadata;
-      this.insertColumns = columns;
-    }
+    String getTableName();
 
-    public String getTableName() {
-      return tableName;
-    }
+    Map<String, DataType> getOverrideColumnsType();
 
-    public Map<String, DataType> getOverrideColumnsType() {
-      return overrideColumnsType;
-    }
+    TableMetadata getTableMetadata();
 
-    @Nullable
-    public TableMetadata getExpectedTableMetadata() {
-      return expectedTableMetadata;
-    }
+    Insert getInsert(String namespace, String table);
 
-    @Nullable
-    public List<Column<?>> getInsertColumns() {
-      return insertColumns;
-    }
+    Put getPut(String namespace, String table);
+
+    Get getGet(String namespace, String table);
   }
 }

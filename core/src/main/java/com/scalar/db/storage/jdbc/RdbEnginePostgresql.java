@@ -297,11 +297,17 @@ class RdbEnginePostgresql
       case DATE:
         return DataType.DATE;
       case TIME:
+        if (typeName.equalsIgnoreCase("timetz")) {
+          throw new IllegalArgumentException(
+              CoreError.JDBC_IMPORT_DATA_TYPE_NOT_SUPPORTED.buildMessage(
+                  typeName, columnDescription));
+        }
         return DataType.TIME;
       case TIMESTAMP:
+        if (typeName.equalsIgnoreCase("timestamptz")) {
+          return DataType.TIMESTAMPTZ;
+        }
         return DataType.TIMESTAMP;
-      case TIMESTAMP_WITH_TIMEZONE:
-        return DataType.TIMESTAMPTZ;
       default:
         throw new IllegalArgumentException(
             CoreError.JDBC_IMPORT_DATA_TYPE_NOT_SUPPORTED.buildMessage(

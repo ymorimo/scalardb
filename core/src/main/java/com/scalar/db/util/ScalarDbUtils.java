@@ -30,7 +30,6 @@ import com.scalar.db.io.BlobValue;
 import com.scalar.db.io.BooleanColumn;
 import com.scalar.db.io.BooleanValue;
 import com.scalar.db.io.Column;
-import com.scalar.db.io.DataType;
 import com.scalar.db.io.DoubleColumn;
 import com.scalar.db.io.DoubleValue;
 import com.scalar.db.io.FloatColumn;
@@ -434,17 +433,5 @@ public final class ScalarDbUtils {
       builder.add(column);
     }
     return Optional.of(builder.build());
-  }
-
-  public static void throwIfNotMatching(
-      DataType actual,
-      @Nullable DataType overrideDataType,
-      String typeName,
-      String columnDescription) {
-    if (actual != null && actual != overrideDataType) {
-      throw new IllegalArgumentException(
-          CoreError.JDBC_IMPORT_DATA_TYPE_OVERRIDE_NOT_SUPPORTED.buildMessage(
-              typeName, overrideDataType, columnDescription));
-    }
   }
 }

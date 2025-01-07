@@ -285,7 +285,12 @@ class RdbEngineSqlServer implements RdbEngineStrategy<String, LocalTime, String,
         return DataType.TIME;
       case TIMESTAMP:
         return DataType.TIMESTAMP;
-      case TIMESTAMP_WITH_TIMEZONE:
+      case OTHER:
+        if (!typeName.equalsIgnoreCase("datetimeoffset")) {
+          throw new IllegalArgumentException(
+              CoreError.JDBC_IMPORT_DATA_TYPE_NOT_SUPPORTED.buildMessage(
+                  typeName, columnDescription));
+        }
         return DataType.TIMESTAMPTZ;
       default:
         throw new IllegalArgumentException(

@@ -3,7 +3,11 @@ package com.scalar.db.storage.jdbc;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.scalar.db.api.DistributedStorageAdminImportTableIntegrationTestBase.TestData;
+import com.scalar.db.api.Get;
 import com.scalar.db.api.Insert;
+import com.scalar.db.api.InsertBuilder;
+import com.scalar.db.api.Put;
+import com.scalar.db.api.PutBuilder;
 import com.scalar.db.api.TableMetadata;
 import com.scalar.db.config.DatabaseConfig;
 import com.scalar.db.io.BigIntColumn;
@@ -30,7 +34,6 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -105,7 +108,6 @@ public class JdbcAdminImportTestUtils {
           "money",
           "numeric(8,2)",
           "rowversion",
-          "smalldatetime",
           "smallmoney",
           "sql_variant",
           "uniqueidentifier",
@@ -128,17 +130,17 @@ public class JdbcAdminImportTestUtils {
   @Override
   protected final void finalize() {}
 
-  public List<TestData> createExistingDatabaseWithAllDataTypes(String namespace, boolean createUnsupportedTables)
+  public List<TestData> createExistingDatabaseWithAllDataTypes(String namespace)
       throws SQLException {
     execute(rdbEngine.createSchemaSqls(namespace));
     if (JdbcTestUtils.isMysql(rdbEngine)) {
-      return createExistingMysqlDatabaseWithAllDataTypes(namespace, createUnsupportedTables);
+      return createExistingMysqlDatabaseWithAllDataTypes(namespace);
     } else if (JdbcTestUtils.isPostgresql(rdbEngine)) {
-      return createExistingPostgresDatabaseWithAllDataTypes(namespace, createUnsupportedTables);
+      return createExistingPostgresDatabaseWithAllDataTypes(namespace);
     } else if (JdbcTestUtils.isOracle(rdbEngine)) {
-      return createExistingOracleDatabaseWithAllDataTypes(namespace, createUnsupportedTables);
+      return createExistingOracleDatabaseWithAllDataTypes(namespace);
     } else if (JdbcTestUtils.isSqlServer(rdbEngine)) {
-      return createExistingSqlServerDatabaseWithAllDataTypes(namespace, createUnsupportedTables);
+      return createExistingSqlServerDatabaseWithAllDataTypes(namespace);
     } else {
       throw new RuntimeException();
     }
@@ -185,12 +187,12 @@ public class JdbcAdminImportTestUtils {
     columns.put("col18", "TINYBLOB");
     columns.put("col19", "MEDIUMBLOB");
     columns.put("col20", "LONGBLOB");
-    columns.put("col21", "BINARY(255)");
+    columns.put("col21", "BINARY(5)");
     columns.put("col22", "DATE");
-    columns.put("col23", "TIME");
-    columns.put("col24", "DATETIME");
-    columns.put("col25", "DATETIME"); // override to TIMESTAMPTZ
-    columns.put("col26", "TIMESTAMP");
+    columns.put("col23", "TIME(6)");
+    columns.put("col24", "DATETIME(6)");
+    columns.put("col25", "DATETIME(6)"); // override to TIMESTAMPTZ
+    columns.put("col26", "TIMESTAMP(6)");
     if (isMariaDB()) {
       columns.put("col27", "JSON");
     }
@@ -236,6 +238,17 @@ public class JdbcAdminImportTestUtils {
     return builder.build();
   }
 
+  private Map<String, Column<?>> prepareInsertColumnsForMysql(TableMetadata metadata) {
+    ImmutableList.Builder<Column<?>> customColumns = new ImmutableList.Builder<>();
+    customColumns.add(
+        TimestampTZColumn.of(
+            "col26", LocalDateTime.of(2005, 10, 11, 8, 35).toInstant(ZoneOffset.UTC)));
+    if (isMariaDB()) {
+      customColumns.add(TextColumn.of("col27", "{\"foo\": \"bar\"}"));
+    }
+    return prepareInsertColumns(metadata, customColumns.build());
+  }
+
   private Map<String, DataType> prepareOverrideColumnsTypeForMysql() {
     return ImmutableMap.of("col25", DataType.TIMESTAMPTZ);
   }
@@ -250,7 +263,7 @@ public class JdbcAdminImportTestUtils {
     columns.put("col04", "bigint");
     columns.put("col05", "real");
     columns.put("col06", "double precision");
-    columns.put("col07", "char(8)");
+    columns.put("col07", "char(3)");
     columns.put("col08", "varchar(512)");
     columns.put("col09", "text");
     columns.put("col10", "bytea");
@@ -286,16 +299,16 @@ public class JdbcAdminImportTestUtils {
 
   private LinkedHashMap<String, String> prepareColumnsForOracle() {
     LinkedHashMap<String, String> columns = new LinkedHashMap<>();
-    columns.put("pk1", "CHAR(8)");
-    columns.put("pk2", "CHAR(8)");
+    columns.put("pk1", "CHAR(3)");
+    columns.put("pk2", "CHAR(3)");
     columns.put("col01", "NUMERIC(15,0)");
     columns.put("col02", "NUMERIC(15,2)");
     columns.put("col03", "FLOAT(53)");
     columns.put("col04", "BINARY_FLOAT");
     columns.put("col05", "BINARY_DOUBLE");
-    columns.put("col06", "CHAR(8)");
+    columns.put("col06", "CHAR(3)");
     columns.put("col07", "VARCHAR2(512)");
-    columns.put("col08", "NCHAR(8)");
+    columns.put("col08", "NCHAR(3)");
     columns.put("col09", "NVARCHAR2(512)");
     columns.put("col10", "CLOB");
     columns.put("col11", "NCLOB");
@@ -347,15 +360,18 @@ public class JdbcAdminImportTestUtils {
         .build();
   }
 
-    private List<Column<?>> prepareInsertColumnsForOracle(TableMetadata metadata){
-    List<Column<?>> customColumns = ImmutableList.of(TimeColumn.of("col16", LocalTime.of( 11, 8, 35)), TimestampColumn.of("col17", LocalDateTime.of(1905, 10, 11, 8, 35)));
+  private Map<String, Column<?>> prepareInsertColumnsForOracle(TableMetadata metadata) {
+    List<Column<?>> customColumns =
+        ImmutableList.of(
+            TimeColumn.of("col16", LocalTime.of(11, 8, 35)),
+            TimestampColumn.of("col17", LocalDateTime.of(1905, 10, 11, 8, 35)));
     return prepareInsertColumns(metadata, customColumns);
   }
 
   private LinkedHashMap<String, String> prepareColumnsForOracleLongRaw() {
     LinkedHashMap<String, String> columns = new LinkedHashMap<>();
-    columns.put("pk1", "CHAR(8)");
-    columns.put("pk2", "CHAR(8)");
+    columns.put("pk1", "CHAR(3)");
+    columns.put("pk2", "CHAR(3)");
     columns.put("col", "LONG RAW");
     return columns;
   }
@@ -381,14 +397,14 @@ public class JdbcAdminImportTestUtils {
     columns.put("col05", "bigint");
     columns.put("col06", "real");
     columns.put("col07", "float");
-    columns.put("col08", "char(8)");
+    columns.put("col08", "char(3)");
     columns.put("col09", "varchar(512)");
-    columns.put("col10", "nchar(8)");
+    columns.put("col10", "nchar(3)");
     columns.put("col11", "nvarchar(512)");
     columns.put("col12", "text");
     columns.put("col13", "ntext");
-    columns.put("col14", "binary");
-    columns.put("col15", "varbinary");
+    columns.put("col14", "binary(5)");
+    columns.put("col15", "varbinary(5)");
     columns.put("col16", "image");
     columns.put("col17", "date");
     columns.put("col18", "time");
@@ -431,19 +447,24 @@ public class JdbcAdminImportTestUtils {
         .build();
   }
 
-  private List<Column<?>> prepareInsertColumnsForSqlServer(TableMetadata metadata){
-    List<Column<?>> customColumns = ImmutableList.of(TimestampColumn.of("col25", LocalDateTime.of(1905, 10, 11, 8, 35)));
+  private Map<String, Column<?>> prepareInsertColumnsForSqlServer(TableMetadata metadata) {
+    List<Column<?>> customColumns =
+        ImmutableList.of(
+            TimestampColumn.of("col19", LocalDateTime.of(1905, 10, 11, 8, 35, 14, 123_000_000)),
+            TimestampColumn.of("col21", LocalDateTime.of(1905, 10, 11, 8, 35)));
     return prepareInsertColumns(metadata, customColumns);
   }
 
-  private Map<String, String> prepareCreateNonImportableTableSql(
+  private List<JdbcTestData> prepareCreateNonImportableTableSql(
       String namespace, List<String> types) {
-    Map<String, String> tables = new HashMap<>();
+    ImmutableList.Builder<JdbcTestData> data = new ImmutableList.Builder<>();
     for (int i = 0; i < types.size(); i++) {
       String table = "bad_table" + i;
-      tables.put(table, prepareCreateNonImportableTableSql(namespace, table, types.get(i)));
+      data.add(
+          JdbcTestData.createUnsupportedTable(
+              table, prepareCreateNonImportableTableSql(namespace, table, types.get(i))));
     }
-    return tables;
+    return data.build();
   }
 
   private String prepareCreateNonImportableTableSql(String namespace, String table, String type) {
@@ -470,53 +491,61 @@ public class JdbcAdminImportTestUtils {
         + "))";
   }
 
-  private List<TestData> createExistingMysqlDatabaseWithAllDataTypes(String namespace, boolean createUnsupportedTables)
+  private List<TestData> createExistingMysqlDatabaseWithAllDataTypes(String namespace)
       throws SQLException {
+    List<JdbcTestData> data = new ArrayList<>();
     TableMetadata tableMetadata = prepareTableMetadataForMysql();
-    Map<String, String> supportedTables =
-        Collections.singletonMap(
+    String sql =
+        prepareCreateTableSql(
+            namespace,
             SUPPORTED_TABLE_NAME,
-            prepareCreateTableSql(
-                namespace,
-                SUPPORTED_TABLE_NAME,
-                prepareColumnsForMysql(),
-                tableMetadata.getPartitionKeyNames()));
-    Map<String, TableMetadata> supportedTableMetadata =
-        Collections.singletonMap(SUPPORTED_TABLE_NAME, tableMetadata);
+            prepareColumnsForMysql(),
+            tableMetadata.getPartitionKeyNames());
+    data.add(
+        JdbcTestData.createSupportedTable(
+            SUPPORTED_TABLE_NAME,
+            sql,
+            tableMetadata,
+            prepareOverrideColumnsTypeForMysql(),
+            prepareInsertColumnsForMysql(tableMetadata)));
 
-    Map<String, String> unsupportedTables = new HashMap<>();
-    if (isMariaDB() && createUnsupportedTables) {
-      unsupportedTables.putAll(prepareCreateNonImportableTableSql(
+    if (isMariaDB()) {
+      data.addAll(
+          prepareCreateNonImportableTableSql(
               namespace,
               UNSUPPORTED_DATA_TYPES_MYSQL.stream()
                   .filter(type -> !type.equalsIgnoreCase("JSON"))
-                  .collect(Collectors.toList()));
-    } else if (createUnsupportedTables) {
-      unsupportedTables.putAll(
-          prepareCreateNonImportableTableSql(namespace, UNSUPPORTED_DATA_TYPES_MYSQL));
+                  .collect(Collectors.toList())));
+    } else {
+      data.addAll(prepareCreateNonImportableTableSql(namespace, UNSUPPORTED_DATA_TYPES_MYSQL));
     }
-    Map<String, TableMetadata> tablesMetadata =
-        executeCreateTableSql(supportedTables, supportedTableMetadata, unsupportedTables);
 
-    return prepareTestData(tablesMetadata, prepareOverrideColumnsTypeForMysql(),prepareInsertColumns(tableMetadata));
+    executeCreateTableSql(data);
+
+    return ImmutableList.copyOf(data);
   }
 
-  private List<TestData> createExistingPostgresDatabaseWithAllDataTypes(String namespace, boolean createUnsupportedTables)
+  private List<TestData> createExistingPostgresDatabaseWithAllDataTypes(String namespace)
       throws SQLException {
+    List<JdbcTestData> data = new ArrayList<>();
+
     TableMetadata tableMetadata = prepareTableMetadataForPostgresql();
-    Map<String, String> supportedTables =
-        Collections.singletonMap(
+    String sql =
+        prepareCreateTableSql(
+            namespace,
             SUPPORTED_TABLE_NAME,
-            prepareCreateTableSql(
-                namespace,
-                SUPPORTED_TABLE_NAME,
-                prepareColumnsForPostgresql(),
-                tableMetadata.getPartitionKeyNames()));
-    Map<String, TableMetadata> supportedTableMetadata =
-        Collections.singletonMap(SUPPORTED_TABLE_NAME, tableMetadata);
-    Map<String, String> unsupportedTables = new HashMap<>();
-    if (createUnsupportedTables){
-       unsupportedTables.putAll(prepareCreateNonImportableTableSql(
+            prepareColumnsForPostgresql(),
+            tableMetadata.getPartitionKeyNames());
+    data.add(
+        JdbcTestData.createSupportedTable(
+            SUPPORTED_TABLE_NAME,
+            sql,
+            tableMetadata,
+            Collections.emptyMap(),
+            prepareInsertColumns(tableMetadata)));
+
+    data.addAll(
+        prepareCreateNonImportableTableSql(
             namespace,
             majorVersion >= 13
                 ? Stream.concat(
@@ -524,125 +553,92 @@ public class JdbcAdminImportTestUtils {
                         UNSUPPORTED_DATA_TYPES_PGSQL_V13_OR_LATER.stream())
                     .collect(Collectors.toList())
                 : UNSUPPORTED_DATA_TYPES_PGSQL));
-    }
 
-    Map<String, TableMetadata> tablesMetadata =
-        executeCreateTableSql(supportedTables, supportedTableMetadata, unsupportedTables);
+    executeCreateTableSql(data);
 
-    return prepareTestData(tablesMetadata, Collections.emptyMap(), prepareInsertColumns(tableMetadata));
+    return ImmutableList.copyOf(data);
   }
 
-  private List<TestData> createExistingOracleDatabaseWithAllDataTypes(String namespace, boolean createUnsupportedTables)
+  private List<TestData> createExistingOracleDatabaseWithAllDataTypes(String namespace)
       throws SQLException {
-    Map<String, String> supportedTables = new HashMap<>();
-    Map<String, TableMetadata> supportedTableMetadata = new HashMap<>();
+    List<JdbcTestData> data = new ArrayList<>();
 
     TableMetadata tableMetadata = prepareTableMetadataForOracle();
-    supportedTables.put(
-        SUPPORTED_TABLE_NAME,
+    String sql =
         prepareCreateTableSql(
             namespace,
             SUPPORTED_TABLE_NAME,
             prepareColumnsForOracle(),
-            tableMetadata.getPartitionKeyNames()));
-    supportedTableMetadata.put(SUPPORTED_TABLE_NAME, tableMetadata);
+            tableMetadata.getPartitionKeyNames());
+    data.add(
+        JdbcTestData.createSupportedTable(
+            SUPPORTED_TABLE_NAME,
+            sql,
+            tableMetadata,
+            prepareOverrideColumnsTypeForOracle(),
+            prepareInsertColumnsForOracle(tableMetadata)));
 
     // LONG columns must be tested with separated tables since they cannot be coexisted
     TableMetadata longRawTableMetadata = prepareTableMetadataForOracleForLongRaw();
-    supportedTables.put(
-        SUPPORTED_TABLE_NAME + "_long_raw",
+    String longRawSupportedTable = SUPPORTED_TABLE_NAME + "_long_raw";
+    String longRawSql =
         prepareCreateTableSql(
             namespace,
-            SUPPORTED_TABLE_NAME + "_long_raw",
+            longRawSupportedTable,
             prepareColumnsForOracleLongRaw(),
-            longRawTableMetadata.getPartitionKeyNames()));
-    supportedTableMetadata.put(SUPPORTED_TABLE_NAME + "_long_raw", longRawTableMetadata);
+            longRawTableMetadata.getPartitionKeyNames());
+    data.add(
+        JdbcTestData.createSupportedTable(
+            longRawSupportedTable,
+            longRawSql,
+            longRawTableMetadata,
+            Collections.emptyMap(),
+            prepareInsertColumns(longRawTableMetadata)));
 
-    Map<String, String> unsupportedTables = new HashMap<>();
-    if (createUnsupportedTables) {
-      unsupportedTables.putAll(prepareCreateNonImportableTableSql(
-          namespace,
-          majorVersion >= 20
-              ? Stream.concat(
-                  UNSUPPORTED_DATA_TYPES_ORACLE.stream(),
-                  UNSUPPORTED_DATA_TYPES_ORACLE_V20_OR_LATER.stream())
-              .collect(Collectors.toList())
-              : UNSUPPORTED_DATA_TYPES_ORACLE));
-    }
-    Map<String, TableMetadata> tablesMetadata =
-        executeCreateTableSql(supportedTables, supportedTableMetadata, unsupportedTables);
+    data.addAll(
+        prepareCreateNonImportableTableSql(
+            namespace,
+            majorVersion >= 20
+                ? Stream.concat(
+                        UNSUPPORTED_DATA_TYPES_ORACLE.stream(),
+                        UNSUPPORTED_DATA_TYPES_ORACLE_V20_OR_LATER.stream())
+                    .collect(Collectors.toList())
+                : UNSUPPORTED_DATA_TYPES_ORACLE));
 
-    return prepareTestData(tablesMetadata, prepareOverrideColumnsTypeForOracle(), prepareInsertColumnsForOracle(tableMetadata));
+    executeCreateTableSql(data);
+
+    return ImmutableList.copyOf(data);
   }
 
-  private List<TestData> createExistingSqlServerDatabaseWithAllDataTypes(String namespace, boolean createUnsupportedTables)
+  private List<TestData> createExistingSqlServerDatabaseWithAllDataTypes(String namespace)
       throws SQLException {
+    List<JdbcTestData> data = new ArrayList<>();
+
     TableMetadata tableMetadata = prepareTableMetadataForSqlServer();
-    Map<String, String> supportedTables =
-        Collections.singletonMap(
+    String sql =
+        prepareCreateTableSql(
+            namespace,
             SUPPORTED_TABLE_NAME,
-            prepareCreateTableSql(
-                namespace,
-                SUPPORTED_TABLE_NAME,
-                prepareColumnsForSqlServer(),
-                tableMetadata.getPartitionKeyNames()));
-    Map<String, TableMetadata> supportedTableMetadata =
-        Collections.singletonMap(SUPPORTED_TABLE_NAME, tableMetadata);
+            prepareColumnsForSqlServer(),
+            tableMetadata.getPartitionKeyNames());
+    data.add(
+        JdbcTestData.createSupportedTable(
+            SUPPORTED_TABLE_NAME,
+            sql,
+            tableMetadata,
+            Collections.emptyMap(),
+            prepareInsertColumnsForSqlServer(tableMetadata)));
 
-    Map<String, String> unsupportedTables = new HashMap<>();
-    if (createUnsupportedTables){
-      unsupportedTables.putAll(prepareCreateNonImportableTableSql(namespace, UNSUPPORTED_DATA_TYPES_MSSQL));
-    }
+    data.addAll(prepareCreateNonImportableTableSql(namespace, UNSUPPORTED_DATA_TYPES_MSSQL));
 
-    Map<String, TableMetadata> tablesMetadata =
-        executeCreateTableSql(supportedTables, supportedTableMetadata, unsupportedTables);
+    executeCreateTableSql(data);
 
-    return prepareTestData(tablesMetadata, Collections.emptyMap(), prepareInsertColumnsForSqlServer(tableMetadata));
+    return ImmutableList.copyOf(data);
   }
 
-  private List<TestData> prepareTestData(
-      Map<String, TableMetadata> tableMetadataMap,
-      Map<String, DataType> overrideColumnsTypeMapForSupportedTable, @Nullable List<Column<?>> insertColumns) {
-    return tableMetadataMap.entrySet().stream()
-        .map(
-            entry -> {
-              String tableName = entry.getKey();
-              Map<String, DataType> overrideColumnsTypeMap =
-                  entry.getKey().equals(SUPPORTED_TABLE_NAME)
-                      ? overrideColumnsTypeMapForSupportedTable
-                      : Collections.emptyMap();
-              TableMetadata tableMetadata = entry.getValue();
-              List<Column<?>> insertColumnsParam = entry.getKey().equals(SUPPORTED_TABLE_NAME) ? insertColumns: null;
-              return new TestData(
-                  tableName, overrideColumnsTypeMap, tableMetadata, insertColumnsParam);
-            })
-        .collect(Collectors.toList());
-  }
-
-  private Map<String, TableMetadata> executeCreateTableSql(
-      Map<String, String> supportedTables,
-      Map<String, TableMetadata> supportedTableMetadata,
-      Map<String, String> unsupportedTables)
-      throws SQLException {
-    Map<String, TableMetadata> results = new HashMap<>();
-    List<String> sqls = new ArrayList<>();
-
-    // table with all supported columns
-    supportedTables.forEach(
-        (table, sql) -> {
-          sqls.add(sql);
-          results.put(table, supportedTableMetadata.get(table));
-        });
-
-    // tables with an unsupported column
-    unsupportedTables.forEach(
-        (table, sql) -> {
-          sqls.add(sql);
-          results.put(table, null);
-        });
-
-    execute(sqls.toArray(new String[0]));
-    return results;
+  private void executeCreateTableSql(List<JdbcTestData> data) throws SQLException {
+    String[] sqls = data.stream().map(JdbcTestData::getCreateTableSql).toArray(String[]::new);
+    execute(sqls);
   }
 
   private boolean isMariaDB() {
@@ -662,21 +658,22 @@ public class JdbcAdminImportTestUtils {
     }
   }
 
-  private List<Column<?>> prepareInsertColumns(TableMetadata tableMetadata, List<Column<?>> customColumns){
-    Map<String, Column<?>> columnsByName = prepareInsertColumns(tableMetadata).
-        stream().collect(Collectors.toMap(Column::getName, column -> column));
-    Map<String, Column<?>> customColumnsByName = customColumns.stream().collect(Collectors.toMap(Column::getName, column -> column));
+  private Map<String, Column<?>> prepareInsertColumns(
+      TableMetadata tableMetadata, List<Column<?>> customColumns) {
+    Map<String, Column<?>> columnsByName = prepareInsertColumns(tableMetadata);
+    Map<String, Column<?>> customColumnsByName =
+        customColumns.stream().collect(Collectors.toMap(Column::getName, column -> column));
     columnsByName.putAll(customColumnsByName);
 
-    return ImmutableList.copyOf(columnsByName.values());
+    return columnsByName;
   }
 
-  private List<Column<?>> prepareInsertColumns(TableMetadata tableMetadata) {
+  private Map<String, Column<?>> prepareInsertColumns(TableMetadata tableMetadata) {
     return tableMetadata.getColumnNames().stream()
         .map(
             columnName ->
                 prepareGenericColumnValue(columnName, tableMetadata.getColumnDataType(columnName)))
-        .collect(Collectors.toList());
+        .collect(Collectors.toMap(Column::getName, column -> column));
   }
 
   private Column<?> prepareGenericColumnValue(String columnName, DataType columnType) {
@@ -686,7 +683,7 @@ public class JdbcAdminImportTestUtils {
       case TEXT:
         return TextColumn.of(columnName, "foo");
       case BLOB:
-        return BlobColumn.of(columnName, "bar".getBytes(StandardCharsets.UTF_8));
+        return BlobColumn.of(columnName, "ABCDE".getBytes(StandardCharsets.UTF_8));
       case FLOAT:
         return FloatColumn.of(columnName, 1.2F);
       case DOUBLE:
@@ -700,25 +697,138 @@ public class JdbcAdminImportTestUtils {
       case TIME:
         return TimeColumn.of(columnName, LocalTime.of(5, 45, 33, 123_456_000));
       case TIMESTAMP:
-        return TimestampColumn.of(columnName, LocalDateTime.of(1003, 3, 2, 8, 35, 12,123_000_000));
+        return TimestampColumn.of(columnName, LocalDateTime.of(1003, 3, 2, 8, 35, 12, 123_000_000));
       case TIMESTAMPTZ:
         return TimestampTZColumn.of(
-            columnName, LocalDateTime.of(1003, 3, 2, 8, 35, 12,123_000_000).toInstant(ZoneOffset.UTC));
+            columnName,
+            LocalDateTime.of(1003, 3, 2, 8, 35, 12, 123_000_000).toInstant(ZoneOffset.UTC));
       default:
         throw new AssertionError();
     }
   }
 
-  public Insert
-   prepareInsert(String namespace, String table, TableMetadata metadata, List<Column<?>> columns)  {
-    return Insert.newBuilder().namespace(namespace).table(table).partitionKey(Key.of()).columns(columns).build();
-  }
-
-  private Key preparePartitionKey(TableMetadata metadata, Column<?> columns) {
-    metadata.getPartitionKeyNames().forEach();
-  }
-
   public void close() throws SQLException {
     dataSource.close();
+  }
+
+  @SuppressWarnings("UseCorrectAssertInTests")
+  public static class JdbcTestData implements TestData {
+
+    private final String tableName;
+    private final Map<String, DataType> overrideColumnsType;
+    private final @Nullable TableMetadata tableMetadata;
+    private final @Nullable Map<String, Column<?>> columns;
+    private String createTableSql;
+
+    private JdbcTestData(
+        String tableName,
+        String createTableSql,
+        Map<String, DataType> overrideColumnsType,
+        @Nullable TableMetadata tableMetadata,
+        @Nullable Map<String, Column<?>> columns) {
+      this.tableName = tableName;
+      this.createTableSql = createTableSql;
+      this.tableMetadata = tableMetadata;
+      this.overrideColumnsType = overrideColumnsType;
+      this.columns = columns;
+    }
+
+    public static JdbcTestData createSupportedTable(
+        String tableName,
+        String createTableSql,
+        TableMetadata tableMetadata,
+        Map<String, DataType> overrideColumnsType,
+        Map<String, Column<?>> columns) {
+      return new JdbcTestData(
+          tableName, createTableSql, overrideColumnsType, tableMetadata, columns);
+    }
+
+    public static JdbcTestData createUnsupportedTable(String tableName, String createTableSql) {
+      return new JdbcTestData(tableName, createTableSql, Collections.emptyMap(), null, null);
+    }
+
+    @Override
+    public boolean isSupportedTable() {
+      return tableMetadata != null;
+    }
+
+    @Override
+    public String getTableName() {
+      return tableName;
+    }
+
+    private String getCreateTableSql() {
+      return createTableSql;
+    }
+
+    @Override
+    public Map<String, DataType> getOverrideColumnsType() {
+      return overrideColumnsType;
+    }
+
+    @Nullable
+    @Override
+    public TableMetadata getTableMetadata() {
+      return tableMetadata;
+    }
+
+    @Override
+    public Insert getInsert(String namespace, String table) {
+      assert columns != null;
+      assert tableMetadata != null;
+
+      InsertBuilder.Buildable insert =
+          Insert.newBuilder().namespace(namespace).table(table).partitionKey(preparePartitionKey());
+      columns.forEach(
+          (name, column) -> {
+            if (!tableMetadata.getPartitionKeyNames().contains(name)) {
+              insert.value(column);
+            }
+          });
+
+      return insert.build();
+    }
+
+    @Override
+    public Put getPut(String namespace, String table) {
+      assert columns != null;
+      assert tableMetadata != null;
+
+      PutBuilder.Buildable put =
+          Put.newBuilder().namespace(namespace).table(table).partitionKey(preparePartitionKey());
+      columns.forEach(
+          (name, column) -> {
+            if (!tableMetadata.getPartitionKeyNames().contains(name)) {
+              put.value(column);
+            }
+          });
+
+      return put.build();
+    }
+
+    @Override
+    public Get getGet(String namespace, String table) {
+      assert columns != null;
+
+      return Get.newBuilder()
+          .namespace(namespace)
+          .table(table)
+          .partitionKey(preparePartitionKey())
+          .build();
+    }
+
+    private Key preparePartitionKey() {
+      assert tableMetadata != null;
+      Key.Builder key = Key.newBuilder();
+      tableMetadata
+          .getPartitionKeyNames()
+          .forEach(
+              col -> {
+                assert columns != null;
+                key.add(columns.get(col));
+              });
+
+      return key.build();
+    }
   }
 }
