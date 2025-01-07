@@ -715,15 +715,15 @@ public class JdbcAdminImportTestUtils {
   public static class JdbcTestData implements TestData {
 
     private final String tableName;
-    private final Map<String, DataType> overrideColumnsType;
+    private final @Nullable Map<String, DataType> overrideColumnsType;
     private final @Nullable TableMetadata tableMetadata;
     private final @Nullable Map<String, Column<?>> columns;
-    private String createTableSql;
+    private final String createTableSql;
 
     private JdbcTestData(
         String tableName,
         String createTableSql,
-        Map<String, DataType> overrideColumnsType,
+        @Nullable Map<String, DataType> overrideColumnsType,
         @Nullable TableMetadata tableMetadata,
         @Nullable Map<String, Column<?>> columns) {
       this.tableName = tableName;
@@ -744,7 +744,7 @@ public class JdbcAdminImportTestUtils {
     }
 
     public static JdbcTestData createUnsupportedTable(String tableName, String createTableSql) {
-      return new JdbcTestData(tableName, createTableSql, Collections.emptyMap(), null, null);
+      return new JdbcTestData(tableName, createTableSql, null, null, null);
     }
 
     @Override
@@ -763,12 +763,13 @@ public class JdbcAdminImportTestUtils {
 
     @Override
     public Map<String, DataType> getOverrideColumnsType() {
+      assert overrideColumnsType != null;
       return overrideColumnsType;
     }
 
-    @Nullable
     @Override
     public TableMetadata getTableMetadata() {
+      assert tableMetadata != null;
       return tableMetadata;
     }
 

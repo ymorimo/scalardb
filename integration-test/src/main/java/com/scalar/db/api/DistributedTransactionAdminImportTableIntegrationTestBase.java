@@ -58,7 +58,7 @@ public abstract class DistributedTransactionAdminImportTableIntegrationTestBase 
 
   private void dropTable() throws Exception {
     for (TestData testData : testDataList) {
-      if (testData.getTableMetadata() == null) {
+      if (!testData.isSupportedTable()) {
         dropNonImportableTable(testData.getTableName());
       } else {
         admin.dropTable(getNamespace(), testData.getTableName());
