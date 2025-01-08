@@ -111,7 +111,7 @@ public abstract class DistributedTransactionAdminImportTableIntegrationTestBase 
 
     // Act Assert
     for (TestData testData : testDataList) {
-      if (testData.getTableMetadata() == null) {
+      if (!testData.isSupportedTable()) {
         importTable_ForNonImportableTable_ShouldThrowIllegalArgumentException(
             testData.getTableName());
       } else {
