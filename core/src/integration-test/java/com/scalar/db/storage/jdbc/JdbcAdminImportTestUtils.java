@@ -687,7 +687,7 @@ public class JdbcAdminImportTestUtils {
       case FLOAT:
         return FloatColumn.of(columnName, 1.2F);
       case DOUBLE:
-        return DoubleColumn.of(columnName, 3.14);
+        return DoubleColumn.of(columnName, 4.23);
       case BIGINT:
         return BigIntColumn.of(columnName, 101);
       case BOOLEAN:
@@ -764,7 +764,7 @@ public class JdbcAdminImportTestUtils {
     @Override
     public Map<String, DataType> getOverrideColumnsType() {
       assert overrideColumnsType != null;
-      return overrideColumnsType;
+      return ImmutableMap.copyOf(overrideColumnsType);
     }
 
     @Override

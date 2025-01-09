@@ -13,12 +13,12 @@ import javax.annotation.concurrent.Immutable;
 
 @Immutable
 public class ImportTableSchema {
-  private final String OVERRIDE_COLUMNS_TYPE = "override-columns-type";
+  private static final String OVERRIDE_COLUMNS_TYPE = "override-columns-type";
   private final String namespace;
   private final String tableName;
   private final boolean isTransactionTable;
   private final ImmutableMap<String, String> options;
-  private final ImmutableMap<String, DataType> columns;
+  private final ImmutableMap<String, DataType> overrideColumnsType;
 
   public ImportTableSchema(
       String tableFullName, JsonObject tableDefinition, Map<String, String> options) {
@@ -35,13 +35,20 @@ public class ImportTableSchema {
     } else {
       isTransactionTable = true;
     }
-    JsonObject columns = tableDefinition.get(OVERRIDE_COLUMNS_TYPE).getAsJsonObject();
+    this.overrideColumnsType = parseOverrideColumnsType(tableFullName, tableDefinition);
+    this.options = buildOptions(tableDefinition, options);
+  }
+
+  private ImmutableMap<String, DataType> parseOverrideColumnsType(
+      String tableFullName, JsonObject tableDefinition) {
+    if (!tableDefinition.has(OVERRIDE_COLUMNS_TYPE)) {
+      return ImmutableMap.of();
+    }
+    JsonObject columns = tableDefinition.getAsJsonObject(OVERRIDE_COLUMNS_TYPE);
     ImmutableMap.Builder<String, DataType> columnsBuilder = ImmutableMap.builder();
     for (Entry<String, JsonElement> column : columns.entrySet()) {
       String columnName = column.getKey();
-
       String columnDataType = column.getValue().getAsString().trim();
-
       DataType dataType = TableSchema.DATA_MAP_TYPE.get(columnDataType.toUpperCase());
       if (dataType == null) {
         throw new IllegalArgumentException(
@@ -50,8 +57,7 @@ public class ImportTableSchema {
       }
       columnsBuilder.put(columnName, dataType);
     }
-    this.columns = columnsBuilder.buildKeepingLast();
-    this.options = buildOptions(tableDefinition, options);
+    return columnsBuilder.buildKeepingLast();
   }
 
   // For the SpotBugs warning CT_CONSTRUCTOR_THROW
@@ -68,7 +74,8 @@ public class ImportTableSchema {
             TableSchema.CLUSTERING_KEY,
             TableSchema.TRANSACTION,
             TableSchema.COLUMNS,
-            TableSchema.SECONDARY_INDEX);
+            TableSchema.SECONDARY_INDEX,
+            OVERRIDE_COLUMNS_TYPE);
     tableDefinition.entrySet().stream()
         .filter(entry -> !keysToIgnore.contains(entry.getKey()))
         .forEach(entry -> optionsBuilder.put(entry.getKey(), entry.getValue().getAsString()));
@@ -92,7 +99,7 @@ public class ImportTableSchema {
     return options;
   }
 
-  public Map<String, DataType> getColumns() {
-    return columns;
+  public Map<String, DataType> getOverrideColumnsType() {
+    return overrideColumnsType;
   }
 }
