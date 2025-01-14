@@ -299,8 +299,6 @@ begin
                     !.deleted = FALSE
                 ];
                 ops_to_be_moved := Append(ops_to_be_moved, tmp_op);
-                (* Don't continue when picking an insert operation considering remaning insert stored_ops *)
-                need_to_stop := TRUE;
             elsif CurrentRecordExists(new_cur_record_info)
                 /\ new_cur_record_info["tx_id"] \in (DOMAIN candidate_separate_ops["non_ins_ops"]) then
                 (* The target record exists in `record` table in Replication DB.
@@ -564,7 +562,7 @@ begin
 end process;
 
 end algorithm *)
-\* BEGIN TRANSLATION (chksum(pcal) = "d40dfc30" /\ chksum(tla) = "a89098f1")
+\* BEGIN TRANSLATION (chksum(pcal) = "198774ca" /\ chksum(tla) = "e835a29f")
 VARIABLES stored_ops, expected_applied_tx_id_on_secondary_db, repl_db_record, 
           secondary_db_record, retry_of_enqueue, pc
 
@@ -736,7 +734,7 @@ BuildNextOperationByMergingOperationChain(self) == /\ pc[self] = "BuildNextOpera
                                                                                                                                              !.deleted = FALSE
                                                                                                                                          ]]
                                                                          /\ ops_to_be_moved' = [ops_to_be_moved EXCEPT ![self] = Append(ops_to_be_moved[self], tmp_op'[self])]
-                                                                         /\ need_to_stop' = [need_to_stop EXCEPT ![self] = TRUE]
+                                                                         /\ UNCHANGED need_to_stop
                                                                     ELSE /\ IF   CurrentRecordExists(new_cur_record_info[self])
                                                                                /\ new_cur_record_info[self]["tx_id"] \in (DOMAIN candidate_separate_ops[self]["non_ins_ops"])
                                                                                THEN /\ tmp_op' = [tmp_op EXCEPT ![self] = candidate_separate_ops[self]["non_ins_ops"][new_cur_record_info[self]["tx_id"]]]
@@ -755,7 +753,7 @@ BuildNextOperationByMergingOperationChain(self) == /\ pc[self] = "BuildNextOpera
                                                                                                                                                                               !.deleted = TRUE
                                                                                                                                                                           ]]
                                                                                                      ELSE /\ Assert(FALSE, 
-                                                                                                                    "Failure of assertion at line 325, column 21.")
+                                                                                                                    "Failure of assertion at line 323, column 21.")
                                                                                                           /\ UNCHANGED new_cur_record_info
                                                                                     /\ ops_to_be_moved' = [ops_to_be_moved EXCEPT ![self] = Append(ops_to_be_moved[self], tmp_op'[self])]
                                                                                     /\ UNCHANGED need_to_stop
