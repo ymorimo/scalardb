@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import org.slf4j.Logger;
@@ -91,22 +92,13 @@ public class BulkTransactionScanWorker extends BaseScanWorker {
         lastBulkTxnTsMillis = bulkTxnTsMillis;
       }
 
-      Set<Transaction> remainingTransactions =
-          new ConcurrentSkipListSet<>(bulkTransaction.transactions);
+      AtomicInteger remainingTransactions = new AtomicInteger(bulkTransaction.transactions.size());
 
       for (Transaction transaction : bulkTransaction.transactions) {
         transactionHandleWorker.enqueue(
             transaction,
             () -> {
-              if (!remainingTransactions.remove(transaction)) {
-                logger.warn(
-                    "The Transaction {} wasn't contained in {}. Remaining transactions: {}",
-                    transaction,
-                    bulkTransaction,
-                    remainingTransactions);
-              }
-
-              if (remainingTransactions.isEmpty()) {
+              if (remainingTransactions.decrementAndGet() <= 0) {
                 try {
                   replicationBulkTransactionRepository.delete(bulkTransaction);
                   if (!ongoingBulkTransactionIds.remove(bulkTransaction.uniqueId)) {

@@ -111,21 +111,6 @@ class RecordHandler {
     // TODO: milli-second timestamp can conflict. Use transaction ID as the second factor.
     valuesForInsert.sort(Comparator.comparingLong(a -> a.txCommittedAtInMillis));
 
-    // TODO: The following concern wouldn't be needed if the order of INSERT operations is
-    //       deterministic. With `repl_version` on the table in the Backup site and deterministic
-    //       INSERT operation order, the merge termination at INSERT operation can be removed,
-    //       probably. This will improve the performance.
-
-    // Not merge following operations once an insert operation is found.
-    // Assuming the following operations are stored in `records.values`:
-    // - t1: INSERT(X: prev_tx_id=null, tx_id=v1, value=10)
-    // - t2: UPDATE(X: prev_tx_id=v1, tx_id=v2, value=20)
-    // (t3: DELETE is delayed)
-    // - t4: INSERT(X: prev_tx_id=null, tx_id=v4, value=40)
-    // `cur_tx_id` is null and merged t1 and t2 are written to the secondary database.
-    // At this point, `prep_tx_id` is set to t2. But a next thread doesn't know which insert out
-    // of t1 and t3 should be handled to reach t2.
-    boolean suspendFollowingOperation = false;
     Value lastValue = null;
     boolean deleted = record.deleted;
     // TODO: Revisit this since it affects the performance.
@@ -134,7 +119,7 @@ class RecordHandler {
     Set<String> insertTxIds = new HashSet<>();
     @Nullable String currentTxId = record.currentTxId;
     TransactionTableMetadata tableMetadata = null;
-    while (!suspendFollowingOperation) {
+    while (true) {
       Value value;
       if (currentTxId == null || deleted) {
         if (valuesForInsert.isEmpty()) {
@@ -150,15 +135,6 @@ class RecordHandler {
       }
 
       if (value.type.equals("insert")) {
-        /*
-        // Now all columns should be null.
-        if (!updatedColumns.isEmpty()) {
-          throw new IllegalStateException(
-              String.format(
-                  "`updatedColumns` should be empty. key:%s, value:%s, updatedColumns:%s",
-                  key, value, updatedColumns));
-        }
-         */
         if (record.insertTxIds.contains(value.txId)) {
           logger.warn(
               "This insert will be skipped since txId:{} is already handled. key:{}",
@@ -170,8 +146,6 @@ class RecordHandler {
           updatedColumns.put(column.name, column);
         }
         insertTxIds.add(value.txId);
-        // TODO: [Optimization] Should check the rest of the values.
-        suspendFollowingOperation = true;
         deleted = false;
       } else if (value.type.equals("update")) {
         for (Column<?> column : value.columns) {
@@ -211,13 +185,7 @@ class RecordHandler {
     Set<Value> restValues = new HashSet<>(valuesForNonInsert.values());
     restValues.addAll(valuesForInsert);
 
-    return new NextValue(
-        lastValue,
-        deleted,
-        restValues,
-        updatedColumns,
-        insertTxIds,
-        suspendFollowingOperation && !restValues.isEmpty());
+    return new NextValue(lastValue, deleted, restValues, updatedColumns, insertTxIds, false);
   }
 
   @VisibleForTesting
