@@ -3,6 +3,7 @@ package com.scalar.db.dataloader.cli.command.dataexport;
 import static java.nio.file.StandardOpenOption.APPEND;
 import static java.nio.file.StandardOpenOption.CREATE;
 
+import com.scalar.db.api.DistributedStorage;
 import com.scalar.db.api.TableMetadata;
 import com.scalar.db.dataloader.cli.exception.DirectoryValidationException;
 import com.scalar.db.dataloader.cli.util.DirectoryUtils;
@@ -11,12 +12,16 @@ import com.scalar.db.dataloader.cli.util.InvalidFilePathException;
 import com.scalar.db.dataloader.core.ColumnKeyValue;
 import com.scalar.db.dataloader.core.FileFormat;
 import com.scalar.db.dataloader.core.ScanRange;
+import com.scalar.db.dataloader.core.dataexport.CsvExportManager;
 import com.scalar.db.dataloader.core.dataexport.ExportManager;
 import com.scalar.db.dataloader.core.dataexport.ExportOptions;
+import com.scalar.db.dataloader.core.dataexport.JsonExportManager;
+import com.scalar.db.dataloader.core.dataexport.JsonLineExportManager;
 import com.scalar.db.dataloader.core.dataexport.producer.ProducerTaskFactory;
 import com.scalar.db.dataloader.core.dataimport.dao.ScalarDBDao;
 import com.scalar.db.dataloader.core.exception.Base64Exception;
 import com.scalar.db.dataloader.core.exception.ColumnParsingException;
+import com.scalar.db.dataloader.core.exception.KeyParsingException;
 import com.scalar.db.dataloader.core.tablemetadata.TableMetadataException;
 import com.scalar.db.dataloader.core.tablemetadata.TableMetadataService;
 import com.scalar.db.dataloader.core.util.KeyUtils;
@@ -57,15 +62,18 @@ public class ExportCommand extends ExportCommandOptions implements Callable<Inte
           new TableMetadataService(storageFactory.getStorageAdmin());
       ScalarDBDao scalarDBDao = new ScalarDBDao();
 
-      ExportManager exportManager = createExportManager(storageFactory, scalarDBDao);
+      ExportManager exportManager = createExportManager(storageFactory, scalarDBDao, outputFormat);
 
       TableMetadata tableMetadata = metaDataService.getTableMetadata(namespace, table);
 
       Key partitionKey =
-          partitionKeyValue != null ? getKey(partitionKeyValue, tableMetadata) : null;
+          partitionKeyValue != null ? getKeysFromList(partitionKeyValue, tableMetadata) : null;
       Key scanStartKey =
-          scanStartKeyValue != null ? getKey(scanStartKeyValue, tableMetadata) : null;
-      Key scanEndKey = scanEndKeyValue != null ? getKey(scanEndKeyValue, tableMetadata) : null;
+          scanStartKeyValue != null
+              ? getKey(scanStartKeyValue, namespace, table, tableMetadata)
+              : null;
+      Key scanEndKey =
+          scanEndKeyValue != null ? getKey(scanEndKeyValue, namespace, table, tableMetadata) : null;
 
       ScanRange scanRange =
           new ScanRange(scanStartKey, scanEndKey, scanStartInclusive, scanEndInclusive);
@@ -111,11 +119,20 @@ public class ExportCommand extends ExportCommandOptions implements Callable<Inte
   }
 
   private ExportManager createExportManager(
-      StorageFactory storageFactory, ScalarDBDao scalarDBDao) {
-    return new ExportManager(
-        storageFactory.getStorage(),
-        scalarDBDao,
-        new ProducerTaskFactory(delimiter, includeTransactionMetadata, prettyPrintJson));
+      StorageFactory storageFactory, ScalarDBDao scalarDBDao, FileFormat fileFormat) {
+    ProducerTaskFactory taskFactory =
+        new ProducerTaskFactory(delimiter, includeTransactionMetadata, prettyPrintJson);
+    DistributedStorage storage = storageFactory.getStorage();
+    switch (fileFormat) {
+      case JSON:
+        return new JsonExportManager(storage, scalarDBDao, taskFactory);
+      case JSONL:
+        return new JsonLineExportManager(storage, scalarDBDao, taskFactory);
+      case CSV:
+        return new CsvExportManager(storage, scalarDBDao, taskFactory);
+      default:
+        throw new AssertionError("Invalid file format" + fileFormat);
+    }
   }
 
   private ExportOptions buildExportOptions(Key partitionKey, ScanRange scanRange) {
@@ -158,15 +175,30 @@ public class ExportCommand extends ExportCommandOptions implements Callable<Inte
   }
 
   /**
-   * *
+   * Convert ColumnKeyValue list to a key
    *
    * @param keyValueList key value list
    * @param tableMetadata table metadata
    * @return key
    * @throws Base64Exception if any error occur during decoding key
+   * @throws ColumnParsingException if any error occur during parsing column value
    */
-  private Key getKey(List<ColumnKeyValue> keyValueList, TableMetadata tableMetadata)
+  private Key getKeysFromList(List<ColumnKeyValue> keyValueList, TableMetadata tableMetadata)
       throws Base64Exception, ColumnParsingException {
     return KeyUtils.parseMultipleKeyValues(keyValueList, tableMetadata);
+  }
+
+  /**
+   * Convert ColumnKeyValue to a key
+   *
+   * @param keyValue key value
+   * @param tableMetadata table metadata
+   * @return key
+   * @throws KeyParsingException if any error occur during decoding key
+   */
+  private Key getKey(
+      ColumnKeyValue keyValue, String namespace, String table, TableMetadata tableMetadata)
+      throws KeyParsingException {
+    return KeyUtils.parseKeyValue(keyValue, namespace, table, tableMetadata);
   }
 }
