@@ -4,6 +4,17 @@ plugins {
     id 'com.github.spotbugs' version "${spotbugsPluginVersion}"
     id 'application'
 }
+sourceSets {
+    integrationTestAll {
+        java {
+            compileClasspath += main.output + test.output
+            runtimeClasspath += main.output + test.output
+            srcDir file('src/integration-test/java')
+        }
+        resources.srcDir file('src/integration-test/resources')
+    }
+}
+
 
 application {
     mainClass = 'com.scalar.db.dataloader.cli.DataLoaderCli'
@@ -22,6 +33,8 @@ dependencies {
     testCompileOnly "com.github.spotbugs:spotbugs-annotations:${spotbugsVersion}"
     testImplementation "org.testcontainers:testcontainers:1.20.4"
     testImplementation "org.testcontainers:postgresql:1.20.4"
+    testImplementation "org.testcontainers:mysql:1.20.4"
+
 
     // for Error Prone
     errorprone "com.google.errorprone:error_prone_core:${errorproneVersion}"
