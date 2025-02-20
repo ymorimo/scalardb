@@ -1,15 +1,18 @@
 package com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.server;
 
-import static com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.Utils.convPutOperationMetadataToString;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.scalar.db.api.ConditionBuilder;
 import com.scalar.db.api.ConditionalExpression.Operator;
+import com.scalar.db.api.Delete;
+import com.scalar.db.api.DeleteBuilder;
 import com.scalar.db.api.DistributedStorage;
+import com.scalar.db.api.Get;
+import com.scalar.db.api.GetBuilder;
 import com.scalar.db.api.MutationCondition;
 import com.scalar.db.api.Put;
 import com.scalar.db.api.PutBuilder.Buildable;
+import com.scalar.db.api.Result;
 import com.scalar.db.api.TransactionState;
 import com.scalar.db.exception.storage.ExecutionException;
 import com.scalar.db.exception.storage.NoMutationException;
@@ -29,6 +32,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
@@ -169,6 +173,7 @@ class RecordHandler {
             updatedColumns.put(columnName, new Column<>(columnName, null, dataType));
           }
         }
+
         deleted = true;
       } else {
         throw new AssertionError();
@@ -204,75 +209,116 @@ class RecordHandler {
 
     Value lastValue = nextValue.nextValue;
 
-    Buildable putBuilder =
-        Put.newBuilder()
-            .namespace(record.key.namespace)
-            .table(record.key.table)
-            .partitionKey(
-                com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
-                    .toScalarDbKey(record.key.pk));
-    if (!record.key.ck.columns.isEmpty()) {
-      putBuilder.clusteringKey(
-          com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
-              .toScalarDbKey(record.key.ck));
-    }
-
     // FIXME: `before_tx_version` must not be used in production to avoid confusion. Prepare a
     //         proper new column which has bigint type.
     String versionColForConditionUpdate = "before_tx_prepared_at";
-    putBuilder.bigIntValue(versionColForConditionUpdate, record.nextVersion());
 
-    putBuilder.textValue("tx_id", lastValue.txId);
-    putBuilder.intValue("tx_version", lastValue.txVersion);
-    putBuilder.bigIntValue("tx_prepared_at", lastValue.txPreparedAtInMillis);
-    putBuilder.bigIntValue("tx_committed_at", lastValue.txCommittedAtInMillis);
-
-    MutationCondition mutationCondition;
-    if (record.currentTxId == null) {
-      // The first insert
-      mutationCondition = ConditionBuilder.putIfNotExists();
-    } else {
-      // TODO: This should contain `putIfExists`?
-      mutationCondition =
-          ConditionBuilder.putIf(
+    if (lastValue.type.equals("delete")) {
+      DeleteBuilder.Buildable deleteBuilder =
+          Delete.newBuilder()
+              .namespace(record.key.namespace)
+              .table(record.key.table)
+              .partitionKey(
+                  com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
+                      .toScalarDbKey(record.key.pk));
+      if (!record.key.ck.columns.isEmpty()) {
+        deleteBuilder.clusteringKey(
+            com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
+                .toScalarDbKey(record.key.ck));
+      }
+      MutationCondition mutationCondition =
+          ConditionBuilder.deleteIf(
                   ConditionBuilder.buildConditionalExpression(
                       BigIntColumn.of(versionColForConditionUpdate, record.nextVersion()),
                       Operator.LTE))
               .build();
-    }
-    putBuilder.condition(mutationCondition);
+      deleteBuilder.condition(mutationCondition);
 
-    if (lastValue.type.equals("delete")) {
-      if (logicalDelete) {
-        // Physical delete causes some issues when there are any following INSERT.
-        // TODO: Logically deleted records will be removed by lazy recovery.
-        //       But, a cleanup worker may be needed in the Semi-Sync Replication itself.
-        putBuilder.intValue("tx_state", TransactionState.DELETED.get());
-      } else {
-        // FIXME for usecase of write heavy logging-ish situation.
-        throw new AssertionError();
+      try {
+        backupScalarDbStorage.delete(deleteBuilder.build());
+      } catch (NoMutationException e) {
+        // It's possible the record is deleted.
+        GetBuilder.BuildableGet getBuilder =
+            Get.newBuilder()
+                .namespace(record.key.namespace)
+                .table(record.key.table)
+                .partitionKey(
+                    com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
+                        .toScalarDbKey(record.key.pk));
+        if (!record.key.ck.columns.isEmpty()) {
+          getBuilder.clusteringKey(
+              com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
+                  .toScalarDbKey(record.key.ck));
+        }
+        Optional<Result> result = backupScalarDbStorage.get(getBuilder.build());
+        if (result.isPresent()) {
+          throw e;
+        }
       }
     } else {
-      putBuilder.intValue("tx_state", TransactionState.COMMITTED.get());
-    }
-    for (Column<?> column : nextValue.updatedColumns.values()) {
-      putBuilder.value(Column.toScalarDbColumn(column));
-    }
+      Buildable putBuilder =
+          Put.newBuilder()
+              .namespace(record.key.namespace)
+              .table(record.key.table)
+              .partitionKey(
+                  com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
+                      .toScalarDbKey(record.key.pk));
+      if (!record.key.ck.columns.isEmpty()) {
+        putBuilder.clusteringKey(
+            com.scalar.db.transaction.consensuscommit.replication.semisyncrepl.model.Key
+                .toScalarDbKey(record.key.ck));
+      }
 
-    try {
-      backupScalarDbStorage.put(putBuilder.build());
-    } catch (NoMutationException e) {
-      // It's possible another thread inserted a record to the backup DB table.
-      Put retryPut =
-          Put.newBuilder(putBuilder.build())
-              .condition(
-                  ConditionBuilder.putIf(
-                          ConditionBuilder.buildConditionalExpression(
-                              BigIntColumn.of(versionColForConditionUpdate, record.nextVersion()),
-                              Operator.LTE))
-                      .build())
-              .build();
-      backupScalarDbStorage.put(retryPut);
+      putBuilder.bigIntValue(versionColForConditionUpdate, record.nextVersion());
+
+      putBuilder.textValue("tx_id", lastValue.txId);
+      putBuilder.intValue("tx_version", lastValue.txVersion);
+      putBuilder.bigIntValue("tx_prepared_at", lastValue.txPreparedAtInMillis);
+      putBuilder.bigIntValue("tx_committed_at", lastValue.txCommittedAtInMillis);
+
+      MutationCondition mutationCondition;
+      if (record.currentTxId == null || record.deleted) {
+        // The first insert
+        mutationCondition = ConditionBuilder.putIfNotExists();
+      } else {
+        // TODO: This should contain `putIfExists`?
+        mutationCondition =
+            ConditionBuilder.putIf(
+                    ConditionBuilder.buildConditionalExpression(
+                        BigIntColumn.of(versionColForConditionUpdate, record.nextVersion()),
+                        Operator.LTE))
+                .build();
+      }
+      putBuilder.condition(mutationCondition);
+
+      putBuilder.intValue("tx_state", TransactionState.COMMITTED.get());
+      for (Column<?> column : nextValue.updatedColumns.values()) {
+        putBuilder.value(Column.toScalarDbColumn(column));
+      }
+
+      try {
+        backupScalarDbStorage.put(putBuilder.build());
+      } catch (NoMutationException e) {
+        // It's possible another thread inserted a record to the backup DB table.
+        Put retryPut =
+            Put.newBuilder(putBuilder.build())
+                .condition(
+                    ConditionBuilder.putIf(
+                            ConditionBuilder.buildConditionalExpression(
+                                BigIntColumn.of(versionColForConditionUpdate, record.nextVersion()),
+                                Operator.LTE))
+                        .build())
+                .build();
+        try {
+          backupScalarDbStorage.put(retryPut);
+        } catch (NoMutationException ee) {
+          // It's possible the record is deleted.
+          backupScalarDbStorage.put(
+              Put.newBuilder(putBuilder.build())
+                  .condition(ConditionBuilder.putIfNotExists())
+                  .build());
+        }
+      }
     }
 
     try {
@@ -291,10 +337,8 @@ class RecordHandler {
     } catch (Exception e) {
       throw new RuntimeException(
           String.format(
-              "Failed to update the replication DB `records` table. Record: %s, Next value: %s, Put operator: %s",
-              record.toStringOnlyWithMetadata(),
-              nextValue.toStringOnlyWithMetadata(),
-              convPutOperationMetadataToString(putBuilder.build())),
+              "Failed to update the replication DB `records` table. Record: %s, Next value: %s",
+              record.toStringOnlyWithMetadata(), nextValue.toStringOnlyWithMetadata()),
           e);
     }
   }
