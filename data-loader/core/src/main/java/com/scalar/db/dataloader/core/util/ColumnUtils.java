@@ -12,12 +12,25 @@ import com.scalar.db.io.BlobColumn;
 import com.scalar.db.io.BooleanColumn;
 import com.scalar.db.io.Column;
 import com.scalar.db.io.DataType;
+import com.scalar.db.io.DateColumn;
 import com.scalar.db.io.DoubleColumn;
 import com.scalar.db.io.FloatColumn;
 import com.scalar.db.io.IntColumn;
 import com.scalar.db.io.TextColumn;
 import com.scalar.db.transaction.consensuscommit.ConsensusCommitUtils;
-import java.util.*;
+import com.scalar.db.io.TimeColumn;
+import com.scalar.db.io.TimestampColumn;
+import com.scalar.db.io.TimestampTZColumn;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
@@ -78,6 +91,22 @@ public final class ColumnUtils {
           return value != null
               ? BlobColumn.of(columnName, Base64.getDecoder().decode(value))
               : BlobColumn.ofNull(columnName);
+        case DATE:
+          return value != null
+              ? DateColumn.of(columnName, LocalDate.parse(value))
+              : DateColumn.ofNull(columnName);
+        case TIME:
+          return value != null
+              ? TimeColumn.of(columnName, LocalTime.parse(value))
+              : TimeColumn.ofNull(columnName);
+        case TIMESTAMP:
+          return value != null
+              ? TimestampColumn.of(columnName, LocalDateTime.parse(value))
+              : TimestampColumn.ofNull(columnName);
+        case TIMESTAMPTZ:
+          return value != null
+              ? TimestampTZColumn.of(columnName, Instant.parse(value))
+              : TimestampTZColumn.ofNull(columnName);
         default:
           throw new AssertionError();
       }
@@ -140,7 +169,7 @@ public final class ColumnUtils {
    * @return a set of columns to ignore
    */
   private static Set<String> getColumnsToIgnore(
-      Set<String> partitionKeyNames, Set<String> clusteringKeyNames) {
+          Set<String> partitionKeyNames, Set<String> clusteringKeyNames) {
     Set<String> columnsToIgnore =
         new HashSet<>(ConsensusCommitUtils.getTransactionMetaColumns().keySet());
     columnsToIgnore.addAll(partitionKeyNames);
