@@ -144,6 +144,9 @@ public final class ColumnUtils {
       if (ConsensusCommitUtils.isTransactionMetaColumn(columnName, tableMetadata)) {
         continue;
       }
+      if (tableMetadata.getPartitionKeyNames().contains(columnName) || tableMetadata.getClusteringKeyNames().contains(columnName)){
+        continue;
+      }
 
       Column<?> column =
           getColumn(
