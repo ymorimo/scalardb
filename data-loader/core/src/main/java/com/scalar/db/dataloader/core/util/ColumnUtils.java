@@ -17,10 +17,10 @@ import com.scalar.db.io.DoubleColumn;
 import com.scalar.db.io.FloatColumn;
 import com.scalar.db.io.IntColumn;
 import com.scalar.db.io.TextColumn;
-import com.scalar.db.transaction.consensuscommit.ConsensusCommitUtils;
 import com.scalar.db.io.TimeColumn;
 import com.scalar.db.io.TimestampColumn;
 import com.scalar.db.io.TimestampTZColumn;
+import com.scalar.db.transaction.consensuscommit.ConsensusCommitUtils;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -53,7 +53,7 @@ public final class ColumnUtils {
    *
    * @param dataType the data type of the specified column
    * @param columnInfo the ScalarDB table column information
-   * @param value the value for the ScalarDB column (may be {@code null})
+   * @param value the value for the ScalarDB column (maybe {@code null})
    * @return the ScalarDB column created from the specified data
    * @throws ColumnParsingException if an error occurs while creating the column or parsing the
    *     value
@@ -140,11 +140,12 @@ public final class ColumnUtils {
       throws Base64Exception, ColumnParsingException {
 
     List<Column<?>> columns = new ArrayList<>();
+    Set<String> columnsToIgnore =
+        getColumnsToIgnore(
+            tableMetadata.getPartitionKeyNames(), tableMetadata.getClusteringKeyNames());
     for (String columnName : tableMetadata.getColumnNames()) {
-      if (ConsensusCommitUtils.isTransactionMetaColumn(columnName, tableMetadata)) {
-        continue;
-      }
-      if (tableMetadata.getPartitionKeyNames().contains(columnName) || tableMetadata.getClusteringKeyNames().contains(columnName)){
+      if (ConsensusCommitUtils.isTransactionMetaColumn(columnName, tableMetadata)
+          || columnsToIgnore.contains(columnName)) {
         continue;
       }
 
@@ -172,7 +173,7 @@ public final class ColumnUtils {
    * @return a set of columns to ignore
    */
   private static Set<String> getColumnsToIgnore(
-          Set<String> partitionKeyNames, Set<String> clusteringKeyNames) {
+      Set<String> partitionKeyNames, Set<String> clusteringKeyNames) {
     Set<String> columnsToIgnore =
         new HashSet<>(ConsensusCommitUtils.getTransactionMetaColumns().keySet());
     columnsToIgnore.addAll(partitionKeyNames);
@@ -189,7 +190,7 @@ public final class ColumnUtils {
    * @param ignoreNullValues ignore null values or not
    * @param dataTypesByColumns data types of columns
    * @return column data
-   * @throws Base64Exception if an error occurs while base64 decoding
+   * @throws ColumnParsingException if an error occurs while parsing columns
    */
   private static Column<?> getColumn(
       Result scalarDBResult,
@@ -197,7 +198,7 @@ public final class ColumnUtils {
       String columnName,
       boolean ignoreNullValues,
       Map<String, DataType> dataTypesByColumns)
-      throws Base64Exception, ColumnParsingException {
+      throws ColumnParsingException {
     if (scalarDBResult != null && !sourceRecord.has(columnName)) {
       return getColumnFromResult(scalarDBResult, columnName);
     } else {
@@ -226,14 +227,14 @@ public final class ColumnUtils {
    * @param ignoreNullValues ignore null values or not
    * @param dataTypesByColumns data types of columns
    * @return column data
-   * @throws Base64Exception if an error occurs while base64 decoding
+   * @throws ColumnParsingException if an error occurs while parsing the column
    */
   private static Column<?> getColumnFromSourceRecord(
       JsonNode sourceRecord,
       String columnName,
       boolean ignoreNullValues,
       Map<String, DataType> dataTypesByColumns)
-      throws Base64Exception, ColumnParsingException {
+      throws ColumnParsingException {
     DataType dataType = dataTypesByColumns.get(columnName);
     String columnValue =
         sourceRecord.has(columnName) && !sourceRecord.get(columnName).isNull()
