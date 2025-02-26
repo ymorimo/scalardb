@@ -802,6 +802,16 @@ public enum CoreError implements ScalarDbError {
       "Duplicated data mappings found for column '%s' in table '%s'",
       "",
       ""),
+  BLOB_CROSS_PARTITION_SCAN_WITH_ORDERING_NOT_SUPPORTED(
+      Category.USER_ERROR,
+      "0174",
+      "Cross-partition scan with ordering is not supported in Blob",
+      "",
+      ""),
+  BLOB_IMPORT_NOT_SUPPORTED(
+      Category.USER_ERROR, "0175", "Import-related functionality is not supported in Blob", "", ""),
+  BLOB_INDEX_NOT_SUPPORTED(
+      Category.USER_ERROR, "0176", "Index-related functionality is not supported in Blob", "", ""),
 
   //
   // Errors for the concurrency error category
@@ -911,6 +921,14 @@ public enum CoreError implements ScalarDbError {
       Category.CONCURRENCY_ERROR,
       "0025",
       "A transaction conflict occurred in the Insert operation",
+      "",
+      ""),
+  BLOB_ERROR_OCCURRED_IN_MUTATION(
+      Category.CONCURRENCY_ERROR, "0026", "An error occurred in the mutation. Details: %s", "", ""),
+  BLOB_CONFLICT_OCCURRED_IN_MUTATION(
+      Category.CONCURRENCY_ERROR,
+      "0027",
+      "A conflict occurred in the mutation. Details: %s",
       "",
       ""),
 
@@ -1065,6 +1083,8 @@ public enum CoreError implements ScalarDbError {
       "Something went wrong while scanning. Are you sure you are running in the correct transaction mode? Details: %s",
       "",
       ""),
+  BLOB_ERROR_OCCURRED_IN_SELECTION(
+      Category.INTERNAL_ERROR, "0049", "An error occurred in the selection. Details: %s", "", ""),
 
   //
   // Errors for the unknown transaction status error category

@@ -56,6 +56,16 @@ sourceSets {
         }
         resources.srcDir file('src/integration-test/resources')
     }
+    integrationTestBlob {
+        java {
+            compileClasspath += main.output + test.output
+            runtimeClasspath += main.output + test.output
+            srcDir file('src/integration-test/java')
+            include '**/com/scalar/db/common/*.java'
+            include '**/com/scalar/db/storage/blob/*.java'
+        }
+        resources.srcDir file('src/integration-test/resources')
+    }
     integrationTestMultiStorage {
         java {
             compileClasspath += main.output + test.output
@@ -85,6 +95,9 @@ configurations {
     integrationTestJdbcImplementation.extendsFrom testImplementation
     integrationTestJdbcRuntimeOnly.extendsFrom testRuntimeOnly
     integrationTestJdbcCompileOnly.extendsFrom testCompileOnly
+    integrationTestBlobImplementation.extendsFrom testImplementation
+    integrationTestBlobRuntimeOnly.extendsFrom testRuntimeOnly
+    integrationTestBlobCompileOnly.extendsFrom testCompileOnly
     integrationTestMultiStorageImplementation.extendsFrom testImplementation
     integrationTestMultiStorageRuntimeOnly.extendsFrom testRuntimeOnly
     integrationTestMultiStorageCompileOnly.extendsFrom testCompileOnly
@@ -96,6 +109,7 @@ dependencies {
     implementation "org.slf4j:slf4j-api:${slf4jVersion}"
     implementation "com.datastax.cassandra:cassandra-driver-core:${cassandraDriverVersion}"
     implementation "com.azure:azure-cosmos:${azureCosmosVersion}"
+    implementation "com.azure:azure-storage-blob:${azureBlobVersion}"
     implementation "org.jooq:jooq:${jooqVersion}"
     implementation platform("software.amazon.awssdk:bom:${awssdkVersion}")
     implementation 'software.amazon.awssdk:applicationautoscaling'
@@ -107,7 +121,7 @@ dependencies {
     implementation "com.microsoft.sqlserver:mssql-jdbc:${sqlserverDriverVersion}"
     implementation "org.xerial:sqlite-jdbc:${sqliteDriverVersion}"
     implementation "com.yugabyte:jdbc-yugabytedb:${yugabyteDriverVersion}"
-    implementation ("org.mariadb.jdbc:mariadb-java-client:${mariadDbDriverVersion}") {
+    implementation("org.mariadb.jdbc:mariadb-java-client:${mariadDbDriverVersion}") {
         exclude group: 'org.slf4j', module: 'slf4j-api'
     }
     implementation "org.apache.commons:commons-text:${commonsTextVersion}"
@@ -143,7 +157,7 @@ task integrationTestCassandra(type: Test) {
     classpath = sourceSets.integrationTestCassandra.runtimeClasspath
     outputs.upToDateWhen { false }  // ensures integration tests are run every time when called
     options {
-        systemProperties(System.getProperties().findAll{it.key.toString().startsWith("scalardb")})
+        systemProperties(System.getProperties().findAll { it.key.toString().startsWith("scalardb") })
     }
 }
 
@@ -154,7 +168,7 @@ task integrationTestCosmos(type: Test) {
     classpath = sourceSets.integrationTestCosmos.runtimeClasspath
     outputs.upToDateWhen { false }  // ensures integration tests are run every time when called
     options {
-        systemProperties(System.getProperties().findAll{it.key.toString().startsWith("scalardb")})
+        systemProperties(System.getProperties().findAll { it.key.toString().startsWith("scalardb") })
     }
     jvmArgs '-XX:MaxDirectMemorySize=4g', '-Xmx6g',
             // INFO com.azure.cosmos.implementation.RxDocumentClientImpl - Initializing DocumentClient [3] with serviceEndpoint [https://localhost:8081/], ...
@@ -172,7 +186,7 @@ task integrationTestDynamo(type: Test) {
     classpath = sourceSets.integrationTestDynamo.runtimeClasspath
     outputs.upToDateWhen { false }  // ensures integration tests are run every time when called
     options {
-        systemProperties(System.getProperties().findAll{it.key.toString().startsWith("scalardb")})
+        systemProperties(System.getProperties().findAll { it.key.toString().startsWith("scalardb") })
     }
     maxParallelForks = 10
 }
@@ -184,7 +198,18 @@ task integrationTestJdbc(type: Test) {
     classpath = sourceSets.integrationTestJdbc.runtimeClasspath
     outputs.upToDateWhen { false }  // ensures integration tests are run every time when called
     options {
-        systemProperties(System.getProperties().findAll{it.key.toString().startsWith("scalardb")})
+        systemProperties(System.getProperties().findAll { it.key.toString().startsWith("scalardb") })
+    }
+}
+
+task integrationTestBlob(type: Test) {
+    description = 'Runs the integration tests for Blob Storage.'
+    group = 'verification'
+    testClassesDirs = sourceSets.integrationTestBlob.output.classesDirs
+    classpath = sourceSets.integrationTestBlob.runtimeClasspath
+    outputs.upToDateWhen { false }  // ensures integration tests are run every time when called
+    options {
+        systemProperties(System.getProperties().findAll { it.key.toString().startsWith("scalardb") })
     }
 }
 
@@ -195,7 +220,7 @@ task integrationTestMultiStorage(type: Test) {
     classpath = sourceSets.integrationTestMultiStorage.runtimeClasspath
     outputs.upToDateWhen { false }  // ensures integration tests are run every time when called
     options {
-        systemProperties(System.getProperties().findAll{it.key.toString().startsWith("scalardb")})
+        systemProperties(System.getProperties().findAll { it.key.toString().startsWith("scalardb") })
     }
 }
 
