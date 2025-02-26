@@ -1,16 +1,15 @@
-package com.scalar.db.dataloader.cli.command;
-
-import org.junit.jupiter.api.*;
-import org.testcontainers.containers.PostgreSQLContainer;
-import java.io.IOException;
-import java.nio.file.*;
-import java.util.Comparator;
-import java.util.UUID;
+package com.scalar.db.dataloader.cli.command.dataimport;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.IOException;
+import java.nio.file.*;
+import java.util.Comparator;
+import org.junit.jupiter.api.*;
+import org.testcontainers.containers.PostgreSQLContainer;
+
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public class ImportCommandTest {
+public class ImportCommandMySQLTest {
 
   private static final String SCALARDB_PROJECT_PATH = "../../.."; // Adjusted to match cli/core test location
   private static final String SCHEMA_LOADER_PROJECT_PATH = SCALARDB_PROJECT_PATH + "/schema-loader";
