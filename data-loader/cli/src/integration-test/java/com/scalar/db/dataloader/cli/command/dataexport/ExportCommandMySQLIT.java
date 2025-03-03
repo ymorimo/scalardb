@@ -75,7 +75,7 @@ public class ExportCommandMySQLIT {
             assertTrue(metadataCount > 0, "Metadata table should have rows");
 
             // Verify employee table exists and has data
-            rs = stmt.executeQuery("SELECT COUNT(*) FROM TEST.employee;");
+            rs = stmt.executeQuery("SELECT COUNT(*) FROM test.employee;");
             assertTrue(rs.next());
             int employeeCount = rs.getInt(1);
             assertTrue(employeeCount > 0, "Employee table should have rows");

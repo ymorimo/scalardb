@@ -12,9 +12,9 @@ public class ImportCommandOptions {
 
   @CommandLine.Option(
       names = {"--mode", "-m"},
-      description = "ScalarDB mode (storage, transaction) (default: storage)",
+      description = "ScalarDB mode (STORAGE, TRANSACTION) (default: STORAGE)",
       paramLabel = "<MODE>",
-      defaultValue = "storage")
+      defaultValue = "STORAGE")
   protected ScalarDBMode scalarDbMode;
 
   @CommandLine.Option(
@@ -72,8 +72,8 @@ public class ImportCommandOptions {
   @CommandLine.Option(
       names = {"--format", "-fmt"},
       paramLabel = "<FORMAT>",
-      description = "Format of the import source file (json, csv, tsv) (default: json)",
-      defaultValue = "json")
+      description = "Format of the import source file (JSON, CSV, JSONL) (default: JSON)",
+      defaultValue = "JSON")
   protected FileFormat sourceFileFormat;
 
   @CommandLine.Option(
@@ -104,23 +104,23 @@ public class ImportCommandOptions {
       names = {"--control-file-validation", "-cfv"},
       paramLabel = "<VALIDATION_LEVEL>",
       description =
-          "Level of validation to perform on control file data mappings (full, keys, mapped) (default: mapped)",
-      defaultValue = "mapped")
+          "Level of validation to perform on control file data mappings (FULL, KEYS, MAPPED) (default: MAPPED)",
+      defaultValue = "MAPPED")
   // TODO: do we need to rename the ControlFileValidationLevel class?
   protected ControlFileValidationLevel controlFileValidation;
 
   @CommandLine.Option(
       names = {"--import-mode", "-im"},
       paramLabel = "<IMPORT_MODE>",
-      description = "Import mode (insert, update, upsert) (default: insert)",
-      defaultValue = "insert")
+      description = "Import mode (INSERT, UPDATE, UPSERT) (default: INSERT)",
+      defaultValue = "INSERT")
   protected ImportMode importMode;
 
   @CommandLine.Option(
       names = {"--delimiter", "-d"},
       paramLabel = "<DELIMITER>",
       description =
-          "Delimiter character used in the CSV/TSV import file (default: comma for CSV, tab for TSV)",
+          "Delimiter character used in the CSV import file (default: comma for CSV)",
       defaultValue = ",")
   protected char delimiter;
 

@@ -1,7 +1,7 @@
 {
   "tables": [{
     "namespace": "test",
-    "table_name": "employee_trn",
+    "table": "employee_trn",
     "mappings": [{
       "source_field": "eid",
       "target_column": "id"
