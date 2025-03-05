@@ -106,7 +106,6 @@ public class ImportCommandOptions {
       description =
           "Level of validation to perform on control file data mappings (FULL, KEYS, MAPPED) (default: MAPPED)",
       defaultValue = "MAPPED")
-  // TODO: do we need to rename the ControlFileValidationLevel class?
   protected ControlFileValidationLevel controlFileValidation;
 
   @CommandLine.Option(
@@ -119,8 +118,7 @@ public class ImportCommandOptions {
   @CommandLine.Option(
       names = {"--delimiter", "-d"},
       paramLabel = "<DELIMITER>",
-      description =
-          "Delimiter character used in the CSV import file (default: comma for CSV)",
+      description = "Delimiter character used in the CSV import file (default: comma for CSV)",
       defaultValue = ",")
   protected char delimiter;
 

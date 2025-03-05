@@ -120,6 +120,7 @@ public class CsvImportProcessor extends ImportProcessor {
     // Wait for all data chunk threads to complete
     for (Future<?> dataChunkFuture : dataChunkFutures) {
       try {
+        assert dataChunkFuture != null;
         importDataChunkStatusList.add((ImportDataChunkStatus) dataChunkFuture.get());
       } catch (Exception e) {
         // TODO: handle the exception
