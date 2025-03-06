@@ -25,6 +25,7 @@ CREATE TABLE `emp_department` (
   PRIMARY KEY (`id`,`emp_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+USE test;
 CREATE TABLE `employee` (
   `id` int NOT NULL,
   `name` longtext,
@@ -32,6 +33,7 @@ CREATE TABLE `employee` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+USE test;
 CREATE TABLE `employee_trn` (
 `id` int NOT NULL,
 `name` longtext,
