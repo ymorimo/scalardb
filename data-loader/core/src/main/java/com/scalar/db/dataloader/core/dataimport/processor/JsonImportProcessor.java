@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -29,12 +30,17 @@ public class JsonImportProcessor extends ImportProcessor {
   }
 
   /**
-   * Process the data from the import file
+   * Processes the source data from the given import file.
    *
-   * @param dataChunkSize size of data chunk
-   * @param transactionBatchSize size of transaction batch
-   * @param reader reader which reads the source file
-   * @return process data chunk status list
+   * <p>This method reads data from the provided {@link BufferedReader}, processes it in chunks, and
+   * batches transactions according to the specified sizes. The method returns a list of {@link
+   * ImportDataChunkStatus} objects, each representing the status of a processed data chunk.
+   *
+   * @param dataChunkSize the number of records to include in each data chunk
+   * @param transactionBatchSize the number of records to include in each transaction batch
+   * @param reader the {@link BufferedReader} used to read the source file
+   * @return a list of {@link ImportDataChunkStatus} objects indicating the processing status of
+   *     each data chunk
    */
   @Override
   public List<ImportDataChunkStatus> process(
@@ -61,7 +67,6 @@ public class JsonImportProcessor extends ImportProcessor {
                 int rowNumber = 1;
                 while (jsonParser.nextToken() != JsonToken.END_ARRAY) {
                   JsonNode jsonNode = OBJECT_MAPPER.readTree(jsonParser);
-                  // TODO: do something with the null jsonNode
                   if (jsonNode == null || jsonNode.isEmpty()) {
                     continue;
                   }
@@ -96,8 +101,7 @@ public class JsonImportProcessor extends ImportProcessor {
                   dataChunkQueue.offer(importDataChunk);
                 }
               } catch (IOException e) {
-                // TODO: handle this exception
-                throw new RuntimeException(e);
+                throw new RuntimeException("Failed to read import file", e);
               }
             });
     readerThread.start();
@@ -124,8 +128,8 @@ public class JsonImportProcessor extends ImportProcessor {
     for (Future<?> dataChunkFuture : dataChunkFutures) {
       try {
         importDataChunkStatusList.add((ImportDataChunkStatus) dataChunkFuture.get());
-      } catch (Exception e) {
-        e.printStackTrace();
+      } catch (InterruptedException | ExecutionException e) {
+        throw new RuntimeException("Data chunk processing failed", e);
       }
     }
 

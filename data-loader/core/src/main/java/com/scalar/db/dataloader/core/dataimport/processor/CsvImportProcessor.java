@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -26,12 +27,17 @@ public class CsvImportProcessor extends ImportProcessor {
   }
 
   /**
-   * Process the data from the import file
+   * Processes the source data from the given import file.
    *
-   * @param dataChunkSize size of data chunk
-   * @param transactionBatchSize size of transaction batch
-   * @param reader reader which reads the source file
-   * @return process data chunk status list
+   * <p>This method reads data from the provided {@link BufferedReader}, processes it in chunks, and
+   * batches transactions according to the specified sizes. The method returns a list of {@link
+   * ImportDataChunkStatus} objects, each representing the status of a processed data chunk.
+   *
+   * @param dataChunkSize the number of records to include in each data chunk
+   * @param transactionBatchSize the number of records to include in each transaction batch
+   * @param reader the {@link BufferedReader} used to read the source file
+   * @return a list of {@link ImportDataChunkStatus} objects indicating the processing status of
+   *     each data chunk
    */
   @Override
   public List<ImportDataChunkStatus> process(
@@ -95,7 +101,7 @@ public class CsvImportProcessor extends ImportProcessor {
                 }
 
               } catch (IOException e) {
-                throw new RuntimeException();
+                throw new RuntimeException("Failed to read import file", e);
               }
             });
 
@@ -121,9 +127,8 @@ public class CsvImportProcessor extends ImportProcessor {
     for (Future<?> dataChunkFuture : dataChunkFutures) {
       try {
         importDataChunkStatusList.add((ImportDataChunkStatus) dataChunkFuture.get());
-      } catch (Exception e) {
-        // TODO: handle the exception
-        e.printStackTrace();
+      } catch (InterruptedException | ExecutionException e) {
+        throw new RuntimeException("Data chunk processing failed", e);
       }
     }
     dataChunkExecutor.shutdown();
