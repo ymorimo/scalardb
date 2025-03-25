@@ -148,6 +148,6 @@ public class ImportCommandOptions {
       names = {"--split-log-mode"},
       paramLabel = "<SPLIT_LOG_MODE>",
       description = "Split log file into multiple files based on data chunks",
-      defaultValue = "true")
+      defaultValue = "false")
   protected boolean splitLogMode;
 }
