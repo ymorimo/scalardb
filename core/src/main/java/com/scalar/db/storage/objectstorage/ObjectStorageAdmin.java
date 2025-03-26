@@ -60,7 +60,10 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
   public void createNamespace(String namespace, Map<String, String> options)
       throws ExecutionException {
     try {
-      insertNamespace(namespace);
+      insert(
+          ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_TABLE, namespace),
+          namespace,
+          new ObjectStorageNamespace(namespace));
     } catch (Exception e) {
       throw new ExecutionException(
           String.format("Failed to create the namespace %s", namespace), e);
@@ -72,7 +75,12 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
       String namespace, String table, TableMetadata metadata, Map<String, String> options)
       throws ExecutionException {
     try {
-      insertTableMetadata(namespace, table, metadata);
+      String concatenatedKey =
+          String.join(ObjectStorageUtils.CONCATENATED_KEY_DELIMITER, namespace, table);
+      insert(
+          ObjectStorageUtils.getObjectKey(metadataNamespace, METADATA_TABLE, concatenatedKey),
+          concatenatedKey,
+          new ObjectStorageTableMetadata(metadata));
     } catch (Exception e) {
       throw new ExecutionException(
           String.format("Failed to create the table %s.%s", table, namespace), e);
@@ -82,7 +90,11 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
   @Override
   public void dropTable(String namespace, String table) throws ExecutionException {
     try {
-      deleteTableMetadata(namespace, table);
+      String concatenatedKey =
+          String.join(ObjectStorageUtils.CONCATENATED_KEY_DELIMITER, namespace, table);
+      delete(
+          ObjectStorageUtils.getObjectKey(metadataNamespace, METADATA_TABLE, concatenatedKey),
+          concatenatedKey);
     } catch (Exception e) {
       throw new ExecutionException(
           String.format("Failed to drop the table %s.%s", table, namespace), e);
@@ -92,7 +104,9 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
   @Override
   public void dropNamespace(String namespace) throws ExecutionException {
     try {
-      deleteNamespace(namespace);
+      delete(
+          ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_TABLE, namespace),
+          namespace);
     } catch (Exception e) {
       throw new ExecutionException(String.format("Failed to drop the namespace %s", namespace), e);
     }
@@ -143,17 +157,19 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
   @Override
   public TableMetadata getTableMetadata(String namespace, String table) throws ExecutionException {
     try {
+      String concatenatedKey =
+          String.join(ObjectStorageUtils.CONCATENATED_KEY_DELIMITER, namespace, table);
       ObjectStorageWrapperResponse response =
           wrapper.get(
-              ObjectStorageUtils.getObjectKey(
-                  metadataNamespace,
-                  METADATA_TABLE,
-                  String.join(ObjectStorageUtils.CONCATENATED_KEY_DELIMITER, namespace, table)));
-      return JsonConvertor.deserialize(
-              response.getValue(), new TypeReference<ObjectStorageTableMetadata>() {})
-          .toTableMetadata();
+              ObjectStorageUtils.getObjectKey(metadataNamespace, METADATA_TABLE, concatenatedKey));
+      Map<String, ObjectStorageTableMetadata> metadataTable =
+          JsonConvertor.deserialize(
+              response.getValue(), new TypeReference<Map<String, ObjectStorageTableMetadata>>() {});
+      ObjectStorageTableMetadata metadata = metadataTable.get(concatenatedKey);
+      return metadata != null ? metadata.toTableMetadata() : null;
     } catch (ObjectStorageWrapperException e) {
       if (e.getCode() == ObjectStorageWrapperException.StatusCode.NOT_FOUND) {
+        // The metadata table does not exist
         return null;
       }
       throw new ExecutionException(
@@ -201,8 +217,13 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
       return true;
     }
     try {
-      wrapper.get(ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_TABLE, namespace));
-      return true;
+      ObjectStorageWrapperResponse response =
+          wrapper.get(
+              ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_TABLE, namespace));
+      Map<String, ObjectStorageNamespace> metadataTable =
+          JsonConvertor.deserialize(
+              response.getValue(), new TypeReference<Map<String, ObjectStorageNamespace>>() {});
+      return metadataTable.containsKey(namespace);
     } catch (ObjectStorageWrapperException e) {
       if (e.getCode() == ObjectStorageWrapperException.StatusCode.NOT_FOUND) {
         return false;
@@ -219,7 +240,10 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
   public void repairNamespace(String namespace, Map<String, String> options)
       throws ExecutionException {
     try {
-      upsertNamespace(namespace);
+      upsert(
+          ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_TABLE, namespace),
+          namespace,
+          new ObjectStorageNamespace(namespace));
     } catch (Exception e) {
       throw new ExecutionException(
           String.format("Failed to repair the namespace %s", namespace), e);
@@ -231,7 +255,12 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
       String namespace, String table, TableMetadata metadata, Map<String, String> options)
       throws ExecutionException {
     try {
-      upsertTableMetadata(namespace, table, metadata);
+      String concatenatedKey =
+          String.join(ObjectStorageUtils.CONCATENATED_KEY_DELIMITER, namespace, table);
+      upsert(
+          ObjectStorageUtils.getObjectKey(metadataNamespace, METADATA_TABLE, concatenatedKey),
+          concatenatedKey,
+          new ObjectStorageTableMetadata(metadata));
     } catch (Exception e) {
       throw new ExecutionException(
           String.format("Failed to repair the table %s.%s", table, namespace), e);
@@ -243,25 +272,29 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
       String namespace, String table, String columnName, DataType columnType)
       throws ExecutionException {
     try {
+      String concatenatedKey =
+          String.join(ObjectStorageUtils.CONCATENATED_KEY_DELIMITER, namespace, table);
       ObjectStorageWrapperResponse response =
           wrapper.get(
-              ObjectStorageUtils.getObjectKey(
-                  metadataNamespace,
-                  METADATA_TABLE,
-                  String.join(ObjectStorageUtils.CONCATENATED_KEY_DELIMITER, namespace, table)));
-      TableMetadata currentMetadata =
+              ObjectStorageUtils.getObjectKey(metadataNamespace, METADATA_TABLE, concatenatedKey));
+      Map<String, ObjectStorageTableMetadata> tableMetadataTable =
           JsonConvertor.deserialize(
-                  response.getValue(), new TypeReference<ObjectStorageTableMetadata>() {})
-              .toTableMetadata();
+              response.getValue(), new TypeReference<Map<String, ObjectStorageTableMetadata>>() {});
+      if (!tableMetadataTable.containsKey(
+          String.join(ObjectStorageUtils.CONCATENATED_KEY_DELIMITER, namespace, table))) {
+        // The metadata table does not exist
+        throw new ExecutionException(
+            String.format("The table %s.%s does not exist", table, namespace));
+      }
+      TableMetadata currentMetadata = tableMetadataTable.get(concatenatedKey).toTableMetadata();
       TableMetadata newMetadata =
           TableMetadata.newBuilder(currentMetadata).addColumn(columnName, columnType).build();
+      tableMetadataTable.put(concatenatedKey, new ObjectStorageTableMetadata(newMetadata));
       if (!wrapper.updateIfVersionMatches(
-          ObjectStorageUtils.getObjectKey(
-              metadataNamespace,
-              METADATA_TABLE,
-              String.join(ObjectStorageUtils.CONCATENATED_KEY_DELIMITER, namespace, table)),
-          JsonConvertor.serialize(new ObjectStorageTableMetadata(newMetadata)),
+          ObjectStorageUtils.getObjectKey(metadataNamespace, METADATA_TABLE, concatenatedKey),
+          JsonConvertor.serialize(tableMetadataTable),
           response.getVersion())) {
+        // If the metadata table is updated by another transaction, throw an exception
         throw new ExecutionException(
             String.format(
                 "Failed to add the column %s to the table %s.%s due to a conflict",
@@ -323,7 +356,11 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
           .forEach(
               namespaceName -> {
                 try {
-                  upsertNamespace(namespaceName);
+                  upsert(
+                      ObjectStorageUtils.getObjectKey(
+                          metadataNamespace, NAMESPACE_TABLE, namespaceName),
+                      namespaceName,
+                      new ObjectStorageNamespace(namespaceName));
                 } catch (ExecutionException e) {
                   throw new RuntimeException(e);
                 }
@@ -333,116 +370,108 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
     }
   }
 
-  private void insertTableMetadata(String namespace, String table, TableMetadata metadata)
+  private <T> void insert(String objectKey, String concatenatedKey, T metadata)
       throws ExecutionException {
-    try {
-      wrapper.insert(
-          ObjectStorageUtils.getObjectKey(
-              metadataNamespace,
-              METADATA_TABLE,
-              String.join(ObjectStorageUtils.CONCATENATED_KEY_DELIMITER, namespace, table)),
-          JsonConvertor.serialize(new ObjectStorageTableMetadata(metadata)));
-    } catch (Exception e) {
-      throw new ExecutionException("Failed to insert the table metadata", e);
-    }
-  }
-
-  private void upsertTableMetadata(String namespace, String table, TableMetadata metadata)
-      throws ExecutionException {
-    String objectKey =
-        ObjectStorageUtils.getObjectKey(
-            metadataNamespace,
-            METADATA_TABLE,
-            String.join(ObjectStorageUtils.CONCATENATED_KEY_DELIMITER, namespace, table));
     try {
       ObjectStorageWrapperResponse response = wrapper.get(objectKey);
-      if (!wrapper.updateIfVersionMatches(
-          objectKey,
-          JsonConvertor.serialize(new ObjectStorageTableMetadata(metadata)),
-          response.getVersion())) {
-        throw new ExecutionException(
-            String.format(
-                "Failed to upsert the table metadata %s.%s due to a conflict", table, namespace));
+      Map<String, T> metadataTable =
+          JsonConvertor.deserialize(response.getValue(), new TypeReference<Map<String, T>>() {});
+      if (metadataTable.containsKey(concatenatedKey)) {
+        // If the metadata already exists in the metadata table, throw an exception
+        throw new ExecutionException("The metadata already exists.");
       }
+      metadataTable.put(concatenatedKey, metadata);
+      if (!wrapper.updateIfVersionMatches(
+          objectKey, JsonConvertor.serialize(metadataTable), response.getVersion())) {
+        // If the metadata is updated by another transaction, throw an exception
+        throw new ExecutionException("Failed to insert the metadata due to a conflict.");
+      }
+    } catch (ExecutionException e) {
+      throw e;
     } catch (ObjectStorageWrapperException e) {
       if (e.getCode() == ObjectStorageWrapperException.StatusCode.NOT_FOUND) {
+        // The metadata table does not exist. Create a new metadata table.
         try {
           wrapper.insert(
-              objectKey, JsonConvertor.serialize(new ObjectStorageTableMetadata(metadata)));
-        } catch (Exception e2) {
-          throw new ExecutionException("Failed to upsert the table metadata", e2);
+              objectKey,
+              JsonConvertor.serialize(Collections.singletonMap(concatenatedKey, metadata)));
+        } catch (ObjectStorageWrapperException e2) {
+          throw new ExecutionException("Failed to insert the metadata.", e2);
         }
       } else {
-        throw new ExecutionException("Failed to upsert the table metadata", e);
+        throw new ExecutionException("Failed to insert the metadata.", e);
       }
     } catch (Exception e) {
-      throw new ExecutionException("Failed to upsert the table metadata", e);
+      throw new ExecutionException("Failed to insert the metadata.", e);
     }
   }
 
-  private void deleteTableMetadata(String namespace, String table) throws ExecutionException {
-    String objectKey =
-        ObjectStorageUtils.getObjectKey(
-            metadataNamespace,
-            METADATA_TABLE,
-            String.join(ObjectStorageUtils.CONCATENATED_KEY_DELIMITER, namespace, table));
-    try {
-      wrapper.delete(objectKey);
-    } catch (ObjectStorageWrapperException e) {
-      if (e.getCode() == ObjectStorageWrapperException.StatusCode.NOT_FOUND) return;
-      throw new ExecutionException("Failed to delete the table metadata", e);
-    } catch (Exception e) {
-      throw new ExecutionException("Failed to delete the table metadata", e);
-    }
-  }
-
-  private void insertNamespace(String namespace) throws ExecutionException {
-    String objectKey =
-        ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_TABLE, namespace);
-    try {
-      wrapper.insert(objectKey, JsonConvertor.serialize(new ObjectStorageNamespace(namespace)));
-    } catch (Exception e) {
-      throw new ExecutionException("Failed to insert the namespace", e);
-    }
-  }
-
-  private void upsertNamespace(String namespace) throws ExecutionException {
-    String objectKey =
-        ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_TABLE, namespace);
+  private <T> void upsert(String objectKey, String concatenatedKey, T metadata)
+      throws ExecutionException {
     try {
       ObjectStorageWrapperResponse response = wrapper.get(objectKey);
+      Map<String, T> metadataTable =
+          JsonConvertor.deserialize(response.getValue(), new TypeReference<Map<String, T>>() {});
+      // Upsert the metadata
+      metadataTable.put(concatenatedKey, metadata);
       if (!wrapper.updateIfVersionMatches(
-          objectKey,
-          JsonConvertor.serialize(new ObjectStorageNamespace(namespace)),
-          response.getVersion())) {
-        throw new ExecutionException(
-            String.format("Failed to upsert the namespace %s due to a conflict", namespace));
+          objectKey, JsonConvertor.serialize(metadataTable), response.getVersion())) {
+        // If the metadata is updated by another transaction, throw an exception
+        throw new ExecutionException("Failed to upsert the metadata due to a conflict.");
       }
+    } catch (ExecutionException e) {
+      throw e;
     } catch (ObjectStorageWrapperException e) {
       if (e.getCode() == ObjectStorageWrapperException.StatusCode.NOT_FOUND) {
+        // The metadata table does not exist. Create a new metadata table.
         try {
-          wrapper.insert(objectKey, JsonConvertor.serialize(new ObjectStorageNamespace(namespace)));
-        } catch (Exception e2) {
-          throw new ExecutionException("Failed to upsert the namespace", e2);
+          wrapper.insert(
+              objectKey,
+              JsonConvertor.serialize(Collections.singletonMap(concatenatedKey, metadata)));
+        } catch (ObjectStorageWrapperException e2) {
+          throw new ExecutionException("Failed to upsert the metadata.", e2);
         }
       } else {
-        throw new ExecutionException("Failed to upsert the namespace", e);
+        throw new ExecutionException("Failed to upsert the metadata.", e);
       }
     } catch (Exception e) {
-      throw new ExecutionException("Failed to upsert the namespace", e);
+      throw new ExecutionException("Failed to upsert the metadata.", e);
     }
   }
 
-  private void deleteNamespace(String namespace) throws ExecutionException {
-    String objectKey =
-        ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_TABLE, namespace);
+  private <T> void delete(String objectKey, String concatenatedKey) throws ExecutionException {
     try {
-      wrapper.delete(objectKey);
+      ObjectStorageWrapperResponse response = wrapper.get(objectKey);
+      Map<String, T> metadataTable =
+          JsonConvertor.deserialize(response.getValue(), new TypeReference<Map<String, T>>() {});
+      if (!metadataTable.containsKey(concatenatedKey)) {
+        // If the metadata does not exist in the table, throw an exception
+        throw new ExecutionException("The metadata does not exist.");
+      }
+      metadataTable.remove(concatenatedKey);
+      if (metadataTable.isEmpty()) {
+        // If the metadata table is empty, delete the metadata table
+        if (!wrapper.deleteIfVersionMatches(objectKey, response.getVersion())) {
+          // If the metadata table is updated by another transaction, throw an exception
+          throw new ExecutionException("Failed to delete the metadata due to a conflict.");
+        }
+      } else {
+        if (!wrapper.updateIfVersionMatches(
+            objectKey, JsonConvertor.serialize(metadataTable), response.getVersion())) {
+          // If the metadata table is updated by another transaction, throw an exception
+          throw new ExecutionException("Failed to delete the metadata due to a conflict.");
+        }
+      }
+    } catch (ExecutionException e) {
+      throw e;
     } catch (ObjectStorageWrapperException e) {
-      if (e.getCode() == ObjectStorageWrapperException.StatusCode.NOT_FOUND) return;
-      throw new ExecutionException("Failed to delete the namespace", e);
+      if (e.getCode() == ObjectStorageWrapperException.StatusCode.NOT_FOUND) {
+        // The metadata table does not exist.
+        throw new ExecutionException("The metadata does not exist.");
+      }
+      throw new ExecutionException("Failed to delete the metadata.", e);
     } catch (Exception e) {
-      throw new ExecutionException("Failed to delete the namespace", e);
+      throw new ExecutionException("Failed to delete the metadata.", e);
     }
   }
 }

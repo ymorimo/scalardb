@@ -18,14 +18,6 @@ public class ObjectStorageUtils {
     }
   }
 
-  public static String getObjectKey(String namespace, @Nullable String table) {
-    if (table == null) {
-      return String.join(OBJECT_KEY_DELIMITER, namespace, "");
-    } else {
-      return String.join(OBJECT_KEY_DELIMITER, namespace, table);
-    }
-  }
-
   public static ObjectStorageWrapper getObjectStorageWrapper(ObjectStorageConfig config) {
     if (Objects.equals(config.getStorageType(), BlobStorageWrapper.STORAGE_TYPE)) {
       return new BlobStorageWrapper(buildBlobContainerClient(config));
