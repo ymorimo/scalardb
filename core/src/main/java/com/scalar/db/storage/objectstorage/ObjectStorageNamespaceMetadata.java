@@ -5,15 +5,15 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 @Immutable
-public class ObjectStorageNamespace {
+public class ObjectStorageNamespaceMetadata {
   private final String name;
 
   // The default constructor  is required by Jackson to deserialize JSON object
-  public ObjectStorageNamespace() {
+  public ObjectStorageNamespaceMetadata() {
     this(null);
   }
 
-  public ObjectStorageNamespace(@Nullable String name) {
+  public ObjectStorageNamespaceMetadata(@Nullable String name) {
     this.name = name != null ? name : "";
   }
 
@@ -26,10 +26,10 @@ public class ObjectStorageNamespace {
     if (this == o) {
       return true;
     }
-    if (!(o instanceof ObjectStorageNamespace)) {
+    if (!(o instanceof ObjectStorageNamespaceMetadata)) {
       return false;
     }
-    ObjectStorageNamespace that = (ObjectStorageNamespace) o;
+    ObjectStorageNamespaceMetadata that = (ObjectStorageNamespaceMetadata) o;
 
     return name.equals(that.name);
   }

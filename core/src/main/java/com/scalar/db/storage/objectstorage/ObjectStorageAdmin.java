@@ -63,7 +63,7 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
       insert(
           ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_TABLE, namespace),
           namespace,
-          new ObjectStorageNamespace(namespace));
+          new ObjectStorageNamespaceMetadata(namespace));
     } catch (Exception e) {
       throw new ExecutionException(
           String.format("Failed to create the namespace %s", namespace), e);
@@ -220,9 +220,10 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
       ObjectStorageWrapperResponse response =
           wrapper.get(
               ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_TABLE, namespace));
-      Map<String, ObjectStorageNamespace> metadataTable =
+      Map<String, ObjectStorageNamespaceMetadata> metadataTable =
           JsonConvertor.deserialize(
-              response.getValue(), new TypeReference<Map<String, ObjectStorageNamespace>>() {});
+              response.getValue(),
+              new TypeReference<Map<String, ObjectStorageNamespaceMetadata>>() {});
       return metadataTable.containsKey(namespace);
     } catch (ObjectStorageWrapperException e) {
       if (e.getCode() == ObjectStorageWrapperException.StatusCode.NOT_FOUND) {
@@ -243,7 +244,7 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
       upsert(
           ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_TABLE, namespace),
           namespace,
-          new ObjectStorageNamespace(namespace));
+          new ObjectStorageNamespaceMetadata(namespace));
     } catch (Exception e) {
       throw new ExecutionException(
           String.format("Failed to repair the namespace %s", namespace), e);
@@ -360,7 +361,7 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
                       ObjectStorageUtils.getObjectKey(
                           metadataNamespace, NAMESPACE_TABLE, namespaceName),
                       namespaceName,
-                      new ObjectStorageNamespace(namespaceName));
+                      new ObjectStorageNamespaceMetadata(namespaceName));
                 } catch (ExecutionException e) {
                   throw new RuntimeException(e);
                 }

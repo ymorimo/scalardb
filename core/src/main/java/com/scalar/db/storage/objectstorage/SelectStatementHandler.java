@@ -142,7 +142,8 @@ public class SelectStatementHandler extends StatementHandler {
       ObjectStorageWrapperResponse response =
           wrapper.get(ObjectStorageUtils.getObjectKey(namespace, table, partition));
       Map<String, ObjectStorageRecord> recordsInPartition =
-          JsonConvertor.deserialize(response.getValue(), new TypeReference<Map<String, ObjectStorageRecord>>() {});
+          JsonConvertor.deserialize(
+              response.getValue(), new TypeReference<Map<String, ObjectStorageRecord>>() {});
       return Optional.ofNullable(recordsInPartition.get(concatenatedKey));
     } catch (ObjectStorageWrapperException e) {
       if (e.getCode() == ObjectStorageWrapperException.StatusCode.NOT_FOUND) {
@@ -164,7 +165,8 @@ public class SelectStatementHandler extends StatementHandler {
       ObjectStorageWrapperResponse response =
           wrapper.get(ObjectStorageUtils.getObjectKey(namespace, table, partition));
       Map<String, ObjectStorageRecord> recordsInPartition =
-          JsonConvertor.deserialize(response.getValue(), new TypeReference<Map<String, ObjectStorageRecord>>() {});
+          JsonConvertor.deserialize(
+              response.getValue(), new TypeReference<Map<String, ObjectStorageRecord>>() {});
       return new HashSet<>(recordsInPartition.values());
     } catch (ObjectStorageWrapperException e) {
       if (e.getCode() == ObjectStorageWrapperException.StatusCode.NOT_FOUND) {
