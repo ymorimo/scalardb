@@ -46,7 +46,7 @@ public class ObjectStorageAdminTestUtils extends AdminTestUtils {
             new ListBlobsOptions()
                 .setPrefix(
                     ObjectStorageUtils.getObjectKey(
-                        metadataNamespace, ObjectStorageAdmin.NAMESPACE_TABLE, null)),
+                        metadataNamespace, ObjectStorageAdmin.NAMESPACE_METADATA_TABLE, null)),
             null)
         .stream()
         .map(BlobItem::getName)
@@ -64,7 +64,7 @@ public class ObjectStorageAdminTestUtils extends AdminTestUtils {
             new ListBlobsOptions()
                 .setPrefix(
                     ObjectStorageUtils.getObjectKey(
-                        metadataNamespace, ObjectStorageAdmin.METADATA_TABLE, null)),
+                        metadataNamespace, ObjectStorageAdmin.TABLE_METADATA_TABLE, null)),
             null)
         .stream()
         .map(BlobItem::getName)

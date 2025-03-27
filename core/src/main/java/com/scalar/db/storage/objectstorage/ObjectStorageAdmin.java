@@ -17,8 +17,8 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 public class ObjectStorageAdmin implements DistributedStorageAdmin {
-  public static final String NAMESPACE_TABLE = "namespaces";
-  public static final String METADATA_TABLE = "metadata";
+  public static final String NAMESPACE_METADATA_TABLE = "namespaces";
+  public static final String TABLE_METADATA_TABLE = "metadata";
 
   private final ObjectStorageWrapper wrapper;
   private final String metadataNamespace;
@@ -61,7 +61,7 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
       throws ExecutionException {
     try {
       insert(
-          ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_TABLE, null),
+          ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_METADATA_TABLE, null),
           namespace,
           new ObjectStorageNamespaceMetadata(namespace));
     } catch (Exception e) {
@@ -78,7 +78,7 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
       String concatenatedKey =
           String.join(ObjectStorageUtils.CONCATENATED_KEY_DELIMITER, namespace, table);
       insert(
-          ObjectStorageUtils.getObjectKey(metadataNamespace, METADATA_TABLE, null),
+          ObjectStorageUtils.getObjectKey(metadataNamespace, TABLE_METADATA_TABLE, null),
           concatenatedKey,
           new ObjectStorageTableMetadata(metadata));
     } catch (Exception e) {
@@ -93,7 +93,7 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
       String concatenatedKey =
           String.join(ObjectStorageUtils.CONCATENATED_KEY_DELIMITER, namespace, table);
       delete(
-          ObjectStorageUtils.getObjectKey(metadataNamespace, METADATA_TABLE, null),
+          ObjectStorageUtils.getObjectKey(metadataNamespace, TABLE_METADATA_TABLE, null),
           concatenatedKey);
     } catch (Exception e) {
       throw new ExecutionException(
@@ -104,7 +104,9 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
   @Override
   public void dropNamespace(String namespace) throws ExecutionException {
     try {
-      delete(ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_TABLE, null), namespace);
+      delete(
+          ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_METADATA_TABLE, null),
+          namespace);
     } catch (Exception e) {
       throw new ExecutionException(String.format("Failed to drop the namespace %s", namespace), e);
     }
@@ -158,7 +160,8 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
       String concatenatedKey =
           String.join(ObjectStorageUtils.CONCATENATED_KEY_DELIMITER, namespace, table);
       ObjectStorageWrapperResponse response =
-          wrapper.get(ObjectStorageUtils.getObjectKey(metadataNamespace, METADATA_TABLE, null));
+          wrapper.get(
+              ObjectStorageUtils.getObjectKey(metadataNamespace, TABLE_METADATA_TABLE, null));
       Map<String, ObjectStorageTableMetadata> metadataTable =
           JsonConvertor.deserialize(
               response.getValue(), new TypeReference<Map<String, ObjectStorageTableMetadata>>() {});
@@ -184,11 +187,14 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
         return Collections.emptySet();
       }
       try {
-        wrapper.get(ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_TABLE, null));
+        wrapper.get(
+            ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_METADATA_TABLE, null));
         Map<String, ObjectStorageTableMetadata> metadataTable =
             JsonConvertor.deserialize(
                 wrapper
-                    .get(ObjectStorageUtils.getObjectKey(metadataNamespace, METADATA_TABLE, null))
+                    .get(
+                        ObjectStorageUtils.getObjectKey(
+                            metadataNamespace, TABLE_METADATA_TABLE, null))
                     .getValue(),
                 new TypeReference<Map<String, ObjectStorageTableMetadata>>() {});
         return metadataTable.keySet().stream()
@@ -220,7 +226,8 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
     }
     try {
       ObjectStorageWrapperResponse response =
-          wrapper.get(ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_TABLE, null));
+          wrapper.get(
+              ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_METADATA_TABLE, null));
       Map<String, ObjectStorageNamespaceMetadata> metadataTable =
           JsonConvertor.deserialize(
               response.getValue(),
@@ -243,7 +250,7 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
       throws ExecutionException {
     try {
       upsert(
-          ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_TABLE, null),
+          ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_METADATA_TABLE, null),
           namespace,
           new ObjectStorageNamespaceMetadata(namespace));
     } catch (Exception e) {
@@ -260,7 +267,7 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
       String concatenatedKey =
           String.join(ObjectStorageUtils.CONCATENATED_KEY_DELIMITER, namespace, table);
       upsert(
-          ObjectStorageUtils.getObjectKey(metadataNamespace, METADATA_TABLE, null),
+          ObjectStorageUtils.getObjectKey(metadataNamespace, TABLE_METADATA_TABLE, null),
           concatenatedKey,
           new ObjectStorageTableMetadata(metadata));
     } catch (Exception e) {
@@ -277,7 +284,8 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
       String concatenatedKey =
           String.join(ObjectStorageUtils.CONCATENATED_KEY_DELIMITER, namespace, table);
       ObjectStorageWrapperResponse response =
-          wrapper.get(ObjectStorageUtils.getObjectKey(metadataNamespace, METADATA_TABLE, null));
+          wrapper.get(
+              ObjectStorageUtils.getObjectKey(metadataNamespace, TABLE_METADATA_TABLE, null));
       Map<String, ObjectStorageTableMetadata> tableMetadataTable =
           JsonConvertor.deserialize(
               response.getValue(), new TypeReference<Map<String, ObjectStorageTableMetadata>>() {});
@@ -292,7 +300,7 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
           TableMetadata.newBuilder(currentMetadata).addColumn(columnName, columnType).build();
       tableMetadataTable.put(concatenatedKey, new ObjectStorageTableMetadata(newMetadata));
       if (!wrapper.updateIfVersionMatches(
-          ObjectStorageUtils.getObjectKey(metadataNamespace, METADATA_TABLE, null),
+          ObjectStorageUtils.getObjectKey(metadataNamespace, TABLE_METADATA_TABLE, null),
           JsonConvertor.serialize(tableMetadataTable),
           response.getVersion())) {
         // If the metadata table is updated by another transaction, throw an exception
@@ -328,7 +336,9 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
       Map<String, ObjectStorageNamespaceMetadata> metadataTable =
           JsonConvertor.deserialize(
               wrapper
-                  .get(ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_TABLE, null))
+                  .get(
+                      ObjectStorageUtils.getObjectKey(
+                          metadataNamespace, NAMESPACE_METADATA_TABLE, null))
                   .getValue(),
               new TypeReference<Map<String, ObjectStorageNamespaceMetadata>>() {});
       return metadataTable.keySet();
@@ -343,7 +353,9 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
       Map<String, ObjectStorageTableMetadata> metadataTable =
           JsonConvertor.deserialize(
               wrapper
-                  .get(ObjectStorageUtils.getObjectKey(metadataNamespace, METADATA_TABLE, null))
+                  .get(
+                      ObjectStorageUtils.getObjectKey(
+                          metadataNamespace, TABLE_METADATA_TABLE, null))
                   .getValue(),
               new TypeReference<Map<String, ObjectStorageTableMetadata>>() {});
       metadataTable.keySet().stream()
@@ -358,7 +370,8 @@ public class ObjectStorageAdmin implements DistributedStorageAdmin {
               namespaceName -> {
                 try {
                   upsert(
-                      ObjectStorageUtils.getObjectKey(metadataNamespace, NAMESPACE_TABLE, null),
+                      ObjectStorageUtils.getObjectKey(
+                          metadataNamespace, NAMESPACE_METADATA_TABLE, null),
                       namespaceName,
                       new ObjectStorageNamespaceMetadata(namespaceName));
                 } catch (ExecutionException e) {
