@@ -12,7 +12,7 @@ public class ObjectStorageUtils {
 
   public static String getObjectKey(String namespace, String table, @Nullable String partition) {
     if (partition == null) {
-      return String.join(OBJECT_KEY_DELIMITER, namespace, table, "");
+      return String.join(OBJECT_KEY_DELIMITER, namespace, table);
     } else {
       return String.join(OBJECT_KEY_DELIMITER, namespace, table, partition);
     }

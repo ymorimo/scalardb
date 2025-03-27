@@ -185,7 +185,7 @@ public class SelectStatementHandler extends StatementHandler {
   private Set<ObjectStorageRecord> getRecordsInTable(String namespace, String table)
       throws ExecutionException {
     Set<String> partitionNames =
-        wrapper.getKeys(ObjectStorageUtils.getObjectKey(namespace, table, null)).stream()
+        wrapper.getKeys(ObjectStorageUtils.getObjectKey(namespace, table, "")).stream()
             .map(key -> key.substring(key.lastIndexOf(ObjectStorageUtils.OBJECT_KEY_DELIMITER) + 1))
             .filter(partition -> !partition.isEmpty())
             .collect(Collectors.toSet());
