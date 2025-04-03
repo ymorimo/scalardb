@@ -332,7 +332,7 @@ public abstract class ImportProcessor {
     List<ImportTransactionBatch> transactionBatches =
         splitIntoTransactionBatches(dataChunk, transactionBatchSize);
     ExecutorService transactionBatchExecutor =
-        Executors.newFixedThreadPool(Math.min(transactionBatches.size(), numCores));
+        Executors.newFixedThreadPool(Math.min(transactionBatches.size(), numCores * 2));
     List<Future<?>> transactionBatchFutures = new ArrayList<>();
     AtomicInteger successCount = new AtomicInteger(0);
     AtomicInteger failureCount = new AtomicInteger(0);
