@@ -35,7 +35,8 @@ public class ImportCommandOptions {
       names = {"--max-threads", "-mt"},
       paramLabel = "<MAX_THREADS>",
       description =
-          "Maximum number of threads to use for parallel processing (default: number of available processors)")
+          "Maximum number of threads to use for parallel processing (default: number of available processors)",
+      defaultValue = "16")
   protected int maxThreads;
 
   @CommandLine.Option(
@@ -130,14 +131,14 @@ public class ImportCommandOptions {
   protected String customHeaderRow;
 
   @CommandLine.Option(
-      names = {"--data-chunk-size"},
+      names = {"--data-chunk-size", "-ds"},
       paramLabel = "<DATA_CHUNK_SIZE>",
       description = "Maximum number of records to be included in a single data chunk",
       defaultValue = "500")
   protected int dataChunkSize;
 
   @CommandLine.Option(
-      names = {"--transaction-size"},
+      names = {"--transaction-size", "-ts"},
       paramLabel = "<TRANSACTION_SIZE>",
       description =
           "Maximum number of put operations that are grouped together into one ScalarDB distributed transaction, only supported in ScalarDB transaction mode",
@@ -145,9 +146,16 @@ public class ImportCommandOptions {
   protected int transactionSize;
 
   @CommandLine.Option(
-      names = {"--split-log-mode"},
+      names = {"--split-log-mode", "-sp"},
       paramLabel = "<SPLIT_LOG_MODE>",
       description = "Split log file into multiple files based on data chunks",
       defaultValue = "false")
   protected boolean splitLogMode;
+
+  @CommandLine.Option(
+      names = {"--data-chunk-queue-size", "-qs"},
+      paramLabel = "<DATA_CHUNK_QUEUE_SIZE>",
+      description = "Maximum number of data chunks that can be kept at a time for processing",
+      defaultValue = "256")
+  protected int dataChunkQueueSize;
 }
