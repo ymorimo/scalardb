@@ -4,6 +4,7 @@ import static com.scalar.db.config.ConfigUtils.getString;
 
 import com.scalar.db.common.error.CoreError;
 import com.scalar.db.config.DatabaseConfig;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,6 +13,9 @@ public class ObjectStorageConfig {
   public static final String PREFIX = DatabaseConfig.PREFIX + STORAGE_NAME + ".";
   public static final String STORAGE_TYPE = PREFIX + "type";
   public static final String BUCKET = PREFIX + "bucket";
+
+  // For S3
+  public static final String ENDPOINT_OVERRIDE = PREFIX + "endpoint_override";
 
   /**
    * @deprecated As of 5.0, will be removed.
@@ -26,6 +30,10 @@ public class ObjectStorageConfig {
   private final String storage_type;
   private final String bucket;
   private final String metadataNamespace;
+
+  // For S3
+  private final String region;
+  private final String endpointOverride;
 
   public ObjectStorageConfig(DatabaseConfig databaseConfig) {
     String storage = databaseConfig.getStorage();
@@ -60,6 +68,10 @@ public class ObjectStorageConfig {
     } else {
       metadataNamespace = databaseConfig.getSystemNamespaceName();
     }
+
+    // For S3
+    region = databaseConfig.getContactPoints().get(0);
+    endpointOverride = getString(databaseConfig.getProperties(), ENDPOINT_OVERRIDE, null);
   }
 
   public String getEndpoint() {
@@ -84,5 +96,15 @@ public class ObjectStorageConfig {
 
   public String getMetadataNamespace() {
     return metadataNamespace;
+  }
+
+  // For S3
+
+  public String getRegion() {
+    return region;
+  }
+
+  public Optional<String> getEndpointOverride() {
+    return Optional.ofNullable(endpointOverride);
   }
 }

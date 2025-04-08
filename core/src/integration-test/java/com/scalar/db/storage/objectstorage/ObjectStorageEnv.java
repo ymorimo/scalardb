@@ -1,20 +1,26 @@
 package com.scalar.db.storage.objectstorage;
 
 import com.scalar.db.config.DatabaseConfig;
+import java.util.Objects;
 import java.util.Properties;
 
 public class ObjectStorageEnv {
   private static final String PROP_OBJECT_STORAGE_ENDPOINT = "scalardb.object_storage.endpoint";
   private static final String PROP_OBJECT_STORAGE_USERNAME = "scalardb.object_storage.username";
   private static final String PROP_OBJECT_STORAGE_PASSWORD = "scalardb.object_storage.password";
-  private static final String PROP_OBJECT_STORAGE_BUCKET = "scalardb.object_storage.storage_type";
-  private static final String PROP_OBJECT_STORAGE_STORAGE_TYPE = "scalardb.object_storage.bucket";
+  private static final String PROP_OBJECT_STORAGE_STORAGE_TYPE = "scalardb.object_storage.storage_type";
+  private static final String PROP_OBJECT_STORAGE_BUCKET  = "scalardb.object_storage.bucket";
+  // For S3
+  private static final String PROP_OBJECT_STORAGE_REGION = "scalardb.s3.region";
+  private static final String PROP_S3_ENDPOINT_OVERRIDE = "scalardb.s3.endpoint_override";
 
   private static final String DEFAULT_BLOB_ENDPOINT = "http://localhost:10000/";
   private static final String DEFAULT_BLOB_USERNAME = "devstoreaccount1";
   private static final String DEFAULT_BLOB_PASSWORD =
       "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==";
   private static final String DEFAULT_BLOB_CONTAINER = "fake-container";
+  // For S3
+  private static final String DEFAULT_BLOB_REGION = "us-west-2";
 
   private ObjectStorageEnv() {}
 
@@ -37,6 +43,16 @@ public class ObjectStorageEnv {
     properties.setProperty(DatabaseConfig.CROSS_PARTITION_SCAN_ORDERING, "false");
     properties.setProperty(ObjectStorageConfig.STORAGE_TYPE, storage_type);
     properties.setProperty(ObjectStorageConfig.BUCKET, bucket);
+
+    // For S3
+    if (Objects.equals(storage_type, S3Wrapper.STORAGE_TYPE)) {
+      String region = System.getProperty(PROP_OBJECT_STORAGE_REGION, DEFAULT_BLOB_REGION);
+      String endpointOverride = System.getProperty(PROP_S3_ENDPOINT_OVERRIDE, null);
+      if (endpointOverride != null) {
+        properties.setProperty(ObjectStorageConfig.ENDPOINT_OVERRIDE, endpointOverride);
+      }
+      properties.setProperty(DatabaseConfig.CONTACT_POINTS, region);
+    }
 
     // Add testName as a metadata namespace suffix
     properties.setProperty(

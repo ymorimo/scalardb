@@ -24,6 +24,7 @@ public class BlobStorageWrapper implements ObjectStorageWrapper {
     this.client = client;
   }
 
+  @Override
   public ObjectStorageWrapperResponse get(String key) throws ObjectStorageWrapperException {
     BlobClient blobClient = client.getBlobClient(key);
     try {
@@ -41,6 +42,7 @@ public class BlobStorageWrapper implements ObjectStorageWrapper {
     }
   }
 
+  @Override
   public Set<String> getKeys(String prefix) {
     return client
         .listBlobs(new ListBlobsOptions().setPrefix(prefix), Duration.ofSeconds(5))
@@ -49,6 +51,7 @@ public class BlobStorageWrapper implements ObjectStorageWrapper {
         .collect(Collectors.toSet());
   }
 
+  @Override
   public void insert(String key, String object) throws ObjectStorageWrapperException {
     BlobClient blobClient = client.getBlobClient(key);
     try {
@@ -62,6 +65,7 @@ public class BlobStorageWrapper implements ObjectStorageWrapper {
     }
   }
 
+  @Override
   public boolean updateIfVersionMatches(String key, String object, String version) {
     BlobClient blobClient = client.getBlobClient(key);
     try {
@@ -80,6 +84,7 @@ public class BlobStorageWrapper implements ObjectStorageWrapper {
     }
   }
 
+  @Override
   public void delete(String key) throws ObjectStorageWrapperException {
     BlobClient blobClient = client.getBlobClient(key);
     try {
@@ -93,6 +98,7 @@ public class BlobStorageWrapper implements ObjectStorageWrapper {
     }
   }
 
+  @Override
   public boolean deleteIfVersionMatches(String key, String version) {
     BlobClient blobClient = client.getBlobClient(key);
     try {
@@ -108,6 +114,7 @@ public class BlobStorageWrapper implements ObjectStorageWrapper {
     }
   }
 
+  @Override
   public void close() {
     // Do nothing
   }
