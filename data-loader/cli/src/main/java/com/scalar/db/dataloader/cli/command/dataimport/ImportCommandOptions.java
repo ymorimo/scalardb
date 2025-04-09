@@ -131,7 +131,7 @@ public class ImportCommandOptions {
   protected String customHeaderRow;
 
   @CommandLine.Option(
-      names = {"--data-chunk-size", "-ds"},
+      names = {"--data-chunk-size", "-dcs"},
       paramLabel = "<DATA_CHUNK_SIZE>",
       description = "Maximum number of records to be included in a single data chunk",
       defaultValue = "500")
@@ -146,7 +146,7 @@ public class ImportCommandOptions {
   protected int transactionSize;
 
   @CommandLine.Option(
-      names = {"--split-log-mode", "-sp"},
+      names = {"--split-log-mode", "-slm"},
       paramLabel = "<SPLIT_LOG_MODE>",
       description = "Split log file into multiple files based on data chunks",
       defaultValue = "false")
