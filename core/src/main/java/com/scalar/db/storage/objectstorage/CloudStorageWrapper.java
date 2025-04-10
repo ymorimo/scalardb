@@ -57,6 +57,13 @@ public class CloudStorageWrapper implements ObjectStorageWrapper {
   }
 
   @Override
+  public void upsert(String key, String object) {
+    storage.create(
+        BlobInfo.newBuilder(BlobId.of(bucket, key)).build(),
+        object.getBytes(StandardCharsets.UTF_8));
+  }
+
+  @Override
   public boolean updateIfVersionMatches(String key, String object, String version) {
     try {
       storage.create(

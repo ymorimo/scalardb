@@ -31,6 +31,14 @@ public interface ObjectStorageWrapper {
   void insert(String key, String object) throws ObjectStorageWrapperException;
 
   /**
+   * Upsert the object into the storage.
+   *
+   * @param key the key of the object
+   * @param object the object to upsert
+   */
+  void upsert(String key, String object);
+
+  /**
    * Update the object in the storage if the version matches.
    *
    * @param key the key of the object

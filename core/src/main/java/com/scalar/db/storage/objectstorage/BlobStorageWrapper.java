@@ -66,6 +66,12 @@ public class BlobStorageWrapper implements ObjectStorageWrapper {
   }
 
   @Override
+  public void upsert(String key, String object) {
+    BlobClient blobClient = client.getBlobClient(key);
+    blobClient.upload(BinaryData.fromString(object), true);
+  }
+
+  @Override
   public boolean updateIfVersionMatches(String key, String object, String version) {
     BlobClient blobClient = client.getBlobClient(key);
     try {

@@ -69,6 +69,12 @@ public class S3Wrapper implements ObjectStorageWrapper {
   }
 
   @Override
+  public void upsert(String key, String object) {
+    client.putObject(
+        PutObjectRequest.builder().bucket(bucket).key(key).build(), RequestBody.fromString(object));
+  }
+
+  @Override
   public boolean updateIfVersionMatches(String key, String object, String version) {
     try {
       client.putObject(
