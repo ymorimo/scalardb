@@ -4,6 +4,7 @@ import static com.scalar.db.config.ConfigUtils.getString;
 
 import com.scalar.db.common.error.CoreError;
 import com.scalar.db.config.DatabaseConfig;
+import java.util.Objects;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +17,9 @@ public class ObjectStorageConfig {
 
   // For S3
   public static final String ENDPOINT_OVERRIDE = PREFIX + "endpoint_override";
+
+  // For Cloud Storage
+  public static final String PROJECT_ID = PREFIX + "project_id";
 
   /**
    * @deprecated As of 5.0, will be removed.
@@ -35,6 +39,9 @@ public class ObjectStorageConfig {
   private final String region;
   private final String endpointOverride;
 
+  // For Cloud Storage
+  private final String projectId;
+
   public ObjectStorageConfig(DatabaseConfig databaseConfig) {
     String storage = databaseConfig.getStorage();
     if (!storage.equals(STORAGE_NAME)) {
@@ -51,8 +58,14 @@ public class ObjectStorageConfig {
     if (!databaseConfig.getProperties().containsKey(BUCKET)) {
       throw new IllegalArgumentException("Bucket name is not specified.");
     }
-    storage_type = getString(databaseConfig.getProperties(), STORAGE_TYPE, null);
-    bucket = getString(databaseConfig.getProperties(), BUCKET, null);
+    if (!databaseConfig.getProperties().containsKey(STORAGE_TYPE)) {
+      throw new IllegalArgumentException("Storage type is not specified.");
+    }
+    storage_type = databaseConfig.getProperties().getProperty(STORAGE_TYPE);
+    if (!databaseConfig.getProperties().containsKey(BUCKET)) {
+      throw new IllegalArgumentException("Bucket name is not specified.");
+    }
+    bucket = databaseConfig.getProperties().getProperty(BUCKET);
 
     if (databaseConfig.getProperties().containsKey(TABLE_METADATA_NAMESPACE)) {
       logger.warn(
@@ -70,8 +83,14 @@ public class ObjectStorageConfig {
     }
 
     // For S3
-    region = databaseConfig.getContactPoints().get(0);
+    region = storage_type.equals(S3Wrapper.STORAGE_TYPE) ? endpoint : null;
     endpointOverride = getString(databaseConfig.getProperties(), ENDPOINT_OVERRIDE, null);
+
+    // For Cloud Storage
+    projectId = getString(databaseConfig.getProperties(), PROJECT_ID, null);
+    if (Objects.equals(storage_type, CloudStorageWrapper.STORAGE_TYPE) && projectId == null) {
+      throw new IllegalArgumentException("Project ID is not specified.");
+    }
   }
 
   public String getEndpoint() {
@@ -106,5 +125,11 @@ public class ObjectStorageConfig {
 
   public Optional<String> getEndpointOverride() {
     return Optional.ofNullable(endpointOverride);
+  }
+
+  // For Cloud Storage
+
+  public String getProjectId() {
+    return projectId;
   }
 }

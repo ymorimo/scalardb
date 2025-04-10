@@ -8,11 +8,14 @@ public class ObjectStorageEnv {
   private static final String PROP_OBJECT_STORAGE_ENDPOINT = "scalardb.object_storage.endpoint";
   private static final String PROP_OBJECT_STORAGE_USERNAME = "scalardb.object_storage.username";
   private static final String PROP_OBJECT_STORAGE_PASSWORD = "scalardb.object_storage.password";
-  private static final String PROP_OBJECT_STORAGE_STORAGE_TYPE = "scalardb.object_storage.storage_type";
-  private static final String PROP_OBJECT_STORAGE_BUCKET  = "scalardb.object_storage.bucket";
+  private static final String PROP_OBJECT_STORAGE_STORAGE_TYPE =
+      "scalardb.object_storage.storage_type";
+  private static final String PROP_OBJECT_STORAGE_BUCKET = "scalardb.object_storage.bucket";
   // For S3
   private static final String PROP_OBJECT_STORAGE_REGION = "scalardb.s3.region";
   private static final String PROP_S3_ENDPOINT_OVERRIDE = "scalardb.s3.endpoint_override";
+  // For Cloud Storage
+  private static final String PROP_OBJECT_STORAGE_PROJECT_ID = "scalardb.gcs.project_id";
 
   private static final String DEFAULT_BLOB_ENDPOINT = "http://localhost:10000/";
   private static final String DEFAULT_BLOB_USERNAME = "devstoreaccount1";
@@ -21,6 +24,8 @@ public class ObjectStorageEnv {
   private static final String DEFAULT_BLOB_CONTAINER = "fake-container";
   // For S3
   private static final String DEFAULT_BLOB_REGION = "us-west-2";
+  // For Cloud Storage
+  private static final String DEFAULT_GCS_PROJECT_ID = "test-project";
 
   private ObjectStorageEnv() {}
 
@@ -52,6 +57,12 @@ public class ObjectStorageEnv {
         properties.setProperty(ObjectStorageConfig.ENDPOINT_OVERRIDE, endpointOverride);
       }
       properties.setProperty(DatabaseConfig.CONTACT_POINTS, region);
+    }
+
+    // For Cloud Storage
+    if (Objects.equals(storage_type, CloudStorageWrapper.STORAGE_TYPE)) {
+      String projectId = System.getProperty(PROP_OBJECT_STORAGE_PROJECT_ID, DEFAULT_GCS_PROJECT_ID);
+      properties.setProperty(ObjectStorageConfig.PROJECT_ID, projectId);
     }
 
     // Add testName as a metadata namespace suffix

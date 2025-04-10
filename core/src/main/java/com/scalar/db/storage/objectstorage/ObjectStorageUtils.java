@@ -3,7 +3,12 @@ package com.scalar.db.storage.objectstorage;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
 import com.azure.storage.common.StorageSharedKeyCredential;
+import com.google.auth.oauth2.ServiceAccountCredentials;
+import com.google.cloud.storage.Storage;
+import com.google.cloud.storage.StorageOptions;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Objects;
 import javax.annotation.Nullable;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -29,6 +34,8 @@ public class ObjectStorageUtils {
       return new S3Wrapper(buildS3Client(config), config.getBucket());
     } else if (Objects.equals(config.getStorageType(), BlobStorageWrapper.STORAGE_TYPE)) {
       return new BlobStorageWrapper(buildBlobContainerClient(config));
+    } else if (Objects.equals(config.getStorageType(), CloudStorageWrapper.STORAGE_TYPE)) {
+      return new CloudStorageWrapper(buildStorage(config), config.getBucket());
     } else {
       throw new IllegalArgumentException("Unsupported storage type: " + config.getStorageType());
     }
@@ -51,5 +58,19 @@ public class ObjectStorageUtils {
         .credential(new StorageSharedKeyCredential(config.getUsername(), config.getPassword()))
         .buildClient()
         .getBlobContainerClient(config.getBucket());
+  }
+
+  private static Storage buildStorage(ObjectStorageConfig config) {
+    try {
+      return StorageOptions.newBuilder()
+          .setProjectId(config.getProjectId())
+          .setCredentials(
+              ServiceAccountCredentials.fromStream(
+                  Files.newInputStream(Paths.get(config.getPassword()))))
+          .build()
+          .getService();
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to create Cloud Storage client", e);
+    }
   }
 }
