@@ -42,9 +42,9 @@ public class Main {
         TransactionFactory transactionFactory = TransactionFactory.create(scalarDbPropertiesFilePath);
         DistributedTransactionManager transactionManager = transactionFactory.getTransactionManager();
 
-        int coreCount = Runtime.getRuntime().availableProcessors();
+//        int coreCount = Runtime.getRuntime().availableProcessors();
         int batchSize = 10;
-        ExecutorService executorService = Executors.newFixedThreadPool(coreCount);
+        ExecutorService executorService = Executors.newFixedThreadPool(5);
         CompletionService<Void> completionService = new ExecutorCompletionService<>(executorService);
         AtomicInteger insertedRecords = new AtomicInteger(0);
         int totalTasks = (int) Math.ceil((double) recordCount / batchSize);  // Ensure correct task tracking

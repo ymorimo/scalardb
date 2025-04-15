@@ -12,6 +12,20 @@ repositories {
 application {
     mainClass = 'com.scalar.db.datapopulator.Main'
 }
+
+tasks.register('runBulkInsert', JavaExec) {
+    group = 'custom'
+    description = 'Runs the main class for bulk inserts'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass.set('com.scalar.db.datapopulator.Main')
+
+    // Set default arguments or pass via command line
+    args = [
+            'scalardb.properties', // path to ScalarDB properties
+            '10000'                // number of records
+    ]
+}
+
 dependencies {
     implementation 'com.scalar-labs:scalardb:3.15.2'
     testImplementation platform('org.junit:junit-bom:5.10.0')

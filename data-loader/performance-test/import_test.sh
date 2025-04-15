@@ -1,18 +1,15 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
 # --- CONFIGURATION VARIABLES ---
 
 IMAGE_NAME="ghcr.io/scalar-labs/scalardb-data-loader:4.0.0-SNAPSHOT"
-CONTAINER_BASE_NAME="data-loader-cli"
-ROOT_PERFORMANCE_TEST_FOLDER="data-loader/performance-test"
 DATABASE_ROOT_PATH="database"
 POSTGRES_SETUP_SCRIPT="./db_setup.sh"
 POSTGRES_CONTAINER="postgres-db"
 PYTHON_SCRIPT_PATH="scripts/import-data-generator.py"
-PYTHON_ARGUMENTS="-s 100MB -o output.csv database/schema.json test.all_columns"
-SCHEMA_PATH="./database/schema.json"
+PYTHON_ARGUMENTS="-s 1MB -o output.csv database/schema.json test.all_columns"
 PROPERTIES_PATH="./database/scalardb.properties"
 INPUT_SOURCE_FILE="./output.csv"
 CONTAINER_INPUT_FILE="/app/output.csv"
@@ -23,45 +20,65 @@ CONTAINER_LOG_DIR_PATH="/app/logs/"
 MEMORY_CONFIGS=("1g" "2g")
 CPU_CONFIGS=("1" "2")
 
-# --- STEP 1: Build Docker image for data loader CLI ---
+# --- FUNCTIONS ---
 
-./gradlew data-loader:cli:docker
+log_step() {
+  echo -e "\n▶ \033[1;34m$1\033[0m"
+}
 
-# --- STEP 2: Switch to performance test folder ---
+cleanup_postgres() {
+  docker rm -f "$POSTGRES_CONTAINER" >/dev/null 2>&1 || true
+}
 
-cd "$ROOT_PERFORMANCE_TEST_FOLDER"
-mkdir -p performance-logs
-chmod 777 performance-logs
+cleanup_files() {
+  rm -rf "$LOG_DIR_HOST" "$INPUT_SOURCE_FILE"
+}
 
-# --- STEP 2: Generate input data using Python ---
+ensure_docker_network() {
+  if ! docker network inspect my-network >/dev/null 2>&1; then
+    log_step "Creating Docker network 'my-network'"
+    docker network create my-network
+  fi
+}
 
-echo "▶ Running Python script to generate input data..."
+trap cleanup_postgres EXIT
+
+# --- PREPARATION ---
+
+mkdir -p "$LOG_DIR_HOST"
+chmod 777 "$LOG_DIR_HOST"
+
+if [[ ! -f "$PYTHON_SCRIPT_PATH" ]]; then
+  echo "❌ Python script not found at $PYTHON_SCRIPT_PATH"
+  exit 1
+fi
+
+log_step "Running Python script to generate input data..."
 python3 "$PYTHON_SCRIPT_PATH" $PYTHON_ARGUMENTS
 echo "✅ Input file generated."
 
+ensure_docker_network
 
+# --- MAIN EXECUTION LOOP ---
 
 for mem in "${MEMORY_CONFIGS[@]}"; do
   for cpu in "${CPU_CONFIGS[@]}"; do
 
-    # --- STEP 3: start DB and load schema
-    # Start PostgreSQL container
-    echo "▶ Starting PostgreSQL Docker container..."
+    log_step "Starting PostgreSQL Docker container..."
     (cd "$DATABASE_ROOT_PATH" && bash "$POSTGRES_SETUP_SCRIPT")
     echo "✅ PostgreSQL container is running."
 
-    # --- STEP 4: Run the docker image
     CONTAINER_NAME="import-mem${mem}-cpu${cpu}"
-    echo "▶ Running Docker container: $CONTAINER_NAME with --memory=$mem --cpus=$cpu"
+    log_step "Running Docker container: $CONTAINER_NAME with --memory=$mem --cpus=$cpu"
 
     docker run --rm \
       --name "$CONTAINER_NAME" \
-       --network my-network \
+      --network my-network \
       --memory="$mem" \
       --cpus="$cpu" \
       -v "$PWD/$INPUT_SOURCE_FILE":"$CONTAINER_INPUT_FILE" \
       -v "$PWD/$PROPERTIES_PATH":"$CONTAINER_PROPERTIES_PATH" \
-       -v "$LOG_DIR_HOST":"$CONTAINER_LOG_DIR" \
+      -v "$LOG_DIR_HOST":"$CONTAINER_LOG_DIR" \
       "$IMAGE_NAME" \
       import --config "$CONTAINER_PROPERTIES_PATH" \
              --file "$CONTAINER_INPUT_FILE" \
@@ -79,16 +96,14 @@ for mem in "${MEMORY_CONFIGS[@]}"; do
     echo "✅ Finished: $CONTAINER_NAME"
     echo "----------------------------------------"
 
-    # Kill and remove the PostgreSQL container
-    echo "🧹 Cleaning up PostgreSQL container..."
-    docker kill "$POSTGRES_CONTAINER" || true
-    docker rm -v "$POSTGRES_CONTAINER" || true
-    echo "🗑️ Removed postgres container"
+    log_step "Cleaning up PostgreSQL container..."
+    cleanup_postgres
   done
 done
 
-# Removes generated input and output files (comment if files are required for final output check)
-rm -rf performance-logs
-rm output.csv
+# --- CLEANUP ---
 
-echo "🎉 All import runs completed."
+log_step "Cleaning up generated files..."
+cleanup_files
+
+echo -e "\n🎉 \033[1;32mAll import runs completed successfully.\033[0m"
