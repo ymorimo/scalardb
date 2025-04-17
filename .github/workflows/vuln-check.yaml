@@ -29,7 +29,6 @@ jobs:
         with:
           target-ref: ${{ inputs.target-ref }}
           find-latest-release: ${{ inputs.find-latest-release }}
-          version-command: "./gradlew :core:properties -q | grep version: | awk '{print $2}'"
 
       - name: Docker images
         id: list-docker-images
