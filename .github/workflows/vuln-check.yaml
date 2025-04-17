@@ -24,8 +24,8 @@ jobs:
     steps:
       - name: Build docker image
         id: build-docker-image
-        # uses: scalar-labs/actions/.github/actions/gradlew-docker@main
-        uses: ymorimo/scalar-actions/.github/actions/gradlew-docker@main
+        # uses: scalar-labs/actions/.github/actions/build-docker-images@main
+        uses: ymorimo/scalar-actions/.github/actions/build-docker-images@main
         with:
           target-ref: ${{ inputs.target-ref }}
           find-latest-release: ${{ inputs.find-latest-release }}
