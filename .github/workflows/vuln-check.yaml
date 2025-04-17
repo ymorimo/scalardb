@@ -31,13 +31,23 @@ jobs:
           find-latest-release: ${{ inputs.find-latest-release }}
           version-command: "./gradlew :core:properties -q | grep version: | awk '{print $2}'"
 
-      # TODO:
-      # - name: Vulnerability check for ScalarDB Schema Loader
-      #   # uses: scalar-labs/actions/.github/actions/vlun-check@main
-      #   uses: ymorimo/scalar-actions/.github/actions/vlun-check@main
-      #   with:
-      #     slack-webhook-url: ${{ secrets.SLACK_SECURITY_WEBHOOK_URL}}
-      #     image-ref: ghcr.io/scalar-labs/scalardb-schema-loader:${{ steps.build-docker-image.outputs.version }}
+      - name: Docker images
+        id: list-docker-images
+        run: |
+          # json='${{ steps.build-docker-image.outputs.docker-images-json }}'
+          # image_schema_loader=$(jq -r 'first(.[] | select(match("scalardb")))')
+          # echo scalardb-schema-loader-image=$(echo $json | jq -r '.[] | select(test("scalardb-schema-loader"))') >> $GITHUB_OUTPUT
+          list=$(echo ${{ steps.build-docker-image.outputs.docker-images }} | tr ',' '\n')
+          echo $list
+          echo ref-scalardb-schema-loader=$(echo $list | grep scalardb-schema-loader)
+          echo ref-scalardb-schema-loader=$(echo $list | grep scalardb-schema-loader) >> $GITHUB_OUTPUT
+
+      - name: Vulnerability check for ScalarDB Schema Loader
+        # uses: scalar-labs/actions/.github/actions/vlun-check@main
+        uses: ymorimo/scalar-actions/.github/actions/vuln-check@main
+        with:
+          image-ref: ${{ steps.list-docker-images.outputs.ref-scalardb-schema-loader }}
+          slack-webhook-url: ${{ secrets.SLACK_SECURITY_WEBHOOK_URL}}
 
     # uses: ymorimo/scalar-actions/.github/workflows/vuln-check-reusable.yaml@main
     # with:
