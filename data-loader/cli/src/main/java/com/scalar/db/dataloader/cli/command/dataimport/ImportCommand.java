@@ -19,7 +19,6 @@ import com.scalar.db.dataloader.core.dataimport.dao.ScalarDbTransactionManager;
 import com.scalar.db.dataloader.core.dataimport.log.*;
 import com.scalar.db.dataloader.core.dataimport.log.writer.DefaultLogWriterFactory;
 import com.scalar.db.dataloader.core.dataimport.log.writer.LogWriterFactory;
-import com.scalar.db.dataloader.core.dataimport.log.writer.LogWriterFactoryConfig;
 import com.scalar.db.dataloader.core.dataimport.processor.DefaultImportProcessorFactory;
 import com.scalar.db.dataloader.core.dataimport.processor.ImportProcessorFactory;
 import com.scalar.db.dataloader.core.tablemetadata.TableMetadataException;
@@ -81,11 +80,7 @@ public class ImportCommand extends ImportCommandOptions implements Callable<Inte
    * @return LogWriterFactory object
    */
   private LogWriterFactory createLogWriterFactory(ImportLoggerConfig config) {
-    LogWriterFactoryConfig logWriterFactoryConfig =
-        LogWriterFactoryConfig.builder()
-            .logStorageLocation(LogStorageLocation.LOCAL_FILE_STORAGE)
-            .build();
-    return new DefaultLogWriterFactory(logWriterFactoryConfig, config);
+    return new DefaultLogWriterFactory(config);
   }
 
   /**
