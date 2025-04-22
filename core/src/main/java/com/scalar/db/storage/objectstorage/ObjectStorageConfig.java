@@ -1,5 +1,7 @@
 package com.scalar.db.storage.objectstorage;
 
+import static com.scalar.db.config.ConfigUtils.getInt;
+import static com.scalar.db.config.ConfigUtils.getLong;
 import static com.scalar.db.config.ConfigUtils.getString;
 
 import com.scalar.db.common.error.CoreError;
@@ -17,6 +19,16 @@ public class ObjectStorageConfig {
 
   // For S3
   public static final String ENDPOINT_OVERRIDE = PREFIX + "endpoint_override";
+
+  // For Blob Storage
+  public static final String BLOB_BLOCK_SIZE =
+      PREFIX + BlobStorageWrapper.STORAGE_TYPE + ".block_size";
+  public static final String BLOB_MAX_UPLOAD_CONCURRENCY =
+      PREFIX + BlobStorageWrapper.STORAGE_TYPE + ".max_upload_concurrency";
+  public static final String BLOB_MAX_SINGLE_UPLOAD_SIZE =
+      PREFIX + BlobStorageWrapper.STORAGE_TYPE + ".max_single_upload_size";
+  public static final String BLOB_TIMEOUT_IN_SECONDS =
+      PREFIX + BlobStorageWrapper.STORAGE_TYPE + ".timeout_in_seconds";
 
   // For Cloud Storage
   public static final String PROJECT_ID = PREFIX + "project_id";
@@ -38,6 +50,12 @@ public class ObjectStorageConfig {
   // For S3
   private final String region;
   private final String endpointOverride;
+
+  // For Blob Storage
+  private final long blockSize;
+  private final int maxUploadConcurrency;
+  private final long maxSingleUploadSize;
+  private final int timeoutInSeconds;
 
   // For Cloud Storage
   private final String projectId;
@@ -86,6 +104,13 @@ public class ObjectStorageConfig {
     region = storage_type.equals(S3Wrapper.STORAGE_TYPE) ? endpoint : null;
     endpointOverride = getString(databaseConfig.getProperties(), ENDPOINT_OVERRIDE, null);
 
+    // For Blob Storage
+    blockSize = getLong(databaseConfig.getProperties(), BLOB_BLOCK_SIZE, 50 * 1024 * 1024);
+    maxUploadConcurrency = getInt(databaseConfig.getProperties(), BLOB_MAX_UPLOAD_CONCURRENCY, 4);
+    maxSingleUploadSize =
+        getLong(databaseConfig.getProperties(), BLOB_MAX_SINGLE_UPLOAD_SIZE, 100 * 1024 * 1024);
+    timeoutInSeconds = getInt(databaseConfig.getProperties(), BLOB_TIMEOUT_IN_SECONDS, 5);
+
     // For Cloud Storage
     projectId = getString(databaseConfig.getProperties(), PROJECT_ID, null);
     if (Objects.equals(storage_type, CloudStorageWrapper.STORAGE_TYPE) && projectId == null) {
@@ -125,6 +150,24 @@ public class ObjectStorageConfig {
 
   public Optional<String> getEndpointOverride() {
     return Optional.ofNullable(endpointOverride);
+  }
+
+  // For Blob Storage
+
+  public long getBlockSize() {
+    return blockSize;
+  }
+
+  public int getMaxUploadConcurrency() {
+    return maxUploadConcurrency;
+  }
+
+  public long getMaxSingleUploadSize() {
+    return maxSingleUploadSize;
+  }
+
+  public int getTimeoutInSeconds() {
+    return timeoutInSeconds;
   }
 
   // For Cloud Storage

@@ -33,7 +33,7 @@ public class ObjectStorageUtils {
     if (Objects.equals(config.getStorageType(), S3Wrapper.STORAGE_TYPE)) {
       return new S3Wrapper(buildS3Client(config), config.getBucket());
     } else if (Objects.equals(config.getStorageType(), BlobStorageWrapper.STORAGE_TYPE)) {
-      return new BlobStorageWrapper(buildBlobContainerClient(config));
+      return new BlobStorageWrapper(buildBlobContainerClient(config), config);
     } else if (Objects.equals(config.getStorageType(), CloudStorageWrapper.STORAGE_TYPE)) {
       return new CloudStorageWrapper(buildStorage(config), config.getBucket());
     } else {
