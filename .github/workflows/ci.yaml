@@ -46,7 +46,7 @@ env:
 jobs:
   check:
     name: Gradle check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
@@ -96,7 +96,7 @@ jobs:
 
   dockerfile-lint:
     name: Lint dockerfiles
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     steps:
       - uses: actions/checkout@v4
@@ -115,7 +115,7 @@ jobs:
 
   integration-test-for-cassandra-3-0:
     name: Cassandra 3.0 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     services:
       cassandra:
@@ -179,7 +179,7 @@ jobs:
 
   integration-test-for-cassandra-3-11:
     name: Cassandra 3.11 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     services:
       cassandra:
@@ -341,7 +341,7 @@ jobs:
 
   integration-test-for-dynamo:
     name: DynamoDB integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     services:
       dynamodb:
@@ -402,7 +402,7 @@ jobs:
 
   integration-test-for-jdbc-mysql-5-7:
     name: MySQL 5.7 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     strategy:
       matrix:
@@ -461,7 +461,7 @@ jobs:
 
   integration-test-for-jdbc-mysql-8-0:
     name: MySQL 8.0 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     strategy:
       matrix:
@@ -520,7 +520,7 @@ jobs:
 
   integration-test-for-jdbc-mysql-8-4:
     name: MySQL 8.4 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     strategy:
       matrix:
@@ -579,7 +579,7 @@ jobs:
 
   integration-test-for-jdbc-postgresql-13:
     name: PostgreSQL 13 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     services:
       postgres:
@@ -643,7 +643,7 @@ jobs:
 
   integration-test-for-jdbc-postgresql-14:
     name: PostgreSQL 14 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     services:
       postgres:
@@ -707,7 +707,7 @@ jobs:
 
   integration-test-for-jdbc-postgresql-15:
     name: PostgreSQL 15 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     services:
       postgres:
@@ -771,7 +771,7 @@ jobs:
 
   integration-test-for-jdbc-postgresql-16:
     name: PostgreSQL 16 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     services:
       postgres:
@@ -835,7 +835,7 @@ jobs:
 
   integration-test-for-jdbc-postgresql-17:
     name: PostgreSQL 17 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     services:
       postgres:
@@ -899,7 +899,7 @@ jobs:
 
   integration-test-for-jdbc-oracle-19:
     name: Oracle 19 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     services:
       oracle:
@@ -963,7 +963,7 @@ jobs:
 
   integration-test-for-jdbc-oracle-21:
     name: Oracle 21 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     services:
       oracle:
@@ -1034,7 +1034,7 @@ jobs:
 
   integration-test-for-jdbc-oracle-23:
     name: Oracle 23 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     strategy:
       matrix:
@@ -1204,7 +1204,7 @@ jobs:
 
   integration-test-for-jdbc-sqlserver-2019:
     name: SQL Server 2019 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     services:
       sqlserver:
@@ -1274,7 +1274,7 @@ jobs:
 
   integration-test-for-jdbc-sqlserver-2022:
     name: SQL Server 2022 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     services:
       sqlserver:
@@ -1344,7 +1344,7 @@ jobs:
 
   integration-test-for-jdbc-sqlite-3:
     name: SQLite 3 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     strategy:
       matrix:
@@ -1402,7 +1402,7 @@ jobs:
 
   integration-test-for-jdbc-mariadb-10:
     name: MariaDB 10 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     strategy:
       matrix:
@@ -1461,7 +1461,7 @@ jobs:
 
   integration-test-for-jdbc-mariadb-11-4:
     name: MariaDB 11.4 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     strategy:
       matrix:
@@ -1521,7 +1521,7 @@ jobs:
 
   integration-test-for-jdbc-yugabytedb-2:
     name: YugabyteDB 2 integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     strategy:
       matrix:
@@ -1580,7 +1580,7 @@ jobs:
 
   integration-test-for-multi-storage:
     name: Multi-storage integration test (${{ matrix.mode.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     services:
       cassandra:
