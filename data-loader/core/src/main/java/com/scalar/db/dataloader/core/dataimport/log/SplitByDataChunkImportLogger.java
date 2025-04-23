@@ -52,7 +52,7 @@ public class SplitByDataChunkImportLogger extends AbstractImportLogger {
    * @param logWriterFactory the factory to create log writers
    */
   public SplitByDataChunkImportLogger(
-          ImportLoggerConfig config, LogWriterFactory logWriterFactory) {
+      ImportLoggerConfig config, LogWriterFactory logWriterFactory) {
     super(config, logWriterFactory);
   }
 
@@ -80,7 +80,7 @@ public class SplitByDataChunkImportLogger extends AbstractImportLogger {
    * @throws IOException if an I/O error occurs while writing to the logs
    */
   private void writeImportTaskResultDetailToLogs(ImportTaskResult importTaskResult)
-          throws IOException {
+      throws IOException {
     for (ImportTargetResult target : importTaskResult.getTargets()) {
       ImportTargetResultStatus status = target.getStatus();
       if (status.equals(ImportTargetResultStatus.SAVED) && config.isLogSuccessRecords()) {
@@ -105,7 +105,7 @@ public class SplitByDataChunkImportLogger extends AbstractImportLogger {
    * @throws IOException if writing or flushing the log fails
    */
   private void writeLog(ImportTargetResult target, LogFileType logFileType, int dataChunkId)
-          throws IOException {
+      throws IOException {
     JsonNode jsonNode = OBJECT_MAPPER.valueToTree(target);
     LogWriter writer = initializeLogWriterIfNeeded(logFileType, dataChunkId);
     synchronized (writer) {
@@ -156,7 +156,7 @@ public class SplitByDataChunkImportLogger extends AbstractImportLogger {
   protected void logTransactionBatch(ImportTransactionBatchResult batchResult) {
     LogFileType logFileType = batchResult.isSuccess() ? LogFileType.SUCCESS : LogFileType.FAILURE;
     try (LogWriter logWriter =
-                 initializeLogWriterIfNeeded(logFileType, batchResult.getDataChunkId())) {
+        initializeLogWriterIfNeeded(logFileType, batchResult.getDataChunkId())) {
       JsonNode jsonNode = createFilteredTransactionBatchLogJsonNode(batchResult);
       synchronized (logWriter) {
         logWriter.write(jsonNode);
@@ -176,6 +176,7 @@ public class SplitByDataChunkImportLogger extends AbstractImportLogger {
   @Override
   protected void logError(String errorMessage, Exception exception) {
     LOGGER.error(errorMessage, exception);
+    throw new RuntimeException(errorMessage, exception);
   }
 
   /**
@@ -186,7 +187,7 @@ public class SplitByDataChunkImportLogger extends AbstractImportLogger {
    */
   private void logDataChunkSummary(ImportDataChunkStatus dataChunkStatus) throws IOException {
     try (LogWriter logWriter =
-                 initializeLogWriterIfNeeded(LogFileType.SUMMARY, dataChunkStatus.getDataChunkId())) {
+        initializeLogWriterIfNeeded(LogFileType.SUMMARY, dataChunkStatus.getDataChunkId())) {
       logWriter.write(OBJECT_MAPPER.valueToTree(dataChunkStatus));
       logWriter.flush();
     }
@@ -228,15 +229,15 @@ public class SplitByDataChunkImportLogger extends AbstractImportLogger {
     switch (logFileType) {
       case SUCCESS:
         logfilePath =
-                config.getLogDirectoryPath() + String.format(SUCCESS_LOG_FILE_NAME_FORMAT, batchId);
+            config.getLogDirectoryPath() + String.format(SUCCESS_LOG_FILE_NAME_FORMAT, batchId);
         break;
       case FAILURE:
         logfilePath =
-                config.getLogDirectoryPath() + String.format(FAILURE_LOG_FILE_NAME_FORMAT, batchId);
+            config.getLogDirectoryPath() + String.format(FAILURE_LOG_FILE_NAME_FORMAT, batchId);
         break;
       case SUMMARY:
         logfilePath =
-                config.getLogDirectoryPath() + String.format(SUMMARY_LOG_FILE_NAME_FORMAT, batchId);
+            config.getLogDirectoryPath() + String.format(SUMMARY_LOG_FILE_NAME_FORMAT, batchId);
         break;
       default:
         logfilePath = "";
@@ -254,18 +255,18 @@ public class SplitByDataChunkImportLogger extends AbstractImportLogger {
    * @throws IOException if an I/O error occurs while creating a new log writer
    */
   private LogWriter initializeLogWriterIfNeeded(LogFileType logFileType, int dataChunkId)
-          throws IOException {
+      throws IOException {
     Map<Integer, LogWriter> logWriters = getLogWriters(logFileType);
     try {
       return logWriters.computeIfAbsent(
-              dataChunkId,
-              id -> {
-                try {
-                  return createLogWriter(logFileType, id);
-                } catch (IOException e) {
-                  throw new UncheckedIOException(e);
-                }
-              });
+          dataChunkId,
+          id -> {
+            try {
+              return createLogWriter(logFileType, id);
+            } catch (IOException e) {
+              throw new UncheckedIOException(e);
+            }
+          });
     } catch (UncheckedIOException e) {
       throw e.getCause();
     }
