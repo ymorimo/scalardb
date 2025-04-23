@@ -51,7 +51,8 @@ command -v docker >/dev/null 2>&1 || { error "Docker is not installed or not in 
 # === CONFIGURATION VARIABLES ===
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-IMAGE_NAME="ghcr.io/scalar-labs/scalardb-data-loader:4.0.0-SNAPSHOT"
+IMAGE_TAG="4.0.0-SNAPSHOT"
+IMAGE_NAME="ghcr.io/scalar-labs/scalardb-data-loader:${IMAGE_TAG}"
 DATABASE_ROOT_PATH="$SCRIPT_DIR/database"
 POSTGRES_SETUP_SCRIPT="$DATABASE_ROOT_PATH/db_setup.sh"
 POSTGRES_CONTAINER="postgres-db"
@@ -65,6 +66,35 @@ CONTAINER_OUTPUT_DIR="/app/output-dir"
 CONTAINER_OUTPUT_DIR_PATH="/app/output-dir/"
 MEMORY_CONFIGS=("2g" "2g")
 CPU_CONFIGS=("1" "2")
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --memory=*)
+      MEMORY_CONFIGS=(${1#*=})
+      shift
+      ;;
+    --cpu=*)
+      CPU_CONFIGS=(${1#*=})
+      shift
+      ;;
+    --data-count=*)
+      POPULATE_DATA_COUNT=${1#*=}
+      shift
+      ;;
+    --image-tag=*)
+      IMAGE_TAG=${1#*=}
+      IMAGE_NAME="ghcr.io/scalar-labs/scalardb-data-loader:${IMAGE_TAG}"
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1"
+      echo "Usage: $0 [--memory=mem1,mem2,...] [--cpu=cpu1,cpu2,...] [--data-count=count] [--image-tag=tag]"
+      echo "Example: $0 --memory=1g,2g,4g --cpu=1,2,4 --data-count=10000 --image-tag=4.0.0-SNAPSHOT"
+      exit 1
+      ;;
+  esac
+done
 
 # === SETUP OUTPUT DIR ===
 mkdir -p "$OUTPUT_DIR_HOST"

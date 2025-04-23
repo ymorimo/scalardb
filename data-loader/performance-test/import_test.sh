@@ -4,21 +4,53 @@ set -euo pipefail
 
 # --- CONFIGURATION VARIABLES ---
 
-IMAGE_NAME="ghcr.io/scalar-labs/scalardb-data-loader:4.0.0-SNAPSHOT"
+IMAGE_TAG="4.0.0-SNAPSHOT"
+IMAGE_NAME="ghcr.io/scalar-labs/scalardb-data-loader:${IMAGE_TAG}"
 DATABASE_ROOT_PATH="database"
 POSTGRES_SETUP_SCRIPT="./db_setup.sh"
 POSTGRES_CONTAINER="postgres-db"
 PYTHON_SCRIPT_PATH="scripts/import-data-generator.py"
-PYTHON_ARGUMENTS="-s 1MB -o output.csv database/schema.json test.all_columns"
+DATA_SIZE="1MB"
+PYTHON_ARGUMENTS="-s $DATA_SIZE -o /app/generated-imports.csv /app/database/schema.json test.all_columns"
 PROPERTIES_PATH="./database/scalardb.properties"
-INPUT_SOURCE_FILE="./output.csv"
-CONTAINER_INPUT_FILE="/app/output.csv"
+INPUT_SOURCE_FILE="./generated-imports.csv"
+CONTAINER_INPUT_FILE="/app/generated-imports.csv"
 CONTAINER_PROPERTIES_PATH="/app/scalardb.properties"
 LOG_DIR_HOST="./performance-logs"
 CONTAINER_LOG_DIR="/app/logs"
 CONTAINER_LOG_DIR_PATH="/app/logs/"
 MEMORY_CONFIGS=("1g" "2g")
 CPU_CONFIGS=("1" "2")
+
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --memory=*)
+      MEMORY_CONFIGS=(${1#*=})
+      shift
+      ;;
+    --cpu=*)
+      CPU_CONFIGS=(${1#*=})
+      shift
+      ;;
+    --data-size=*)
+      DATA_SIZE=${1#*=}
+      shift
+      ;;
+    --image-tag=*)
+      IMAGE_TAG=${1#*=}
+      IMAGE_NAME="ghcr.io/scalar-labs/scalardb-data-loader:${IMAGE_TAG}"
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1"
+      echo "Usage: $0 [--memory=mem1,mem2,...] [--cpu=cpu1,cpu2,...] [--data-size=size] [--image-tag=tag]"
+      echo "Example: $0 --memory=1g,2g,4g --cpu=1,2,4 --data-size=2MB --image-tag=4.0.0-SNAPSHOT"
+      exit 1
+      ;;
+  esac
+done
 
 # --- FUNCTIONS ---
 
@@ -53,8 +85,11 @@ if [[ ! -f "$PYTHON_SCRIPT_PATH" ]]; then
   exit 1
 fi
 
-log_step "Running Python script to generate input data..."
-python3 "$PYTHON_SCRIPT_PATH" $PYTHON_ARGUMENTS
+log_step "Running Python script to generate input data using Docker..."
+docker run --rm -it \
+  -v "$PWD":/app \
+  python:alpine \
+  python3 /app/"$PYTHON_SCRIPT_PATH" $PYTHON_ARGUMENTS
 echo "✅ Input file generated."
 
 ensure_docker_network
@@ -89,7 +124,6 @@ for mem in "${MEMORY_CONFIGS[@]}"; do
              --mode transaction \
              --transaction-size 10 \
              --data-chunk-size 50 \
-             --data-chunk-queue-size 100 \
              --max-threads 16 \
              --log-dir "$CONTAINER_LOG_DIR_PATH"
 
