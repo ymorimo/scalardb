@@ -10,4 +10,4 @@ RUN groupadd -r --gid 201 scalar && \
 
 USER 201
 
-ENTRYPOINT ["java", "-jar", "/app.jar"]
+ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=80.0", "-jar", "/app.jar"]
