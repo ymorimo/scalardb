@@ -137,9 +137,7 @@ public class SingleFileImportLogger extends AbstractImportLogger {
    */
   private void logDataChunkSummary(ImportDataChunkStatus dataChunkStatus) throws IOException {
     ensureSummaryLogWriterInitialized();
-    synchronized (summaryLogWriter) {
-      writeImportDataChunkSummary(dataChunkStatus, summaryLogWriter);
-    }
+    writeImportDataChunkSummary(dataChunkStatus, summaryLogWriter);
   }
 
   /**
@@ -193,23 +191,14 @@ public class SingleFileImportLogger extends AbstractImportLogger {
    */
   private void writeImportTaskResultDetailToLogs(ImportTaskResult importTaskResult)
       throws IOException {
-    JsonNode jsonNode;
     for (ImportTargetResult target : importTaskResult.getTargets()) {
       if (config.isLogSuccessRecords()
           && target.getStatus().equals(ImportTargetResultStatus.SAVED)) {
-        synchronized (successLogWriter) {
-          jsonNode = OBJECT_MAPPER.valueToTree(target);
-          successLogWriter.write(jsonNode);
-          successLogWriter.flush();
-        }
+        writeToLogWriter(successLogWriter, OBJECT_MAPPER.valueToTree(target));
       }
       if (config.isLogRawSourceRecords()
           && !target.getStatus().equals(ImportTargetResultStatus.SAVED)) {
-        synchronized (failureLogWriter) {
-          jsonNode = OBJECT_MAPPER.valueToTree(target);
-          failureLogWriter.write(jsonNode);
-          failureLogWriter.flush();
-        }
+        writeToLogWriter(failureLogWriter, OBJECT_MAPPER.valueToTree(target));
       }
     }
   }
@@ -223,7 +212,6 @@ public class SingleFileImportLogger extends AbstractImportLogger {
    */
   private void writeToLogWriter(LogWriter logWriter, JsonNode jsonNode) throws IOException {
     logWriter.write(jsonNode);
-    logWriter.flush();
   }
 
   /**
