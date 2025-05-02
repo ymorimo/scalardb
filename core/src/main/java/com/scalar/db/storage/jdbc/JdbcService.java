@@ -100,12 +100,18 @@ public class JdbcService {
   public Scanner getScanner(Scan scan, Connection connection)
       throws SQLException, ExecutionException {
     operationChecker.check(scan);
+    connection.setAutoCommit(false);
 
     TableMetadata tableMetadata = tableMetadataManager.getTableMetadata(scan);
 
     SelectQuery selectQuery = buildSelectQuery(scan, tableMetadata);
     PreparedStatement preparedStatement = connection.prepareStatement(selectQuery.sql());
     selectQuery.bind(preparedStatement);
+
+    // Set fetch size to stream results rather than fetching all at once
+    preparedStatement.setFetchSize(50); // For PostgreSQL
+
+    // Execute the query
     ResultSet resultSet = preparedStatement.executeQuery();
     return new ScannerImpl(
         new ResultInterpreter(scan.getProjections(), tableMetadata, rdbEngine),
