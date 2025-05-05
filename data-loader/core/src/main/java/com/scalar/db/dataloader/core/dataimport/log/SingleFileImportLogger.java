@@ -62,7 +62,7 @@ public class SingleFileImportLogger extends AbstractImportLogger {
    */
   @Override
   public void onTaskComplete(ImportTaskResult taskResult) {
-    if (!config.isLogSuccessRecords() && !config.isLogRawSourceRecords()) return;
+    if (!config.isLogSuccessRecordsEnabled() && !config.isLogRawSourceRecordsEnabled()) return;
     try {
       writeImportTaskResultDetailToLogs(taskResult);
     } catch (Exception e) {
@@ -192,11 +192,11 @@ public class SingleFileImportLogger extends AbstractImportLogger {
   private void writeImportTaskResultDetailToLogs(ImportTaskResult importTaskResult)
       throws IOException {
     for (ImportTargetResult target : importTaskResult.getTargets()) {
-      if (config.isLogSuccessRecords()
+      if (config.isLogSuccessRecordsEnabled()
           && target.getStatus().equals(ImportTargetResultStatus.SAVED)) {
         writeToLogWriter(successLogWriter, OBJECT_MAPPER.valueToTree(target));
       }
-      if (config.isLogRawSourceRecords()
+      if (config.isLogRawSourceRecordsEnabled()
           && !target.getStatus().equals(ImportTargetResultStatus.SAVED)) {
         writeToLogWriter(failureLogWriter, OBJECT_MAPPER.valueToTree(target));
       }
@@ -223,7 +223,6 @@ public class SingleFileImportLogger extends AbstractImportLogger {
       closeLogWriter(summaryLogWriter);
       closeLogWriter(successLogWriter);
       closeLogWriter(failureLogWriter);
-      summaryLogWriter = null;
     }
   }
 }

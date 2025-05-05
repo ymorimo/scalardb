@@ -58,8 +58,8 @@ public class ImportCommand extends ImportCommandOptions implements Callable<Inte
     ImportLoggerConfig config =
         ImportLoggerConfig.builder()
             .logDirectoryPath(logDirectory)
-            .isLogRawSourceRecords(importOptions.isLogRawRecord())
-            .isLogSuccessRecords(importOptions.isLogSuccessRecords())
+            .isLogRawSourceRecordsEnabled(importOptions.isLogRawRecord())
+            .isLogSuccessRecordsEnabled(importOptions.isLogSuccessRecords())
             .prettyPrint(prettyPrint)
             .build();
     LogWriterFactory logWriterFactory = createLogWriterFactory(config);
