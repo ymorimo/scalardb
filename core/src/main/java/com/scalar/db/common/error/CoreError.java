@@ -865,6 +865,12 @@ public enum CoreError implements ScalarDbError {
       "The replication feature is not enabled. To use this feature, you must enable it",
       "",
       ""),
+  DATA_LOADER_INVALID_DATE_TIME_FOR_COLUMN_VALUE(
+      Category.USER_ERROR,
+      "0199",
+      "Invalid date time value specified for column %s in table %s in namespace %s",
+      "",
+      ""),
 
   //
   // Errors for the concurrency error category
