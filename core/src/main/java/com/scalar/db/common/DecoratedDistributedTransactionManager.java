@@ -23,9 +23,7 @@ import java.util.Optional;
 import java.util.function.BiConsumer;
 
 public abstract class DecoratedDistributedTransactionManager
-    implements DistributedTransactionManager,
-        DistributedTransactionDecoratorAddable,
-        DistributedTransactionExpirationHandlerSettable {
+    implements DistributedTransactionManager, DistributedTransactionExpirationHandlerSettable {
 
   private final DistributedTransactionManager transactionManager;
 
@@ -70,29 +68,29 @@ public abstract class DecoratedDistributedTransactionManager
 
   @Override
   public DistributedTransaction begin() throws TransactionException {
-    return transactionManager.begin();
+    return decorateTransactionOnBeginOrStart(transactionManager.begin());
   }
 
   @Override
   public DistributedTransaction begin(String txId) throws TransactionException {
-    return transactionManager.begin(txId);
+    return decorateTransactionOnBeginOrStart(transactionManager.begin(txId));
   }
 
   @Override
   public DistributedTransaction start() throws TransactionException {
-    return transactionManager.start();
+    return decorateTransactionOnBeginOrStart(transactionManager.start());
   }
 
   @Override
   public DistributedTransaction start(String txId) throws TransactionException {
-    return transactionManager.start(txId);
+    return decorateTransactionOnBeginOrStart(transactionManager.start(txId));
   }
 
   /** @deprecated As of release 2.4.0. Will be removed in release 4.0.0. */
   @Deprecated
   @Override
   public DistributedTransaction start(Isolation isolation) throws TransactionException {
-    return transactionManager.start(isolation);
+    return decorateTransactionOnBeginOrStart(transactionManager.start(isolation));
   }
 
   /** @deprecated As of release 2.4.0. Will be removed in release 4.0.0. */
@@ -100,7 +98,7 @@ public abstract class DecoratedDistributedTransactionManager
   @Override
   public DistributedTransaction start(String txId, Isolation isolation)
       throws TransactionException {
-    return transactionManager.start(txId, isolation);
+    return decorateTransactionOnBeginOrStart(transactionManager.start(txId, isolation));
   }
 
   /** @deprecated As of release 2.4.0. Will be removed in release 4.0.0. */
@@ -108,14 +106,14 @@ public abstract class DecoratedDistributedTransactionManager
   @Override
   public DistributedTransaction start(Isolation isolation, SerializableStrategy strategy)
       throws TransactionException {
-    return transactionManager.start(isolation, strategy);
+    return decorateTransactionOnBeginOrStart(transactionManager.start(isolation, strategy));
   }
 
   /** @deprecated As of release 2.4.0. Will be removed in release 4.0.0. */
   @Deprecated
   @Override
   public DistributedTransaction start(SerializableStrategy strategy) throws TransactionException {
-    return transactionManager.start(strategy);
+    return decorateTransactionOnBeginOrStart(transactionManager.start(strategy));
   }
 
   /** @deprecated As of release 2.4.0. Will be removed in release 4.0.0. */
@@ -123,7 +121,7 @@ public abstract class DecoratedDistributedTransactionManager
   @Override
   public DistributedTransaction start(String txId, SerializableStrategy strategy)
       throws TransactionException {
-    return transactionManager.start(txId, strategy);
+    return decorateTransactionOnBeginOrStart(transactionManager.start(txId, strategy));
   }
 
   /** @deprecated As of release 2.4.0. Will be removed in release 4.0.0. */
@@ -131,7 +129,12 @@ public abstract class DecoratedDistributedTransactionManager
   @Override
   public DistributedTransaction start(
       String txId, Isolation isolation, SerializableStrategy strategy) throws TransactionException {
-    return transactionManager.start(txId, isolation, strategy);
+    return decorateTransactionOnBeginOrStart(transactionManager.start(txId, isolation, strategy));
+  }
+
+  protected DistributedTransaction decorateTransactionOnBeginOrStart(
+      DistributedTransaction transaction) throws TransactionException {
+    return transaction;
   }
 
   @Override
@@ -227,14 +230,6 @@ public abstract class DecoratedDistributedTransactionManager
           .getOriginalTransactionManager();
     }
     return transactionManager;
-  }
-
-  @Override
-  public void addTransactionDecorator(DistributedTransactionDecorator transactionDecorator) {
-    if (transactionManager instanceof DistributedTransactionDecoratorAddable) {
-      ((DistributedTransactionDecoratorAddable) transactionManager)
-          .addTransactionDecorator(transactionDecorator);
-    }
   }
 
   @Override

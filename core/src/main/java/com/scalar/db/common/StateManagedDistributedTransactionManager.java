@@ -3,6 +3,7 @@ package com.scalar.db.common;
 import com.google.common.annotations.VisibleForTesting;
 import com.scalar.db.api.Delete;
 import com.scalar.db.api.DistributedTransaction;
+import com.scalar.db.api.DistributedTransactionManager;
 import com.scalar.db.api.Get;
 import com.scalar.db.api.Insert;
 import com.scalar.db.api.Mutation;
@@ -12,43 +13,26 @@ import com.scalar.db.api.Scan;
 import com.scalar.db.api.Update;
 import com.scalar.db.api.Upsert;
 import com.scalar.db.common.error.CoreError;
-import com.scalar.db.config.DatabaseConfig;
 import com.scalar.db.exception.transaction.AbortException;
 import com.scalar.db.exception.transaction.CommitException;
 import com.scalar.db.exception.transaction.CrudException;
 import com.scalar.db.exception.transaction.RollbackException;
-import com.scalar.db.exception.transaction.TransactionException;
 import com.scalar.db.exception.transaction.UnknownTransactionStatusException;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.CopyOnWriteArrayList;
 
-public abstract class TransactionDecorationDistributedTransactionManager
-    extends AbstractDistributedTransactionManager
-    implements DistributedTransactionDecoratorAddable {
+public class StateManagedDistributedTransactionManager
+    extends DecoratedDistributedTransactionManager {
 
-  private final List<DistributedTransactionDecorator> transactionDecorators =
-      new CopyOnWriteArrayList<>();
-
-  public TransactionDecorationDistributedTransactionManager(DatabaseConfig config) {
-    super(config);
-
-    // Add the StateManagedTransaction decorator by default
-    addTransactionDecorator(StateManagedTransaction::new);
-  }
-
-  protected DistributedTransaction decorate(DistributedTransaction transaction)
-      throws TransactionException {
-    DistributedTransaction decorated = transaction;
-    for (DistributedTransactionDecorator transactionDecorator : transactionDecorators) {
-      decorated = transactionDecorator.decorate(decorated);
-    }
-    return decorated;
+  public StateManagedDistributedTransactionManager(
+      DistributedTransactionManager transactionManager) {
+    super(transactionManager);
   }
 
   @Override
-  public void addTransactionDecorator(DistributedTransactionDecorator transactionDecorator) {
-    transactionDecorators.add(transactionDecorator);
+  protected DistributedTransaction decorateTransactionOnBeginOrStart(
+      DistributedTransaction transaction) {
+    return new StateManagedTransaction(transaction);
   }
 
   /**

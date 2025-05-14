@@ -9,48 +9,32 @@ import com.scalar.db.api.Put;
 import com.scalar.db.api.Result;
 import com.scalar.db.api.Scan;
 import com.scalar.db.api.TwoPhaseCommitTransaction;
+import com.scalar.db.api.TwoPhaseCommitTransactionManager;
 import com.scalar.db.api.Update;
 import com.scalar.db.api.Upsert;
 import com.scalar.db.common.error.CoreError;
-import com.scalar.db.config.DatabaseConfig;
 import com.scalar.db.exception.transaction.AbortException;
 import com.scalar.db.exception.transaction.CommitException;
 import com.scalar.db.exception.transaction.CrudException;
 import com.scalar.db.exception.transaction.PreparationException;
 import com.scalar.db.exception.transaction.RollbackException;
-import com.scalar.db.exception.transaction.TransactionException;
 import com.scalar.db.exception.transaction.UnknownTransactionStatusException;
 import com.scalar.db.exception.transaction.ValidationException;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.CopyOnWriteArrayList;
 
-public abstract class TransactionDecorationTwoPhaseCommitTransactionManager
-    extends AbstractTwoPhaseCommitTransactionManager
-    implements TwoPhaseCommitTransactionDecoratorAddable {
+public class StateManagedTwoPhaseCommitTransactionManager
+    extends DecoratedTwoPhaseCommitTransactionManager {
 
-  private final List<TwoPhaseCommitTransactionDecorator> transactionDecorators =
-      new CopyOnWriteArrayList<>();
-
-  public TransactionDecorationTwoPhaseCommitTransactionManager(DatabaseConfig config) {
-    super(config);
-
-    // Add the StateManagedTransaction decorator by default
-    addTransactionDecorator(StateManagedTransaction::new);
-  }
-
-  protected TwoPhaseCommitTransaction decorate(TwoPhaseCommitTransaction transaction)
-      throws TransactionException {
-    TwoPhaseCommitTransaction decorated = transaction;
-    for (TwoPhaseCommitTransactionDecorator transactionDecorator : transactionDecorators) {
-      decorated = transactionDecorator.decorate(decorated);
-    }
-    return decorated;
+  public StateManagedTwoPhaseCommitTransactionManager(
+      TwoPhaseCommitTransactionManager transactionManager) {
+    super(transactionManager);
   }
 
   @Override
-  public void addTransactionDecorator(TwoPhaseCommitTransactionDecorator transactionDecorator) {
-    transactionDecorators.add(transactionDecorator);
+  protected TwoPhaseCommitTransaction decorateTransactionOnBeginOrStart(
+      TwoPhaseCommitTransaction transaction) {
+    return new StateManagedTransaction(transaction);
   }
 
   /**
