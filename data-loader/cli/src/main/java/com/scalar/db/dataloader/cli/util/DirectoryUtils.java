@@ -1,7 +1,5 @@
 package com.scalar.db.dataloader.cli.util;
 
-import static com.scalar.db.dataloader.cli.ErrorMessage.ERROR_DIRECTORY_WRITE_ACCESS;
-
 import com.scalar.db.common.error.CoreError;
 import com.scalar.db.dataloader.cli.exception.DirectoryValidationException;
 import java.io.IOException;
@@ -27,9 +25,9 @@ public final class DirectoryUtils {
 
     // Check if the current working directory is writable
     if (!Files.isWritable(workingDirectoryPath)) {
-      // TODO: this error needs to be proper, check and set the label properly
       throw new DirectoryValidationException(
-          String.format(ERROR_DIRECTORY_WRITE_ACCESS, workingDirectoryPath.toAbsolutePath()));
+          CoreError.DATA_LOADER_DIRECTORY_WRITE_ACCESS.buildMessage(
+              workingDirectoryPath.toAbsolutePath()));
     }
   }
 
@@ -40,7 +38,7 @@ public final class DirectoryUtils {
    * @param directoryPath the directory path to validate
    * @throws DirectoryValidationException if the directory is not writable or cannot be created
    */
-  public static void validateTargetDirectory(String directoryPath)
+  public static void validateOrCreateTargetDirectory(String directoryPath)
       throws DirectoryValidationException {
     if (StringUtils.isBlank(directoryPath)) {
       throw new IllegalArgumentException(
@@ -50,7 +48,10 @@ public final class DirectoryUtils {
     Path path = Paths.get(directoryPath);
 
     if (Files.exists(path)) {
-      // Check if the provided directory is writable
+      if (!Files.isDirectory(path)) {
+        throw new DirectoryValidationException(
+            CoreError.DATA_LOADER_PATH_IS_NOT_A_DIRECTORY.buildMessage(path));
+      }
       if (!Files.isWritable(path)) {
         throw new DirectoryValidationException(
             CoreError.DATA_LOADER_DIRECTORY_WRITE_ACCESS_NOT_ALLOWED.buildMessage(

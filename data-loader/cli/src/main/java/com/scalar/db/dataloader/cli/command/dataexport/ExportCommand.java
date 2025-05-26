@@ -5,6 +5,7 @@ import static java.nio.file.StandardOpenOption.CREATE;
 
 import com.scalar.db.api.DistributedStorage;
 import com.scalar.db.api.TableMetadata;
+import com.scalar.db.common.error.CoreError;
 import com.scalar.db.dataloader.cli.exception.DirectoryValidationException;
 import com.scalar.db.dataloader.cli.util.DirectoryUtils;
 import com.scalar.db.dataloader.cli.util.FileUtils;
@@ -19,7 +20,6 @@ import com.scalar.db.dataloader.core.dataexport.JsonExportManager;
 import com.scalar.db.dataloader.core.dataexport.JsonLineExportManager;
 import com.scalar.db.dataloader.core.dataexport.producer.ProducerTaskFactory;
 import com.scalar.db.dataloader.core.dataimport.dao.ScalarDbDao;
-import com.scalar.db.dataloader.core.exception.Base64Exception;
 import com.scalar.db.dataloader.core.exception.ColumnParsingException;
 import com.scalar.db.dataloader.core.exception.KeyParsingException;
 import com.scalar.db.dataloader.core.tablemetadata.TableMetadataException;
@@ -44,8 +44,8 @@ import picocli.CommandLine.Spec;
 @CommandLine.Command(name = "export", description = "export data from a ScalarDB table")
 public class ExportCommand extends ExportCommandOptions implements Callable<Integer> {
 
-  private static final String EXPORT_FILE_NAME_FORMAT = "export_%s.%s_%s.%s";
-  private static final Logger LOGGER = LoggerFactory.getLogger(ExportCommand.class);
+  private static final String EXPORT_FILE_NAME_FORMAT = "export.%s.%s.%s.%s";
+  private static final Logger logger = LoggerFactory.getLogger(ExportCommand.class);
 
   @Spec CommandSpec spec;
 
@@ -82,7 +82,7 @@ public class ExportCommand extends ExportCommandOptions implements Callable<Inte
       String filePath =
           getOutputAbsoluteFilePath(
               outputDirectory, outputFileName, exportOptions.getOutputFileFormat());
-      LOGGER.info("Exporting data to file: {}", filePath);
+      logger.info("Exporting data to file: {}", filePath);
 
       try (BufferedWriter writer =
           Files.newBufferedWriter(Paths.get(filePath), Charset.defaultCharset(), CREATE, APPEND)) {
@@ -90,21 +90,25 @@ public class ExportCommand extends ExportCommandOptions implements Callable<Inte
       }
 
     } catch (DirectoryValidationException e) {
-      LOGGER.error("Invalid output directory path: {}", outputDirectory);
+      logger.error("Invalid output directory path: {}", outputDirectory);
       return 1;
     } catch (InvalidFilePathException e) {
-      LOGGER.error(
+      logger.error(
           "The ScalarDB connection settings file path is invalid or the file is missing: {}",
           scalarDbPropertiesFilePath);
       return 1;
     } catch (TableMetadataException e) {
-      LOGGER.error("Failed to retrieve table metadata: {}", e.getMessage());
+      logger.error("Failed to retrieve table metadata: {}", e.getMessage());
       return 1;
     }
     return 0;
   }
 
   private String getScalarDbPropertiesFilePath() {
+    if (StringUtils.isBlank(configFilePath)) {
+      throw new IllegalArgumentException(
+          CoreError.DATA_LOADER_CONFIG_FILE_PATH_BLANK.buildMessage());
+    }
     return Objects.equals(configFilePath, DEFAULT_CONFIG_FILE_NAME)
         ? Paths.get("").toAbsolutePath().resolve(DEFAULT_CONFIG_FILE_NAME).toString()
         : configFilePath;
@@ -114,7 +118,7 @@ public class ExportCommand extends ExportCommandOptions implements Callable<Inte
     if (StringUtils.isBlank(outputDirectory)) {
       DirectoryUtils.validateWorkingDirectory();
     } else {
-      DirectoryUtils.validateTargetDirectory(outputDirectory);
+      DirectoryUtils.validateOrCreateTargetDirectory(outputDirectory);
     }
   }
 
@@ -180,11 +184,10 @@ public class ExportCommand extends ExportCommandOptions implements Callable<Inte
    * @param keyValueList key value list
    * @param tableMetadata table metadata
    * @return key
-   * @throws Base64Exception if any error occur during decoding key
    * @throws ColumnParsingException if any error occur during parsing column value
    */
   private Key getKeysFromList(List<ColumnKeyValue> keyValueList, TableMetadata tableMetadata)
-      throws Base64Exception, ColumnParsingException {
+      throws ColumnParsingException {
     return KeyUtils.parseMultipleKeyValues(keyValueList, tableMetadata);
   }
 

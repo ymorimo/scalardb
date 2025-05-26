@@ -215,16 +215,16 @@ public final class KeyUtils {
   }
 
   /**
-   * Convert a keyValue, in the format of <key>=<value>, to a ScalarDB Key instance.
+   * Convert a list of ColumnKeyValue objects to a ScalarDB Key instance.
    *
-   * @param keyValues A list of key values in the format of <key>=<value>
+   * @param keyValues A list of ColumnKeyValue objects, where each object contains a column name and
+   *     its corresponding value
    * @param tableMetadata Metadata for one ScalarDB table
    * @return A new ScalarDB Key instance formatted by data type
-   * @throws Base64Exception if there is an error parsing the key value
+   * @throws ColumnParsingException if there is an error parsing the column
    */
   public static Key parseMultipleKeyValues(
-      List<ColumnKeyValue> keyValues, TableMetadata tableMetadata)
-      throws Base64Exception, ColumnParsingException {
+      List<ColumnKeyValue> keyValues, TableMetadata tableMetadata) throws ColumnParsingException {
     Key.Builder builder = Key.newBuilder();
     for (ColumnKeyValue keyValue : keyValues) {
       String columnName = keyValue.getColumnName();
