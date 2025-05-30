@@ -2,8 +2,10 @@ package com.scalar.db.dataloader.cli.command.dataimport;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scalar.db.api.DistributedStorageAdmin;
+import com.scalar.db.api.DistributedTransactionAdmin;
 import com.scalar.db.api.TableMetadata;
 import com.scalar.db.common.error.CoreError;
+import com.scalar.db.dataloader.cli.util.ScalarDbUtil;
 import com.scalar.db.dataloader.core.FileFormat;
 import com.scalar.db.dataloader.core.ScalarDbMode;
 import com.scalar.db.dataloader.core.dataimport.ImportManager;
@@ -95,23 +97,38 @@ public class ImportCommand extends ImportCommandOptions implements Callable<Inte
       ControlFile controlFile, String namespace, String tableName)
       throws IOException, TableMetadataException {
     File configFile = new File(configFilePath);
-    StorageFactory storageFactory = StorageFactory.create(configFile);
-    try (DistributedStorageAdmin storageAdmin = storageFactory.getStorageAdmin()) {
-      TableMetadataService tableMetadataService = new TableMetadataService(storageAdmin);
-      Map<String, TableMetadata> tableMetadataMap = new HashMap<>();
-      if (controlFile != null) {
-        for (ControlFileTable table : controlFile.getTables()) {
-          tableMetadataMap.put(
-              TableMetadataUtil.getTableLookupKey(table.getNamespace(), table.getTable()),
-              tableMetadataService.getTableMetadata(table.getNamespace(), table.getTable()));
-        }
-      } else {
-        tableMetadataMap.put(
-            TableMetadataUtil.getTableLookupKey(namespace, tableName),
-            tableMetadataService.getTableMetadata(namespace, tableName));
+    Map<String, TableMetadata> tableMetadataMap;
+    TableMetadataService tableMetadataService;
+    if(ScalarDbUtil.isScalarDBClusterEnabled(configFile)){
+      TransactionFactory transactionFactory = TransactionFactory.create(configFile);
+      try(DistributedTransactionAdmin transactionAdmin = transactionFactory.getTransactionAdmin()){
+        tableMetadataService = new TableMetadataService(transactionAdmin);
+        tableMetadataMap = generateMetadata(tableMetadataService,controlFile,namespace,tableName);
       }
-      return tableMetadataMap;
+    }else{
+      StorageFactory storageFactory = StorageFactory.create(configFile);
+      try (DistributedStorageAdmin storageAdmin = storageFactory.getStorageAdmin()) {
+        tableMetadataService = new TableMetadataService(storageAdmin);
+        tableMetadataMap = generateMetadata(tableMetadataService,controlFile,namespace,tableName);
+      }
     }
+    return tableMetadataMap;
+  }
+
+  private Map<String, TableMetadata> generateMetadata(TableMetadataService tableMetadataService,  ControlFile controlFile, String namespace, String tableName) throws TableMetadataException {
+    Map<String, TableMetadata> tableMetadataMap = new HashMap<>();
+    if (controlFile != null) {
+      for (ControlFileTable table : controlFile.getTables()) {
+        tableMetadataMap.put(
+                TableMetadataUtil.getTableLookupKey(table.getNamespace(), table.getTable()),
+                tableMetadataService.getTableMetadata(table.getNamespace(), table.getTable()));
+      }
+    } else {
+      tableMetadataMap.put(
+              TableMetadataUtil.getTableLookupKey(namespace, tableName),
+              tableMetadataService.getTableMetadata(namespace, tableName));
+    }
+    return  tableMetadataMap;
   }
 
   /**
