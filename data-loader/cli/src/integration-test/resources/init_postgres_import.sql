@@ -1,6 +1,15 @@
 --CREATE DATABASE scalardb;
 -- \c scalardb;
 
+CREATE SCHEMA coordinator;
+CREATE TABLE coordinator.state (
+  tx_id varchar(128) NOT NULL,
+  tx_state int DEFAULT NULL,
+  tx_created_at bigint DEFAULT NULL,
+  PRIMARY KEY (tx_id)
+);
+
+
 CREATE SCHEMA scalardb;
 -- CREATE SCHEMA coordinator;
 -- Metadata table
@@ -63,7 +72,13 @@ INSERT INTO scalardb.metadata VALUES
   ('test.all_columns','tx_id','TEXT',NULL,NULL,FALSE,12),
   ('test.all_columns','tx_prepared_at','BIGINT',NULL,NULL,FALSE,15),
   ('test.all_columns','tx_state','INT',NULL,NULL,FALSE,13),
-  ('test.all_columns','tx_version','INT',NULL,NULL,FALSE,14);
+  ('test.all_columns','tx_version','INT',NULL,NULL,FALSE,14),
+  ('coordinator.state','tx_id','TEXT','PARTITION',NULL,FALSE,1),
+  ('coordinator.state','tx_state','INT',NULL,NULL,FALSE,2),
+  ('coordinator.state','tx_created_at','BIGINT',NULL,NULL,FALSE,3),
+  ('test.emp_department','id','INT','PARTITION',NULL,FALSE,1),
+  ('test.emp_department','emp_id','INT','CLUSTERING','ASC',FALSE,2),
+  ('test.emp_department','department','TEXT',NULL,NULL,FALSE,3);
 
 CREATE SCHEMA test;
 
@@ -75,32 +90,13 @@ CREATE TABLE test.employee (
   email TEXT
 );
 
-INSERT INTO test.employee VALUES
-  (0,'emp0','emp0@example.com'),
-  (1,'emp1','emp1@example.com'),
-  (2,'emp2','emp2@example.com'),
-  (3,'emp3','emp3@example.com'),
-  (4,'emp4','emp4@example.com'),
-  (5,'emp5','emp5@example.com'),
-  (6,'emp6','emp6@example.com'),
-  (7,'emp7','emp7@example.com'),
-  (8,'emp8','emp8@example.com'),
-  (9,'emp9','emp9@example.com'),
-  (10,'emp10','emp10@example.com'),
-  (11,'emp11','emp11@example.com'),
-  (12,'emp12','emp12@example.com'),
-  (13,'emp13','emp13@example.com'),
-  (14,'emp14','emp14@example.com'),
-  (15,'emp15','emp15@example.com'),
-  (16,'emp16','emp16@example.com'),
-  (17,'emp17','emp17@example.com'),
-  (18,'emp18','emp18@example.com'),
-  (19,'emp19','emp19@example.com'),
-  (20,'emp20','emp20@example.com'),
-  (21,'emp21','emp21@example.com'),
-  (22,'emp22','emp22@example.com'),
-  (23,'emp23','emp23@example.com'),
-  (24,'emp24','emp24@example.com');
+CREATE TABLE test.emp_department (
+  id INT NOT NULL,
+  emp_id INT NOT NULL,
+  department TEXT,
+  PRIMARY KEY (id,emp_id)
+);
+
 
 -- Table: employee_trn
 CREATE TABLE test.employee_trn (
@@ -120,13 +116,6 @@ CREATE TABLE test.employee_trn (
   before_name TEXT,
   before_email TEXT
 );
-
-INSERT INTO test.employee_trn VALUES
-  (1,'sample111n','test@11111.com','adc7139e-c86b-4dc1-bab8-6cedd1ef053e',3,2,1732686695522,1732686695696,'183fa126-bb16-4b0e-8470-94bcd034917f',3,1,1732622694074,1732622694143,'sample111n','test@11111.com'),
-  (10,'sample333n','test@3333.com','adc7139e-c86b-4dc1-bab8-6cedd1ef053e',3,2,1732686695522,1732686695696,'183fa126-bb16-4b0e-8470-94bcd034917f',3,1,1732622694074,1732622694143,'sample333n','test@3333.com'),
-  (100,'sample444n','test@4444.com','adc7139e-c86b-4dc1-bab8-6cedd1ef053e',3,2,1732686695522,1732686695696,'183fa126-bb16-4b0e-8470-94bcd034917f',3,1,1732622694074,1732622694143,'sample444n','test@4444.com'),
-  (1000,'sample555n','test@5555.com','adc7139e-c86b-4dc1-bab8-6cedd1ef053e',3,2,1732686695522,1732686695696,'ce9d10de-3266-435f-a06d-959ad9866bd9',3,1,1732622694070,1732622694137,'sample555n','test@5555.com'),
-  (10000,'sample666n','test@6666.com','adc7139e-c86b-4dc1-bab8-6cedd1ef053e',3,2,1732686695522,1732686695696,'ce9d10de-3266-435f-a06d-959ad9866bd9',3,1,1732622694070,1732622694137,'sample666n','test@6666.com');
 
 -- Table: all_columns
 CREATE TABLE test.all_columns (
@@ -161,11 +150,3 @@ CREATE TABLE test.all_columns (
   before_col5 DOUBLE PRECISION,
   PRIMARY KEY (col1, col2, col3)
 );
-
--- Sample insert values (same data as original)
-INSERT INTO test.all_columns VALUES
-  (1,1,TRUE,1.4e-45,5e-324,'VALUE!!s','blob test value','2000-01-01','01:01:01.000000','2000-01-01 01:01:00.000','1970-01-21 03:20:41.740','93a076fb-ad33-4acd-b66a-29ced406eab8',3,1,1741080038401,1741080038693,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
-  (2,2,TRUE,1.4e-45,5e-324,'VALUE!!s','blob test value','2000-01-01','01:01:01.000000','2000-01-01 01:01:00.000','1970-01-21 03:20:41.740','93a076fb-ad33-4acd-b66a-29ced406eab8',3,1,1741080038401,1741080038693,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
-  (3,3,TRUE,1.4e-45,5e-324,'VALUE!!s','blob test value','2000-01-01','01:01:01.000000','2000-01-01 01:01:00.000','1970-01-21 03:20:41.740','93a076fb-ad33-4acd-b66a-29ced406eab8',3,1,1741080038401,1741080038693,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
-  (4,4,TRUE,1.4e-45,5e-324,'VALUE!!s','blob test value','2000-01-01','01:01:01.000000','2000-01-01 01:01:00.000','1970-01-21 03:20:41.740','93a076fb-ad33-4acd-b66a-29ced406eab8',3,1,1741080038401,1741080038693,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
-  (5,5,TRUE,1.4e-45,5e-324,'VALUE!!s','blob test value','2000-01-01','01:01:01.000000','2000-01-01 01:01:00.000','1970-01-21 03:20:41.740','93a076fb-ad33-4acd-b66a-29ced406eab8',3,1,1741080038401,1741080038693,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
