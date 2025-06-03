@@ -1,13 +1,9 @@
 package com.scalar.db.dataloader.cli.command.dataimport;
 
-import static com.scalar.db.dataloader.cli.ErrorMessage.ERROR_CONTROL_FILE_INVALID_JSON;
-import static com.scalar.db.dataloader.cli.ErrorMessage.ERROR_CREATE_LOG_DIRECTORY_FAILED;
-import static com.scalar.db.dataloader.cli.ErrorMessage.ERROR_IMPORT_TARGET_MISSING;
-import static com.scalar.db.dataloader.cli.ErrorMessage.ERROR_LOG_DIRECTORY_WRITE_ACCESS;
-import static com.scalar.db.dataloader.cli.ErrorMessage.ERROR_MISSING_FILE;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.scalar.db.api.DistributedStorageAdmin;
 import com.scalar.db.api.TableMetadata;
+import com.scalar.db.common.error.CoreError;
 import com.scalar.db.dataloader.core.FileFormat;
 import com.scalar.db.dataloader.core.ScalarDbMode;
 import com.scalar.db.dataloader.core.dataimport.ImportManager;
@@ -16,7 +12,10 @@ import com.scalar.db.dataloader.core.dataimport.controlfile.ControlFile;
 import com.scalar.db.dataloader.core.dataimport.controlfile.ControlFileTable;
 import com.scalar.db.dataloader.core.dataimport.dao.ScalarDbStorageManager;
 import com.scalar.db.dataloader.core.dataimport.dao.ScalarDbTransactionManager;
-import com.scalar.db.dataloader.core.dataimport.log.*;
+import com.scalar.db.dataloader.core.dataimport.log.ImportLoggerConfig;
+import com.scalar.db.dataloader.core.dataimport.log.LogMode;
+import com.scalar.db.dataloader.core.dataimport.log.SingleFileImportLogger;
+import com.scalar.db.dataloader.core.dataimport.log.SplitByDataChunkImportLogger;
 import com.scalar.db.dataloader.core.dataimport.log.writer.DefaultLogWriterFactory;
 import com.scalar.db.dataloader.core.dataimport.log.writer.LogWriterFactory;
 import com.scalar.db.dataloader.core.dataimport.processor.DefaultImportProcessorFactory;
@@ -43,7 +42,7 @@ import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.ParameterException;
 import picocli.CommandLine.Spec;
 
-@CommandLine.Command(name = "import", description = "import data into a ScalarDB table")
+@CommandLine.Command(name = "import", description = "Import data into a ScalarDB table")
 public class ImportCommand extends ImportCommandOptions implements Callable<Integer> {
 
   /** Spec injected by PicoCli */
@@ -97,21 +96,22 @@ public class ImportCommand extends ImportCommandOptions implements Callable<Inte
       throws IOException, TableMetadataException {
     File configFile = new File(configFilePath);
     StorageFactory storageFactory = StorageFactory.create(configFile);
-    TableMetadataService tableMetadataService =
-        new TableMetadataService(storageFactory.getStorageAdmin());
-    Map<String, TableMetadata> tableMetadataMap = new HashMap<>();
-    if (controlFile != null) {
-      for (ControlFileTable table : controlFile.getTables()) {
+    try (DistributedStorageAdmin storageAdmin = storageFactory.getStorageAdmin()) {
+      TableMetadataService tableMetadataService = new TableMetadataService(storageAdmin);
+      Map<String, TableMetadata> tableMetadataMap = new HashMap<>();
+      if (controlFile != null) {
+        for (ControlFileTable table : controlFile.getTables()) {
+          tableMetadataMap.put(
+              TableMetadataUtil.getTableLookupKey(table.getNamespace(), table.getTable()),
+              tableMetadataService.getTableMetadata(table.getNamespace(), table.getTable()));
+        }
+      } else {
         tableMetadataMap.put(
-            TableMetadataUtil.getTableLookupKey(table.getNamespace(), table.getTable()),
-            tableMetadataService.getTableMetadata(table.getNamespace(), table.getTable()));
+            TableMetadataUtil.getTableLookupKey(namespace, tableName),
+            tableMetadataService.getTableMetadata(namespace, tableName));
       }
-    } else {
-      tableMetadataMap.put(
-          TableMetadataUtil.getTableLookupKey(namespace, tableName),
-          tableMetadataService.getTableMetadata(namespace, tableName));
+      return tableMetadataMap;
     }
-    return tableMetadataMap;
   }
 
   /**
@@ -122,7 +122,7 @@ public class ImportCommand extends ImportCommandOptions implements Callable<Inte
    * @param reader buffered reader with source data
    * @param logWriterFactory log writer factory object
    * @param config import logging config
-   * @return ImportManger object
+   * @return ImportManager object
    */
   private ImportManager createImportManager(
       ImportOptions importOptions,
@@ -147,7 +147,7 @@ public class ImportCommand extends ImportCommandOptions implements Callable<Inte
               null,
               scalarDbTransactionManager.getDistributedTransactionManager());
     } else {
-      ScalarDbStorageManager scalarDbStorageManger =
+      ScalarDbStorageManager scalarDbStorageManager =
           new ScalarDbStorageManager(StorageFactory.create(configFile));
       importManager =
           new ImportManager(
@@ -156,12 +156,14 @@ public class ImportCommand extends ImportCommandOptions implements Callable<Inte
               importOptions,
               importProcessorFactory,
               ScalarDbMode.STORAGE,
-              scalarDbStorageManger.getDistributedStorage(),
+              scalarDbStorageManager.getDistributedStorage(),
               null);
     }
     if (importOptions.getLogMode().equals(LogMode.SPLIT_BY_DATA_CHUNK)) {
       importManager.addListener(new SplitByDataChunkImportLogger(config, logWriterFactory));
-    } else importManager.addListener(new SingleFileImportLogger(config, logWriterFactory));
+    } else {
+      importManager.addListener(new SingleFileImportLogger(config, logWriterFactory));
+    }
     return importManager;
   }
 
@@ -177,7 +179,8 @@ public class ImportCommand extends ImportCommandOptions implements Callable<Inte
     // Throw an error if there was no clear imports target specified
     if (StringUtils.isBlank(controlFilePath)
         && (StringUtils.isBlank(namespace) || StringUtils.isBlank(tableName))) {
-      throw new ParameterException(spec.commandLine(), ERROR_IMPORT_TARGET_MISSING);
+      throw new ParameterException(
+          spec.commandLine(), CoreError.DATA_LOADER_IMPORT_TARGET_MISSING.buildMessage());
     }
 
     // Make sure the control file exists when a path is provided
@@ -186,7 +189,8 @@ public class ImportCommand extends ImportCommandOptions implements Callable<Inte
       if (!Files.exists(path)) {
         throw new ParameterException(
             spec.commandLine(),
-            String.format(ERROR_MISSING_FILE, controlFilePath, FILE_OPTION_NAME_LONG_FORMAT));
+            CoreError.DATA_LOADER_MISSING_IMPORT_FILE.buildMessage(
+                controlFilePath, FILE_OPTION_NAME_LONG_FORMAT));
       }
     }
   }
@@ -208,7 +212,8 @@ public class ImportCommand extends ImportCommandOptions implements Callable<Inte
         if (!Files.isWritable(logDirectoryPath)) {
           throw new ParameterException(
               spec.commandLine(),
-              String.format(ERROR_LOG_DIRECTORY_WRITE_ACCESS, logDirectoryPath.toAbsolutePath()));
+              CoreError.DATA_LOADER_LOG_DIRECTORY_CREATION_FAILED.buildMessage(
+                  logDirectoryPath.toAbsolutePath()));
         }
       } else {
         // Create the log directory if it doesn't exist
@@ -217,7 +222,8 @@ public class ImportCommand extends ImportCommandOptions implements Callable<Inte
         } catch (IOException e) {
           throw new ParameterException(
               spec.commandLine(),
-              String.format(ERROR_CREATE_LOG_DIRECTORY_FAILED, logDirectoryPath.toAbsolutePath()));
+              CoreError.DATA_LOADER_LOG_DIRECTORY_CREATION_FAILED.buildMessage(
+                  logDirectoryPath.toAbsolutePath()));
         }
       }
       return;
@@ -230,7 +236,8 @@ public class ImportCommand extends ImportCommandOptions implements Callable<Inte
     if (!Files.isWritable(logDirectoryPath)) {
       throw new ParameterException(
           spec.commandLine(),
-          String.format(ERROR_LOG_DIRECTORY_WRITE_ACCESS, logDirectoryPath.toAbsolutePath()));
+          CoreError.DATA_LOADER_LOG_DIRECTORY_WRITE_ACCESS_DENIED.buildMessage(
+              logDirectoryPath.toAbsolutePath()));
     }
   }
 
@@ -242,7 +249,7 @@ public class ImportCommand extends ImportCommandOptions implements Callable<Inte
    * @throws ParameterException if the path is invalid
    */
   private Optional<ControlFile> parseControlFileFromPath(String controlFilePath) {
-    if (controlFilePath == null) {
+    if (StringUtils.isBlank(controlFilePath)) {
       return Optional.empty();
     }
     try {
@@ -252,7 +259,8 @@ public class ImportCommand extends ImportCommandOptions implements Callable<Inte
       return Optional.of(controlFile);
     } catch (IOException e) {
       throw new ParameterException(
-          spec.commandLine(), String.format(ERROR_CONTROL_FILE_INVALID_JSON, controlFilePath));
+          spec.commandLine(),
+          CoreError.DATA_LOADER_INVALID_CONTROL_FILE.buildMessage(controlFilePath));
     }
   }
 

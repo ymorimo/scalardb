@@ -4153,6 +4153,347 @@ public abstract class ConsensusCommitSpecificIntegrationTestBase {
     assertThatCode(transaction::commit).doesNotThrowAnyException();
   }
 
+  @Test
+  public void get_GetWithIndexGiven_WithSerializable_ShouldNotThrowAnyException()
+      throws TransactionException {
+    // Arrange
+    manager.insert(
+        Insert.newBuilder()
+            .namespace(namespace1)
+            .table(TABLE_1)
+            .partitionKey(Key.ofInt(ACCOUNT_ID, 0))
+            .clusteringKey(Key.ofInt(ACCOUNT_TYPE, 0))
+            .intValue(BALANCE, INITIAL_BALANCE)
+            .build());
+
+    // Act Assert
+    DistributedTransaction transaction = manager.begin(Isolation.SERIALIZABLE);
+    Optional<Result> actual =
+        transaction.get(
+            Get.newBuilder()
+                .namespace(namespace1)
+                .table(TABLE_1)
+                .indexKey(Key.ofInt(BALANCE, INITIAL_BALANCE))
+                .build());
+
+    assertThat(actual).isPresent();
+    assertThat(actual.get().getInt(ACCOUNT_ID)).isEqualTo(0);
+    assertThat(actual.get().getInt(ACCOUNT_TYPE)).isEqualTo(0);
+    assertThat(actual.get().getInt(BALANCE)).isEqualTo(INITIAL_BALANCE);
+
+    assertThatCode(transaction::commit).doesNotThrowAnyException();
+  }
+
+  @Test
+  public void
+      get_GetWithIndexGiven_NoRecordsInIndexRange_WithSerializable_ShouldNotThrowAnyException()
+          throws TransactionException {
+    // Arrange
+
+    // Act Assert
+    DistributedTransaction transaction = manager.begin(Isolation.SERIALIZABLE);
+    Optional<Result> actual =
+        transaction.get(
+            Get.newBuilder()
+                .namespace(namespace1)
+                .table(TABLE_1)
+                .indexKey(Key.ofInt(BALANCE, INITIAL_BALANCE))
+                .build());
+
+    assertThat(actual).isEmpty();
+
+    assertThatCode(transaction::commit).doesNotThrowAnyException();
+  }
+
+  @Test
+  public void
+      get_GetWithIndexGiven_RecordInsertedIntoIndexRangeByMySelf_WithSerializable_ShouldNotThrowAnyException()
+          throws TransactionException {
+    // Arrange
+    manager.insert(
+        Insert.newBuilder()
+            .namespace(namespace1)
+            .table(TABLE_1)
+            .partitionKey(Key.ofInt(ACCOUNT_ID, 0))
+            .clusteringKey(Key.ofInt(ACCOUNT_TYPE, 0))
+            .intValue(BALANCE, INITIAL_BALANCE)
+            .build());
+
+    // Act Assert
+    DistributedTransaction transaction = manager.begin(Isolation.SERIALIZABLE);
+    Optional<Result> actual =
+        transaction.get(
+            Get.newBuilder()
+                .namespace(namespace1)
+                .table(TABLE_1)
+                .indexKey(Key.ofInt(BALANCE, INITIAL_BALANCE))
+                .build());
+
+    assertThat(actual).isPresent();
+    assertThat(actual.get().getInt(ACCOUNT_ID)).isEqualTo(0);
+    assertThat(actual.get().getInt(ACCOUNT_TYPE)).isEqualTo(0);
+    assertThat(actual.get().getInt(BALANCE)).isEqualTo(INITIAL_BALANCE);
+
+    transaction.insert(
+        Insert.newBuilder()
+            .namespace(namespace1)
+            .table(TABLE_1)
+            .partitionKey(Key.ofInt(ACCOUNT_ID, 1))
+            .clusteringKey(Key.ofInt(ACCOUNT_TYPE, 0))
+            .intValue(BALANCE, INITIAL_BALANCE)
+            .build());
+
+    assertThatCode(transaction::commit).doesNotThrowAnyException();
+  }
+
+  @Test
+  public void
+      get_GetWithIndexGiven_RecordInsertedIntoIndexRangeByAnotherTransaction_WithSerializable_ShouldThrowCommitConflictException()
+          throws TransactionException {
+    // Arrange
+    manager.insert(
+        Insert.newBuilder()
+            .namespace(namespace1)
+            .table(TABLE_1)
+            .partitionKey(Key.ofInt(ACCOUNT_ID, 0))
+            .clusteringKey(Key.ofInt(ACCOUNT_TYPE, 0))
+            .intValue(BALANCE, INITIAL_BALANCE)
+            .build());
+
+    // Act Assert
+    DistributedTransaction transaction = manager.begin(Isolation.SERIALIZABLE);
+    Optional<Result> actual =
+        transaction.get(
+            Get.newBuilder()
+                .namespace(namespace1)
+                .table(TABLE_1)
+                .indexKey(Key.ofInt(BALANCE, INITIAL_BALANCE))
+                .build());
+
+    assertThat(actual).isPresent();
+    assertThat(actual.get().getInt(ACCOUNT_ID)).isEqualTo(0);
+    assertThat(actual.get().getInt(ACCOUNT_TYPE)).isEqualTo(0);
+    assertThat(actual.get().getInt(BALANCE)).isEqualTo(INITIAL_BALANCE);
+
+    DistributedTransaction another = manager.begin(Isolation.SERIALIZABLE);
+    another.insert(
+        Insert.newBuilder()
+            .namespace(namespace1)
+            .table(TABLE_1)
+            .partitionKey(Key.ofInt(ACCOUNT_ID, 1))
+            .clusteringKey(Key.ofInt(ACCOUNT_TYPE, 0))
+            .intValue(BALANCE, INITIAL_BALANCE)
+            .build());
+    another.commit();
+
+    assertThatThrownBy(transaction::commit).isInstanceOf(CommitConflictException.class);
+  }
+
+  @Test
+  public void
+      get_GetWithIndexGiven_NoRecordsInIndexRange_RecordInsertedIntoIndexRangeByMySelf_WithSerializable_ShouldNotThrowAnyException()
+          throws TransactionException {
+    // Arrange
+
+    // Act Assert
+    DistributedTransaction transaction = manager.begin(Isolation.SERIALIZABLE);
+    Optional<Result> actual =
+        transaction.get(
+            Get.newBuilder()
+                .namespace(namespace1)
+                .table(TABLE_1)
+                .indexKey(Key.ofInt(BALANCE, INITIAL_BALANCE))
+                .build());
+
+    assertThat(actual).isEmpty();
+
+    transaction.insert(
+        Insert.newBuilder()
+            .namespace(namespace1)
+            .table(TABLE_1)
+            .partitionKey(Key.ofInt(ACCOUNT_ID, 0))
+            .clusteringKey(Key.ofInt(ACCOUNT_TYPE, 0))
+            .intValue(BALANCE, INITIAL_BALANCE)
+            .build());
+
+    assertThatCode(transaction::commit).doesNotThrowAnyException();
+  }
+
+  @Test
+  public void
+      get_GetWithIndexGiven_NoRecordsInIndexRange_RecordInsertedIntoIndexRangeByAnotherTransaction_WithSerializable_ShouldThrowCommitConflictException()
+          throws TransactionException {
+    // Arrange
+
+    // Act Assert
+    DistributedTransaction transaction = manager.begin(Isolation.SERIALIZABLE);
+    Optional<Result> actual =
+        transaction.get(
+            Get.newBuilder()
+                .namespace(namespace1)
+                .table(TABLE_1)
+                .indexKey(Key.ofInt(BALANCE, INITIAL_BALANCE))
+                .build());
+
+    assertThat(actual).isEmpty();
+
+    DistributedTransaction another = manager.begin(Isolation.SERIALIZABLE);
+    another.insert(
+        Insert.newBuilder()
+            .namespace(namespace1)
+            .table(TABLE_1)
+            .partitionKey(Key.ofInt(ACCOUNT_ID, 0))
+            .clusteringKey(Key.ofInt(ACCOUNT_TYPE, 0))
+            .intValue(BALANCE, INITIAL_BALANCE)
+            .build());
+    another.commit();
+
+    assertThatThrownBy(transaction::commit).isInstanceOf(CommitConflictException.class);
+  }
+
+  @Test
+  public void getAndUpdate_GetWithIndexGiven_ShouldUpdate() throws TransactionException {
+    // Arrange
+    manager.insert(
+        Insert.newBuilder()
+            .namespace(namespace1)
+            .table(TABLE_1)
+            .partitionKey(Key.ofInt(ACCOUNT_ID, 0))
+            .clusteringKey(Key.ofInt(ACCOUNT_TYPE, 0))
+            .intValue(BALANCE, INITIAL_BALANCE)
+            .build());
+
+    // Act Assert
+    DistributedTransaction transaction = manager.begin();
+    Optional<Result> actual =
+        transaction.get(
+            Get.newBuilder()
+                .namespace(namespace1)
+                .table(TABLE_1)
+                .indexKey(Key.ofInt(BALANCE, INITIAL_BALANCE))
+                .build());
+
+    assertThat(actual).isPresent();
+    assertThat(actual.get().getInt(ACCOUNT_ID)).isEqualTo(0);
+    assertThat(actual.get().getInt(ACCOUNT_TYPE)).isEqualTo(0);
+    assertThat(actual.get().getInt(BALANCE)).isEqualTo(INITIAL_BALANCE);
+
+    transaction.update(
+        Update.newBuilder()
+            .namespace(namespace1)
+            .table(TABLE_1)
+            .partitionKey(Key.ofInt(ACCOUNT_ID, 0))
+            .clusteringKey(Key.ofInt(ACCOUNT_TYPE, 0))
+            .intValue(BALANCE, 1)
+            .build());
+
+    transaction.commit();
+
+    transaction = manager.begin();
+    actual =
+        transaction.get(
+            Get.newBuilder()
+                .namespace(namespace1)
+                .table(TABLE_1)
+                .partitionKey(Key.ofInt(ACCOUNT_ID, 0))
+                .clusteringKey(Key.ofInt(ACCOUNT_TYPE, 0))
+                .build());
+    transaction.commit();
+
+    assertThat(actual).isPresent();
+    assertThat(actual.get().getInt(ACCOUNT_ID)).isEqualTo(0);
+    assertThat(actual.get().getInt(ACCOUNT_TYPE)).isEqualTo(0);
+    assertThat(actual.get().getInt(BALANCE)).isEqualTo(1);
+  }
+
+  @Test
+  public void scanAndUpdate_ScanWithIndexGiven_ShouldUpdate() throws TransactionException {
+    // Arrange
+    manager.mutate(
+        Arrays.asList(
+            Insert.newBuilder()
+                .namespace(namespace1)
+                .table(TABLE_1)
+                .partitionKey(Key.ofInt(ACCOUNT_ID, 0))
+                .clusteringKey(Key.ofInt(ACCOUNT_TYPE, 0))
+                .intValue(BALANCE, INITIAL_BALANCE)
+                .build(),
+            Insert.newBuilder()
+                .namespace(namespace1)
+                .table(TABLE_1)
+                .partitionKey(Key.ofInt(ACCOUNT_ID, 0))
+                .clusteringKey(Key.ofInt(ACCOUNT_TYPE, 1))
+                .intValue(BALANCE, INITIAL_BALANCE)
+                .build()));
+
+    // Act Assert
+    DistributedTransaction transaction = manager.begin();
+    List<Result> actualResults =
+        transaction.scan(
+            Scan.newBuilder()
+                .namespace(namespace1)
+                .table(TABLE_1)
+                .indexKey(Key.ofInt(BALANCE, INITIAL_BALANCE))
+                .build());
+
+    assertThat(actualResults).hasSize(2);
+    Set<Integer> expectedTypes = Sets.newHashSet(0, 1);
+    for (Result result : actualResults) {
+      assertThat(result.getInt(ACCOUNT_ID)).isEqualTo(0);
+      expectedTypes.remove(result.getInt(ACCOUNT_TYPE));
+      assertThat(result.getInt(BALANCE)).isEqualTo(INITIAL_BALANCE);
+    }
+    assertThat(expectedTypes).isEmpty();
+
+    transaction.update(
+        Update.newBuilder()
+            .namespace(namespace1)
+            .table(TABLE_1)
+            .partitionKey(Key.ofInt(ACCOUNT_ID, 0))
+            .clusteringKey(Key.ofInt(ACCOUNT_TYPE, 0))
+            .intValue(BALANCE, 1)
+            .build());
+    transaction.update(
+        Update.newBuilder()
+            .namespace(namespace1)
+            .table(TABLE_1)
+            .partitionKey(Key.ofInt(ACCOUNT_ID, 0))
+            .clusteringKey(Key.ofInt(ACCOUNT_TYPE, 1))
+            .intValue(BALANCE, 2)
+            .build());
+
+    transaction.commit();
+
+    transaction = manager.begin();
+    Optional<Result> actual1 =
+        transaction.get(
+            Get.newBuilder()
+                .namespace(namespace1)
+                .table(TABLE_1)
+                .partitionKey(Key.ofInt(ACCOUNT_ID, 0))
+                .clusteringKey(Key.ofInt(ACCOUNT_TYPE, 0))
+                .build());
+    Optional<Result> actual2 =
+        transaction.get(
+            Get.newBuilder()
+                .namespace(namespace1)
+                .table(TABLE_1)
+                .partitionKey(Key.ofInt(ACCOUNT_ID, 0))
+                .clusteringKey(Key.ofInt(ACCOUNT_TYPE, 1))
+                .build());
+    transaction.commit();
+
+    assertThat(actual1).isPresent();
+    assertThat(actual1.get().getInt(ACCOUNT_ID)).isEqualTo(0);
+    assertThat(actual1.get().getInt(ACCOUNT_TYPE)).isEqualTo(0);
+    assertThat(actual1.get().getInt(BALANCE)).isEqualTo(1);
+
+    assertThat(actual2).isPresent();
+    assertThat(actual2.get().getInt(ACCOUNT_ID)).isEqualTo(0);
+    assertThat(actual2.get().getInt(ACCOUNT_TYPE)).isEqualTo(1);
+    assertThat(actual2.get().getInt(BALANCE)).isEqualTo(2);
+  }
+
   private DistributedTransaction prepareTransfer(
       int fromId,
       String fromNamespace,
