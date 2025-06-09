@@ -96,8 +96,13 @@ public class JdbcService {
     }
   }
 
-  @SuppressFBWarnings("OBL_UNSATISFIED_OBLIGATION_EXCEPTION_EDGE")
   public Scanner getScanner(Scan scan, Connection connection)
+      throws SQLException, ExecutionException {
+    return getScanner(scan, connection, true);
+  }
+
+  @SuppressFBWarnings("OBL_UNSATISFIED_OBLIGATION_EXCEPTION_EDGE")
+  public Scanner getScanner(Scan scan, Connection connection, boolean closeConnectionOnScannerClose)
       throws SQLException, ExecutionException {
     operationChecker.check(scan);
     connection.setAutoCommit(false);
@@ -117,7 +122,8 @@ public class JdbcService {
         new ResultInterpreter(scan.getProjections(), tableMetadata, rdbEngine),
         connection,
         preparedStatement,
-        resultSet);
+        resultSet,
+        closeConnectionOnScannerClose);
   }
 
   public List<Result> scan(Scan scan, Connection connection)
