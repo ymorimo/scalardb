@@ -49,6 +49,7 @@ public class ObjectStorageUtils {
             StaticCredentialsProvider.create(
                 AwsBasicCredentials.create(config.getUsername(), config.getPassword())))
         .region(Region.of(config.getRegion()))
+        .forcePathStyle(true)
         .build();
   }
 
