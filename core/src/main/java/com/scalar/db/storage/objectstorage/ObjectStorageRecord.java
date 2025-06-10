@@ -58,12 +58,12 @@ public class ObjectStorageRecord {
     if (o == this) {
       return true;
     }
-    if (!(o instanceof com.scalar.db.storage.cosmos.Record)) {
+    if (!(o instanceof ObjectStorageRecord)) {
       return false;
     }
 
-    com.scalar.db.storage.cosmos.Record other = (com.scalar.db.storage.cosmos.Record) o;
-    if (!other.getConcatenatedPartitionKey().equals(concatenatedKey)) {
+    ObjectStorageRecord other = (ObjectStorageRecord) o;
+    if (!other.getConcatenatedKey().equals(concatenatedKey)) {
       return false;
     }
     if (!other.getPartitionKey().equals(partitionKey)) {
