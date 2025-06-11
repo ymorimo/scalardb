@@ -53,16 +53,6 @@ CREATE TABLE `employee_trn` (
 PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE DATABASE IF NOT EXISTS coordinator;
-USE coordinator;
-CREATE TABLE `state` (
-  `tx_id` varchar(128) NOT NULL,
-  `tx_state` int DEFAULT NULL,
-  `tx_created_at` bigint DEFAULT NULL,
-  PRIMARY KEY (`tx_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
-
 CREATE TABLE `all_columns` (
   `col1` bigint NOT NULL,
   `col2` int NOT NULL,
@@ -94,4 +84,13 @@ CREATE TABLE `all_columns` (
   `before_col4` double DEFAULT NULL,
   `before_col5` double DEFAULT NULL,
   PRIMARY KEY (`col1`,`col2`,`col3`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE DATABASE IF NOT EXISTS coordinator;
+USE coordinator;
+CREATE TABLE `state` (
+  `tx_id` varchar(128) NOT NULL,
+  `tx_state` int DEFAULT NULL,
+  `tx_created_at` bigint DEFAULT NULL,
+  PRIMARY KEY (`tx_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

@@ -101,11 +101,18 @@ public class ExportCommandPostgresSQLIT {
   void testExportToFile() throws IOException {
     String outputDir = tempDir.toString();
     String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "all_columns",
-      "--output-dir", outputDir,
-      "--format", "CSV"
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "CSV",
+      "--max-threads",
+      "4"
     };
 
     ExportCommand exportCommand = new ExportCommand();
@@ -124,12 +131,20 @@ public class ExportCommandPostgresSQLIT {
     String outputDir = tempDir.toString();
 
     String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "all_columns",
-      "--output-dir", outputDir,
-      "--format", "JSON",
-      "--projection", "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11"
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "JSON",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--max-threads",
+      "4"
     };
 
     ExportCommand exportCommand = new ExportCommand();
@@ -146,13 +161,21 @@ public class ExportCommandPostgresSQLIT {
     String outputDir = tempDir.toString();
 
     String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "all_columns",
-      "--output-dir", outputDir,
-      "--format", "JSON",
-      "--projection", "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
-      "--pretty-print"
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "JSON",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--pretty-print",
+      "--max-threads",
+      "4"
     };
 
     ExportCommand exportCommand = new ExportCommand();
@@ -169,12 +192,20 @@ public class ExportCommandPostgresSQLIT {
     String outputDir = tempDir.toString();
 
     String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "all_columns",
-      "--output-dir", outputDir,
-      "--format", "CSV",
-      "--projection", "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11"
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "CSV",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--max-threads",
+      "4"
     };
 
     ExportCommand exportCommand = new ExportCommand();
@@ -192,13 +223,22 @@ public class ExportCommandPostgresSQLIT {
     String outputDir = tempDir.toString();
 
     String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "all_columns",
-      "--output-dir", outputDir,
-      "--format", "JSON",
-      "--partition-key", "col1=1",
-      "--projection", "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11"
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "JSON",
+      "--partition-key",
+      "col1=1",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--max-threads",
+      "4"
     };
 
     ExportCommand exportCommand = new ExportCommand();
@@ -214,12 +254,20 @@ public class ExportCommandPostgresSQLIT {
   void testExportToFileWithRequiredOptionsWithJSONLinesFormat() throws IOException {
     String outputDir = tempDir.toString();
     String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "all_columns",
-      "--output-dir", outputDir,
-      "--format", "JSONL",
-      "--projection", "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11"
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "JSONL",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--max-threads",
+      "4"
     };
 
     ExportCommand exportCommand = new ExportCommand();
@@ -235,13 +283,22 @@ public class ExportCommandPostgresSQLIT {
   void testExportToFileWithRequiredOptionsWithJSONLinesFormatWithFileName() throws IOException {
     String outputDir = tempDir.toString();
     String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "all_columns",
-      "--output-dir", outputDir,
-      "--output-file", "sample.jsonl",
-      "--format", "JSONL",
-      "--projection", "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11"
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--output-file",
+      "sample.jsonl",
+      "--format",
+      "JSONL",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--max-threads",
+      "4"
     };
     ExportCommand exportCommand = new ExportCommand();
     CommandLine commandLine = new CommandLine(exportCommand);
@@ -258,13 +315,22 @@ public class ExportCommandPostgresSQLIT {
     String outputDir = tempDir.toString();
 
     String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "all_columns",
-      "--output-dir", outputDir,
-      "--format", "JSONL",
-      "--projection", "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
-      "--limit", "2"
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "JSONL",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--limit",
+      "2",
+      "--max-threads",
+      "4"
     };
 
     ExportCommand exportCommand = new ExportCommand();
@@ -282,14 +348,24 @@ public class ExportCommandPostgresSQLIT {
     String outputDir = tempDir.toString();
 
     String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "all_columns",
-      "--output-dir", outputDir,
-      "--format", "JSONL",
-      "--projection", "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
-      "--start-key", "col2=1",
-      "--end-key", "col2=5"
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "JSONL",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--start-key",
+      "col2=1",
+      "--end-key",
+      "col2=5",
+      "--max-threads",
+      "4"
     };
 
     ExportCommand exportCommand = new ExportCommand();
@@ -324,7 +400,9 @@ public class ExportCommandPostgresSQLIT {
       "--start-inclusive",
       "--end-key",
       "col2=5",
-      "--end-inclusive"
+      "--end-inclusive",
+      "--max-threads",
+      "4"
     };
 
     ExportCommand exportCommand = new ExportCommand();
@@ -341,13 +419,21 @@ public class ExportCommandPostgresSQLIT {
     String outputDir = tempDir.toString();
 
     String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "all_columns",
-      "--output-dir", outputDir,
-      "--format", "JSONL",
-      "--projection", "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
-      "--include-metadata"
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "JSONL",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--include-metadata",
+      "--max-threads",
+      "4"
     };
 
     ExportCommand exportCommand = new ExportCommand();
@@ -379,7 +465,7 @@ public class ExportCommandPostgresSQLIT {
       "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
       "--include-metadata",
       "--max-threads",
-      "2"
+      "4"
     };
 
     ExportCommand exportCommand = new ExportCommand();
@@ -395,13 +481,22 @@ public class ExportCommandPostgresSQLIT {
   void testExportToFileWithRequiredOptionsWithPartitionKeyFilter() throws IOException {
     String outputDir = tempDir.toString();
     String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "all_columns",
-      "--output-dir", outputDir,
-      "--format", "CSV",
-      "--partition-key", "col1=1",
-      "--projection", "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11"
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "CSV",
+      "--partition-key",
+      "col1=1",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--max-threads",
+      "4"
     };
 
     ExportCommand exportCommand = new ExportCommand();
@@ -417,14 +512,24 @@ public class ExportCommandPostgresSQLIT {
   void testExportToFileWithRequiredOptionsWithPartitionKeyFilterWithDelimiter() throws IOException {
     String outputDir = tempDir.toString();
     String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "all_columns",
-      "--output-dir", outputDir,
-      "--format", "CSV",
-      "--partition-key", "col1=1",
-      "--projection", "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
-      "--delimiter", ";"
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "CSV",
+      "--partition-key",
+      "col1=1",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--delimiter",
+      ";",
+      "--max-threads",
+      "4"
     };
 
     ExportCommand exportCommand = new ExportCommand();
@@ -441,15 +546,25 @@ public class ExportCommandPostgresSQLIT {
       throws IOException {
     String outputDir = tempDir.toString();
     String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "all_columns",
-      "--output-dir", outputDir,
-      "--format", "CSV",
-      "--partition-key", "col1=1",
-      "--projection", "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
-      "--delimiter", ";",
-      "--no-header"
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "CSV",
+      "--partition-key",
+      "col1=1",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--delimiter",
+      ";",
+      "--no-header",
+      "--max-threads",
+      "4"
     };
 
     ExportCommand exportCommand = new ExportCommand();
@@ -481,7 +596,565 @@ public class ExportCommandPostgresSQLIT {
       "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
       "--include-metadata",
       "--data-chunk-size",
-      "2"
+      "2",
+      "--max-threads",
+      "4"
+    };
+
+    ExportCommand exportCommand = new ExportCommand();
+    CommandLine commandLine = new CommandLine(exportCommand);
+    int exitCode = commandLine.execute(args);
+    assertEquals(0, exitCode);
+    List<Path> files = findFilesWithExtension(tempDir, JSONLINES_EXTENSION);
+    assertThat(files).hasSize(1);
+    assertThat(files.get(0).getFileName().toString()).endsWith(JSONLINES_EXTENSION);
+  }
+
+  @Test
+  void testExportToFileWithTransaction() throws IOException {
+    String outputDir = tempDir.toString();
+    String[] args = {
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "CSV",
+      "--mode",
+      "TRANSACTION",
+      "--max-threads",
+      "4"
+    };
+
+    ExportCommand exportCommand = new ExportCommand();
+    CommandLine commandLine = new CommandLine(exportCommand);
+    int exitCode = commandLine.execute(args);
+    assertEquals(0, exitCode);
+
+    // Verify output file
+    List<Path> files = findFilesWithExtension(tempDir, CSV_EXTENSION);
+    assertThat(files).hasSize(1);
+    assertThat(files.get(0).getFileName().toString()).endsWith(CSV_EXTENSION);
+  }
+
+  @Test
+  void testExportToFileWithRequiredOptionsWithJSONFormatWithTransaction() throws IOException {
+    String outputDir = tempDir.toString();
+
+    String[] args = {
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "JSON",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--mode",
+      "TRANSACTION",
+      "--max-threads",
+      "4"
+    };
+
+    ExportCommand exportCommand = new ExportCommand();
+    CommandLine commandLine = new CommandLine(exportCommand);
+    int exitCode = commandLine.execute(args);
+    assertEquals(0, exitCode);
+    List<Path> files = findFilesWithExtension(tempDir, JSON_EXTENSION);
+    assertThat(files).hasSize(1);
+    assertThat(files.get(0).getFileName().toString()).endsWith(JSON_EXTENSION);
+  }
+
+  @Test
+  void testExportToFileWithRequiredOptionsWithJSONFormatWithPrettyPrintWithTransaction()
+      throws IOException {
+    String outputDir = tempDir.toString();
+
+    String[] args = {
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "JSON",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--pretty-print",
+      "--mode",
+      "TRANSACTION",
+      "--max-threads",
+      "4"
+    };
+
+    ExportCommand exportCommand = new ExportCommand();
+    CommandLine commandLine = new CommandLine(exportCommand);
+    int exitCode = commandLine.execute(args);
+    assertEquals(0, exitCode);
+    List<Path> files = findFilesWithExtension(tempDir, JSON_EXTENSION);
+    assertThat(files).hasSize(1);
+    assertThat(files.get(0).getFileName().toString()).endsWith(JSON_EXTENSION);
+  }
+
+  @Test
+  void testExportToFileWithRequiredOptionsWithCSVFormatWithPartitionKeyFilterWithTransaction()
+      throws IOException {
+    String outputDir = tempDir.toString();
+
+    String[] args = {
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "CSV",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--mode",
+      "TRANSACTION",
+      "--max-threads",
+      "4"
+    };
+
+    ExportCommand exportCommand = new ExportCommand();
+    CommandLine commandLine = new CommandLine(exportCommand);
+    int exitCode = commandLine.execute(args);
+    assertEquals(0, exitCode);
+    List<Path> files = findFilesWithExtension(tempDir, CSV_EXTENSION);
+    assertThat(files).hasSize(1);
+    assertThat(files.get(0).getFileName().toString()).endsWith(CSV_EXTENSION);
+  }
+
+  @Test
+  void testExportToFileWithRequiredOptionsWithJSONFormatWithPartitionKeyFilterWithTransaction()
+      throws IOException {
+    String outputDir = tempDir.toString();
+
+    String[] args = {
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "JSON",
+      "--partition-key",
+      "col1=1",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--mode",
+      "TRANSACTION",
+      "--max-threads",
+      "4"
+    };
+
+    ExportCommand exportCommand = new ExportCommand();
+    CommandLine commandLine = new CommandLine(exportCommand);
+    int exitCode = commandLine.execute(args);
+    assertEquals(0, exitCode);
+    List<Path> files = findFilesWithExtension(tempDir, JSON_EXTENSION);
+    assertThat(files).hasSize(1);
+    assertThat(files.get(0).getFileName().toString()).endsWith(JSON_EXTENSION);
+  }
+
+  @Test
+  void testExportToFileWithRequiredOptionsWithJSONLinesFormatWithTransaction() throws IOException {
+    String outputDir = tempDir.toString();
+    String[] args = {
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "JSONL",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--mode",
+      "TRANSACTION",
+      "--max-threads",
+      "4"
+    };
+
+    ExportCommand exportCommand = new ExportCommand();
+    CommandLine commandLine = new CommandLine(exportCommand);
+    int exitCode = commandLine.execute(args);
+    assertEquals(0, exitCode);
+    List<Path> files = findFilesWithExtension(tempDir, JSONLINES_EXTENSION);
+    assertThat(files).hasSize(1);
+    assertThat(files.get(0).getFileName().toString()).endsWith(JSONLINES_EXTENSION);
+  }
+
+  @Test
+  void testExportToFileWithRequiredOptionsWithJSONLinesFormatWithFileNameWithTransaction()
+      throws IOException {
+    String outputDir = tempDir.toString();
+    String[] args = {
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--output-file",
+      "sample.jsonl",
+      "--format",
+      "JSONL",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--mode",
+      "TRANSACTION",
+      "--max-threads",
+      "4"
+    };
+    ExportCommand exportCommand = new ExportCommand();
+    CommandLine commandLine = new CommandLine(exportCommand);
+    int exitCode = commandLine.execute(args);
+    assertEquals(0, exitCode);
+    List<Path> files = findFilesWithExtension(tempDir, JSONLINES_EXTENSION);
+    assertThat(files).hasSize(1);
+    assertThat(files.get(0).getFileName().toString()).endsWith(JSONLINES_EXTENSION);
+    assertThat(files.get(0).getFileName().toString()).isEqualTo("sample.jsonl");
+  }
+
+  @Test
+  void testExportToFileWithRequiredOptionsWithJSONFLinesFormatWithLimitWithTransaction()
+      throws IOException {
+    String outputDir = tempDir.toString();
+
+    String[] args = {
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "JSONL",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--limit",
+      "2",
+      "--mode",
+      "TRANSACTION",
+      "--max-threads",
+      "4"
+    };
+
+    ExportCommand exportCommand = new ExportCommand();
+    CommandLine commandLine = new CommandLine(exportCommand);
+    int exitCode = commandLine.execute(args);
+    assertEquals(0, exitCode);
+    List<Path> files = findFilesWithExtension(tempDir, JSONLINES_EXTENSION);
+    assertThat(files).hasSize(1);
+    assertThat(files.get(0).getFileName().toString()).endsWith(JSONLINES_EXTENSION);
+  }
+
+  @Test
+  void testExportToFileWithRequiredOptionsWithJSONFLinesFormatWithScanStartAndEndWithTransaction()
+      throws IOException {
+    String outputDir = tempDir.toString();
+
+    String[] args = {
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "JSONL",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--start-key",
+      "col2=1",
+      "--end-key",
+      "col2=5",
+      "--mode",
+      "TRANSACTION",
+      "--max-threads",
+      "4"
+    };
+
+    ExportCommand exportCommand = new ExportCommand();
+    CommandLine commandLine = new CommandLine(exportCommand);
+    int exitCode = commandLine.execute(args);
+    assertEquals(0, exitCode);
+    List<Path> files = findFilesWithExtension(tempDir, JSONLINES_EXTENSION);
+    assertThat(files).hasSize(1);
+    assertThat(files.get(0).getFileName().toString()).endsWith(JSONLINES_EXTENSION);
+  }
+
+  @Test
+  void
+      testExportToFileWithRequiredOptionsWithJSONFLinesFormatWithScanStartAndEndAndInclusiveWithTransaction()
+          throws IOException {
+    String outputDir = tempDir.toString();
+
+    String[] args = {
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "JSONL",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--start-key",
+      "col2=1",
+      "--start-inclusive",
+      "--end-key",
+      "col2=5",
+      "--end-inclusive",
+      "--mode",
+      "TRANSACTION",
+      "--max-threads",
+      "4"
+    };
+
+    ExportCommand exportCommand = new ExportCommand();
+    CommandLine commandLine = new CommandLine(exportCommand);
+    int exitCode = commandLine.execute(args);
+    assertEquals(0, exitCode);
+    List<Path> files = findFilesWithExtension(tempDir, JSONLINES_EXTENSION);
+    assertThat(files).hasSize(1);
+    assertThat(files.get(0).getFileName().toString()).endsWith(JSONLINES_EXTENSION);
+  }
+
+  @Test
+  void testExportToFileWithRequiredOptionsWithJSONLinesFormatWithMetadataWithTransaction()
+      throws IOException {
+    String outputDir = tempDir.toString();
+
+    String[] args = {
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "JSONL",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--include-metadata",
+      "--mode",
+      "TRANSACTION",
+      "--max-threads",
+      "4"
+    };
+
+    ExportCommand exportCommand = new ExportCommand();
+    CommandLine commandLine = new CommandLine(exportCommand);
+    int exitCode = commandLine.execute(args);
+    assertEquals(0, exitCode);
+    List<Path> files = findFilesWithExtension(tempDir, JSONLINES_EXTENSION);
+    assertThat(files).hasSize(1);
+    assertThat(files.get(0).getFileName().toString()).endsWith(JSONLINES_EXTENSION);
+  }
+
+  @Test
+  void
+      testExportToFileWithRequiredOptionsWithJSONFLinesFormatWithMetadataWithMaxThreadWithTransaction()
+          throws IOException {
+    String outputDir = tempDir.toString();
+
+    String[] args = {
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "JSONL",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--include-metadata",
+      "--max-threads",
+      "4",
+      "--mode",
+      "TRANSACTION"
+    };
+
+    ExportCommand exportCommand = new ExportCommand();
+    CommandLine commandLine = new CommandLine(exportCommand);
+    int exitCode = commandLine.execute(args);
+    assertEquals(0, exitCode);
+    List<Path> files = findFilesWithExtension(tempDir, JSONLINES_EXTENSION);
+    assertThat(files).hasSize(1);
+    assertThat(files.get(0).getFileName().toString()).endsWith(JSONLINES_EXTENSION);
+  }
+
+  @Test
+  void testExportToFileWithRequiredOptionsWithPartitionKeyFilterWithTransaction()
+      throws IOException {
+    String outputDir = tempDir.toString();
+    String[] args = {
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "CSV",
+      "--partition-key",
+      "col1=1",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--mode",
+      "TRANSACTION",
+      "--max-threads",
+      "4"
+    };
+
+    ExportCommand exportCommand = new ExportCommand();
+    CommandLine commandLine = new CommandLine(exportCommand);
+    int exitCode = commandLine.execute(args);
+    assertEquals(0, exitCode);
+    List<Path> files = findFilesWithExtension(tempDir, CSV_EXTENSION);
+    assertThat(files).hasSize(1);
+    assertThat(files.get(0).getFileName().toString()).endsWith(CSV_EXTENSION);
+  }
+
+  @Test
+  void testExportToFileWithRequiredOptionsWithPartitionKeyFilterWithDelimiterWithTransaction()
+      throws IOException {
+    String outputDir = tempDir.toString();
+    String[] args = {
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "CSV",
+      "--partition-key",
+      "col1=1",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--delimiter",
+      ";",
+      "--mode",
+      "TRANSACTION",
+      "--max-threads",
+      "4"
+    };
+
+    ExportCommand exportCommand = new ExportCommand();
+    CommandLine commandLine = new CommandLine(exportCommand);
+    int exitCode = commandLine.execute(args);
+    assertEquals(0, exitCode);
+    List<Path> files = findFilesWithExtension(tempDir, CSV_EXTENSION);
+    assertThat(files).hasSize(1);
+    assertThat(files.get(0).getFileName().toString()).endsWith(CSV_EXTENSION);
+  }
+
+  @Test
+  void
+      testExportToFileWithRequiredOptionsWithPartitionKeyFilterWithDelimiterAndNoHeaderWithTransaction()
+          throws IOException {
+    String outputDir = tempDir.toString();
+    String[] args = {
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "CSV",
+      "--partition-key",
+      "col1=1",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--delimiter",
+      ";",
+      "--no-header",
+      "--mode",
+      "TRANSACTION",
+      "--max-threads",
+      "4"
+    };
+
+    ExportCommand exportCommand = new ExportCommand();
+    CommandLine commandLine = new CommandLine(exportCommand);
+    int exitCode = commandLine.execute(args);
+    assertEquals(0, exitCode);
+    List<Path> files = findFilesWithExtension(tempDir, CSV_EXTENSION);
+    assertThat(files).hasSize(1);
+    assertThat(files.get(0).getFileName().toString()).endsWith(CSV_EXTENSION);
+  }
+
+  @Test
+  void
+      testExportToFileWithRequiredOptionsWithJSONFLinesFormatWithMetadataWithDataChunkSizeWithTransaction()
+          throws IOException {
+    String outputDir = tempDir.toString();
+
+    String[] args = {
+      "--config",
+      configFilePath.toString(),
+      "--namespace",
+      "test",
+      "--table",
+      "all_columns",
+      "--output-dir",
+      outputDir,
+      "--format",
+      "JSONL",
+      "--projection",
+      "col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11",
+      "--include-metadata",
+      "--data-chunk-size",
+      "2",
+      "--mode",
+      "TRANSACTION",
+      "--max-threads",
+      "4"
     };
 
     ExportCommand exportCommand = new ExportCommand();

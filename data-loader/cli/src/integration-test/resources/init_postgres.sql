@@ -1,6 +1,14 @@
 --CREATE DATABASE scalardb;
 -- \c scalardb;
 
+CREATE SCHEMA coordinator;
+CREATE TABLE coordinator.state (
+  tx_id varchar(128) NOT NULL,
+  tx_state int DEFAULT NULL,
+  tx_created_at bigint DEFAULT NULL,
+  PRIMARY KEY (tx_id)
+);
+
 CREATE SCHEMA scalardb;
 -- CREATE SCHEMA coordinator;
 -- Metadata table
@@ -63,7 +71,10 @@ INSERT INTO scalardb.metadata VALUES
   ('test.all_columns','tx_id','TEXT',NULL,NULL,FALSE,12),
   ('test.all_columns','tx_prepared_at','BIGINT',NULL,NULL,FALSE,15),
   ('test.all_columns','tx_state','INT',NULL,NULL,FALSE,13),
-  ('test.all_columns','tx_version','INT',NULL,NULL,FALSE,14);
+  ('test.all_columns','tx_version','INT',NULL,NULL,FALSE,14),
+  ('coordinator.state','tx_id','TEXT','PARTITION',NULL,FALSE,1),
+  ('coordinator.state','tx_state','INT',NULL,NULL,FALSE,2),
+  ('coordinator.state','tx_created_at','BIGINT',NULL,NULL,FALSE,3);
 
 CREATE SCHEMA test;
 
