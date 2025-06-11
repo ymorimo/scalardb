@@ -44,13 +44,20 @@ public class JdbcService {
   private final OperationChecker operationChecker;
   private final RdbEngineStrategy rdbEngine;
   private final QueryBuilder queryBuilder;
+  private final int scanFetchSize;
 
   @SuppressFBWarnings("EI_EXPOSE_REP2")
   public JdbcService(
       TableMetadataManager tableMetadataManager,
       OperationChecker operationChecker,
-      RdbEngineStrategy rdbEngine) {
-    this(tableMetadataManager, operationChecker, rdbEngine, new QueryBuilder(rdbEngine));
+      RdbEngineStrategy rdbEngine,
+      int scanFetchSize) {
+    this(
+        tableMetadataManager,
+        operationChecker,
+        rdbEngine,
+        new QueryBuilder(rdbEngine),
+        scanFetchSize);
   }
 
   @VisibleForTesting
@@ -58,11 +65,13 @@ public class JdbcService {
       TableMetadataManager tableMetadataManager,
       OperationChecker operationChecker,
       RdbEngineStrategy rdbEngine,
-      QueryBuilder queryBuilder) {
+      QueryBuilder queryBuilder,
+      int scanFetchSize) {
     this.tableMetadataManager = Objects.requireNonNull(tableMetadataManager);
     this.operationChecker = Objects.requireNonNull(operationChecker);
     this.rdbEngine = Objects.requireNonNull(rdbEngine);
     this.queryBuilder = Objects.requireNonNull(queryBuilder);
+    this.scanFetchSize = scanFetchSize;
   }
 
   public Optional<Result> get(Get get, Connection connection)
@@ -102,28 +111,24 @@ public class JdbcService {
   }
 
   @SuppressFBWarnings("OBL_UNSATISFIED_OBLIGATION_EXCEPTION_EDGE")
-  public Scanner getScanner(Scan scan, Connection connection, boolean closeConnectionOnScannerClose)
+  public Scanner getScanner(
+      Scan scan, Connection connection, boolean commitAndCloseConnectionOnScannerClose)
       throws SQLException, ExecutionException {
     operationChecker.check(scan);
-    connection.setAutoCommit(false);
 
     TableMetadata tableMetadata = tableMetadataManager.getTableMetadata(scan);
 
     SelectQuery selectQuery = buildSelectQuery(scan, tableMetadata);
     PreparedStatement preparedStatement = connection.prepareStatement(selectQuery.sql());
     selectQuery.bind(preparedStatement);
-
-    // Set fetch size to stream results rather than fetching all at once
-    preparedStatement.setFetchSize(50); // For PostgreSQL
-
-    // Execute the query
+    preparedStatement.setFetchSize(scanFetchSize);
     ResultSet resultSet = preparedStatement.executeQuery();
     return new ScannerImpl(
         new ResultInterpreter(scan.getProjections(), tableMetadata, rdbEngine),
         connection,
         preparedStatement,
         resultSet,
-        closeConnectionOnScannerClose);
+        commitAndCloseConnectionOnScannerClose);
   }
 
   public List<Result> scan(Scan scan, Connection connection)
