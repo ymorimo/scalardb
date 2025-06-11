@@ -26,9 +26,7 @@ public class ObjectStorage extends AbstractDistributedStorage {
 
   private final ObjectStorageWrapper wrapper;
   private final SelectStatementHandler selectStatementHandler;
-  private final PutStatementHandler putStatementHandler;
-  private final DeleteStatementHandler deleteStatementHandler;
-  private final BatchHandler batchHandler;
+  private final MutateStatementHandler mutateStatementHandler;
   private final OperationChecker operationChecker;
 
   public ObjectStorage(DatabaseConfig databaseConfig) {
@@ -45,9 +43,7 @@ public class ObjectStorage extends AbstractDistributedStorage {
             databaseConfig.getMetadataCacheExpirationTimeSecs());
     operationChecker = new ObjectStorageOperationChecker(databaseConfig, metadataManager);
     selectStatementHandler = new SelectStatementHandler(wrapper, metadataManager);
-    putStatementHandler = new PutStatementHandler(wrapper, metadataManager);
-    deleteStatementHandler = new DeleteStatementHandler(wrapper, metadataManager);
-    batchHandler = new BatchHandler(wrapper, metadataManager);
+    mutateStatementHandler = new MutateStatementHandler(wrapper, metadataManager);
     logger.info("ObjectStorage object is created properly");
   }
 
@@ -56,16 +52,12 @@ public class ObjectStorage extends AbstractDistributedStorage {
       DatabaseConfig databaseConfig,
       ObjectStorageWrapper wrapper,
       SelectStatementHandler select,
-      PutStatementHandler put,
-      DeleteStatementHandler delete,
-      BatchHandler batch,
+      MutateStatementHandler mutate,
       OperationChecker operationChecker) {
     super(databaseConfig);
     this.wrapper = wrapper;
     this.selectStatementHandler = select;
-    this.putStatementHandler = put;
-    this.deleteStatementHandler = delete;
-    this.batchHandler = batch;
+    this.mutateStatementHandler = mutate;
     this.operationChecker = operationChecker;
   }
 
@@ -116,7 +108,7 @@ public class ObjectStorage extends AbstractDistributedStorage {
   public void put(Put put) throws ExecutionException {
     put = copyAndSetTargetToIfNot(put);
     operationChecker.check(put);
-    putStatementHandler.handle(put);
+    mutateStatementHandler.handle(put);
   }
 
   @Override
@@ -128,7 +120,7 @@ public class ObjectStorage extends AbstractDistributedStorage {
   public void delete(Delete delete) throws ExecutionException {
     delete = copyAndSetTargetToIfNot(delete);
     operationChecker.check(delete);
-    deleteStatementHandler.handle(delete);
+    mutateStatementHandler.handle(delete);
   }
 
   @Override
@@ -138,19 +130,9 @@ public class ObjectStorage extends AbstractDistributedStorage {
 
   @Override
   public void mutate(List<? extends Mutation> mutations) throws ExecutionException {
-    if (mutations.size() == 1) {
-      Mutation mutation = mutations.get(0);
-      if (mutation instanceof Put) {
-        put((Put) mutation);
-        return;
-      } else if (mutation instanceof Delete) {
-        delete((Delete) mutation);
-        return;
-      }
-    }
     mutations = copyAndSetTargetToIfNot(mutations);
     operationChecker.check(mutations);
-    batchHandler.handle(mutations);
+    mutateStatementHandler.handle(mutations);
   }
 
   @Override

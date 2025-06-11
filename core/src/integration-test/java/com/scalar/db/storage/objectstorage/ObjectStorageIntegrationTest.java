@@ -41,4 +41,9 @@ public class ObjectStorageIntegrationTest extends DistributedStorageIntegrationT
   @Override
   @Disabled("Index-related operations are not supported for object storages")
   public void scan_ScanGivenForNonIndexedColumn_ShouldThrowIllegalArgumentException() {}
+
+  @Test
+  @Override
+  @Disabled("Index-related operations are not supported for object storages")
+  public void put_PutGivenForIndexedColumnWithNullValue_ShouldPut() {}
 }
