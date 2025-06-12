@@ -4,7 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Objects;
+import java.util.ArrayList;
+import java.util.List;
 import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -16,6 +17,7 @@ import org.testcontainers.utility.MountableFile;
 import picocli.CommandLine;
 
 public class ImportCommandCsvMySQLIT {
+
   private static final MySQLContainer<?> mysql =
       new MySQLContainer<>("mysql:8.0")
           .withDatabaseName("test")
@@ -30,8 +32,7 @@ public class ImportCommandCsvMySQLIT {
   static void startContainers() {
     mysql.withCopyFileToContainer(
         MountableFile.forClasspathResource("init_mysql_import.sql"),
-        "/docker-entrypoint-initdb.d/init_mysql.sql"); // Ensures the SQL file is available before
-    // container starts
+        "/docker-entrypoint-initdb.d/init_mysql.sql");
     mysql.start();
   }
 
@@ -44,7 +45,6 @@ public class ImportCommandCsvMySQLIT {
 
   @BeforeEach
   void setup() throws Exception {
-    // Setup ScalarDB schema
     configFilePath = tempDir.resolve("scalardb.properties");
     FileUtils.writeStringToFile(configFilePath.toFile(), getScalarDbConfig(), "UTF-8");
   }
@@ -59,444 +59,137 @@ public class ImportCommandCsvMySQLIT {
         + "scalar.db.cross_partition_scan.enabled=true\n";
   }
 
-  @Test
-  void testImportFromFileWithTransactionModeAndDataChunkSizeAndTransactionSizeWithFormatCSV()
+  private int runImportCommand(String... args) {
+    ImportCommand importCommand = new ImportCommand();
+    return new CommandLine(importCommand).execute(args);
+  }
+
+  private Path getPathFromResource(String resource) throws Exception {
+    return Paths.get(getClass().getClassLoader().getResource(resource).toURI());
+  }
+
+  private List<String> buildCommonArgs(String file, String table, String importMode)
       throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("import_data/import_single_mapped.csv"))
-                .toURI());
-    Path controlFilePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("control_files/control_file_trn_mapped.json"))
-                .toURI());
-    Path logPath =
-        Paths.get(Objects.requireNonNull(getClass().getClassLoader().getResource("logs")).toURI());
-    String[] args = {
-      "--config",
-      configFilePath.toString(),
-      "--namespace",
-      "test",
-      "--table",
-      "employee_trn",
-      "--log-dir",
-      logPath.toString(),
-      "--format",
-      "CSV",
-      "--import-mode",
-      "UPSERT",
-      "--mode",
-      "TRANSACTION",
-      "--file",
-      filePath.toString(),
-      "--control-file",
-      controlFilePath.toString(),
-      "--control-file-validation",
-      "MAPPED",
-      "--log-raw-record",
-      "--log-success",
-      "--transaction-size",
-      "1",
-      "--data-chunk-size",
-      "5"
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-    assertEquals(0, exitCode);
+    List<String> args = new ArrayList<>();
+    args.add("--config");
+    args.add(configFilePath.toString());
+    args.add("--namespace");
+    args.add("test");
+    args.add("--table");
+    args.add(table);
+    args.add("--log-dir");
+    args.add(tempDir.toString());
+    args.add("--format");
+    args.add("CSV");
+    args.add("--import-mode");
+    args.add(importMode);
+    args.add("--file");
+    args.add(getPathFromResource(file).toString());
+    return args;
   }
 
   @Test
-  void testImportFromFileWithTransactionModeWithFormatCSVAndSplitLogMode() throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("import_data/import_single_mapped.csv"))
-                .toURI());
-    Path controlFilePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("control_files/control_file_trn_mapped.json"))
-                .toURI());
-    Path logPath =
-        Paths.get(Objects.requireNonNull(getClass().getClassLoader().getResource("logs")).toURI());
-    String[] args = {
-      "--config",
-      configFilePath.toString(),
-      "--namespace",
-      "test",
-      "--table",
-      "employee_trn",
-      "--log-dir",
-      logPath.toString(),
-      "--format",
-      "CSV",
-      "--import-mode",
-      "UPSERT",
-      "--mode",
-      "TRANSACTION",
-      "--file",
-      filePath.toString(),
-      "--control-file",
-      controlFilePath.toString(),
-      "--control-file-validation",
-      "MAPPED",
-      "--log-raw-record",
-      "--log-success",
-      "--split-log-mode"
-    };
+  void testImportWithControlFileAndTransactionMode() throws Exception {
+    List<String> args =
+        buildCommonArgs("import_data/import_single_trn_full.csv", "employee_trn", "UPSERT");
+    args.add("--mode");
+    args.add("TRANSACTION");
+    args.add("--control-file");
+    args.add(getPathFromResource("control_files/control_file_trn.json").toString());
+    args.add("--control-file-validation");
+    args.add("FULL");
+    args.add("--log-success");
 
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    assertEquals(0, commandLine.execute(args));
+    assertEquals(0, runImportCommand(args.toArray(new String[0])));
   }
 
   @Test
-  void
-      testImportFromFileWithImportModeUpsertWithControlFileWithStorageModeAndFileFormatCSVWithTwoTables()
-          throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("import_data/import_multi_mapped.csv"))
-                .toURI());
-    Path controlFilePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("control_files/control_file_multi.json"))
-                .toURI());
-    String[] args = {
-      "--config",
-      configFilePath.toString(),
-      "--namespace",
-      "test",
-      "--table",
-      "employee",
-      "--log-dir",
-      tempDir.toString(),
-      "--format",
-      "CSV",
-      "--import-mode",
-      "UPSERT",
-      "--file",
-      filePath.toString(),
-      "--control-file",
-      controlFilePath.toString(),
-      "--control-file-validation",
-      "FULL",
-      "--log-success"
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
-    assertEquals(0, exitCode);
+  void testImportSimpleUpsert() throws Exception {
+    List<String> args = buildCommonArgs("import_data/import_data_all.csv", "all_columns", "UPSERT");
+    assertEquals(0, runImportCommand(args.toArray(new String[0])));
   }
 
   @Test
-  void testImportFromFileWithImportModeInsertAndFileFormatCSV() throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("import_data/import_data_all.csv"))
-                .toURI());
-    String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "all_columns",
-      "--log-dir", tempDir.toString(),
-      "--format", "CSV",
-      "--import-mode", "INSERT",
-      "--file", filePath.toString()
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
-    assertEquals(0, exitCode);
+  void testImportSimpleInsert() throws Exception {
+    List<String> args = buildCommonArgs("import_data/import_data_all.csv", "all_columns", "INSERT");
+    assertEquals(0, runImportCommand(args.toArray(new String[0])));
   }
 
   @Test
-  void testImportFromFileWithImportModeUpdateAndFileFormatCSV() throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("import_data/import_data_all.csv"))
-                .toURI());
-    String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "all_columns",
-      "--log-dir", tempDir.toString(),
-      "--format", "CSV",
-      "--import-mode", "UPDATE",
-      "--file", filePath.toString()
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
-    assertEquals(0, exitCode);
+  void testImportSimpleUpdate() throws Exception {
+    List<String> args = buildCommonArgs("import_data/import_data_all.csv", "all_columns", "UPDATE");
+    assertEquals(0, runImportCommand(args.toArray(new String[0])));
   }
 
   @Test
-  void testImportFromFileWithImportModeUpsertAndFileFormatCSV() throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("import_data/import_data_all.csv"))
-                .toURI());
-    String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "all_columns",
-      "--log-dir", tempDir.toString(),
-      "--format", "CSV",
-      "--import-mode", "UPSERT",
-      "--file", filePath.toString()
-    };
+  void testImportWithControlFileMultiTable() throws Exception {
+    List<String> args =
+        buildCommonArgs("import_data/import_multi_mapped.csv", "employee", "UPSERT");
+    args.add("--control-file");
+    args.add(getPathFromResource("control_files/control_file_multi.json").toString());
+    args.add("--control-file-validation");
+    args.add("FULL");
+    args.add("--log-success");
 
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
-    assertEquals(0, exitCode);
+    assertEquals(0, runImportCommand(args.toArray(new String[0])));
   }
 
   @Test
-  void testImportFromFileWithControlFileWithStorageModeAndFileFormatCSV() throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("import_data/import_single_trn_full.csv"))
-                .toURI());
-    Path controlFilePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("control_files/control_file_trn.json"))
-                .toURI());
-    String[] args = {
-      "--config",
-      configFilePath.toString(),
-      "--namespace",
-      "test",
-      "--table",
-      "employee_trn",
-      "--log-dir",
-      tempDir.toString(),
-      "--format",
-      "CSV",
-      "--mode",
-      "TRANSACTION",
-      "--import-mode",
-      "UPSERT",
-      "--file",
-      filePath.toString(),
-      "--control-file",
-      controlFilePath.toString(),
-      "--control-file-validation",
-      "FULL",
-      "--log-success"
-    };
+  void testImportWithNoHeader() throws Exception {
+    List<String> args =
+        buildCommonArgs("import_data/import_single_without_header.csv", "employee", "UPSERT");
+    args.add("--delimiter");
+    args.add(",");
+    args.add("--header");
+    args.add("id,name,email");
 
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
-    assertEquals(0, exitCode);
+    assertEquals(0, runImportCommand(args.toArray(new String[0])));
   }
 
   @Test
-  void testImportFromFileWithStorageModeTransactionAndFileFormatCSV_WithLogRawRecordsEnabled()
-      throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("import_data/import_single_trn_full.csv"))
-                .toURI());
-    Path controlFilePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("control_files/control_file_trn.json"))
-                .toURI());
-    Path logPath =
-        Paths.get(Objects.requireNonNull(getClass().getClassLoader().getResource("logs")).toURI());
-    String[] args = {
-      "--config",
-      configFilePath.toString(),
-      "--namespace",
-      "test",
-      "--table",
-      "employee_trn",
-      "--log-dir",
-      logPath.toString(),
-      "--format",
-      "CSV",
-      "--import-mode",
-      "UPSERT",
-      "--mode",
-      "TRANSACTION",
-      "--file",
-      filePath.toString(),
-      "--control-file",
-      controlFilePath.toString(),
-      "--control-file-validation",
-      "MAPPED",
-      "--log-raw-record",
-      "--log-success",
-    };
+  void testImportWithDifferentDelimiter() throws Exception {
+    List<String> args =
+        buildCommonArgs("import_data/import_single_delimiter.csv", "employee", "UPSERT");
+    args.add("--delimiter");
+    args.add(":");
 
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-    assertEquals(0, exitCode);
+    assertEquals(0, runImportCommand(args.toArray(new String[0])));
   }
 
   @Test
-  void testImportFromFileWithImportModeUpsertAndFileFormatCsv() throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("import_data/import_single.csv"))
-                .toURI());
-    String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "employee",
-      "--log-dir", tempDir.toString(),
-      "--format", "CSV",
-      "--import-mode", "UPSERT",
-      "--file", filePath.toString()
-    };
+  void testImportWithSplitLogMode() throws Exception {
+    List<String> args =
+        buildCommonArgs("import_data/import_single_mapped.csv", "employee_trn", "UPSERT");
+    args.add("--mode");
+    args.add("TRANSACTION");
+    args.add("--control-file");
+    args.add(getPathFromResource("control_files/control_file_trn_mapped.json").toString());
+    args.add("--control-file-validation");
+    args.add("MAPPED");
+    args.add("--log-raw-record");
+    args.add("--log-success");
+    args.add("--split-log-mode");
 
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
-    assertEquals(0, exitCode);
+    assertEquals(0, runImportCommand(args.toArray(new String[0])));
   }
 
   @Test
-  void testImportFromFileWithImportModeUpdateAndFileFormatCsv() throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("import_data/import_single.csv"))
-                .toURI());
-    String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "employee",
-      "--log-dir", tempDir.toString(),
-      "--format", "CSV",
-      "--import-mode", "UPDATE",
-      "--file", filePath.toString()
-    };
+  void testImportWithChunkAndTxnSize() throws Exception {
+    List<String> args =
+        buildCommonArgs("import_data/import_single_mapped.csv", "employee_trn", "UPSERT");
+    args.add("--mode");
+    args.add("TRANSACTION");
+    args.add("--control-file");
+    args.add(getPathFromResource("control_files/control_file_trn_mapped.json").toString());
+    args.add("--control-file-validation");
+    args.add("MAPPED");
+    args.add("--log-raw-record");
+    args.add("--log-success");
+    args.add("--transaction-size");
+    args.add("1");
+    args.add("--data-chunk-size");
+    args.add("5");
 
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
-    assertEquals(0, exitCode);
-  }
-
-  @Test
-  void testImportFromFileWithImportModeUpsertAndFileFormatCsvWithoutHeader() throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("import_data/import_single_without_header.csv"))
-                .toURI());
-    String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "employee",
-      "--log-dir", tempDir.toString(),
-      "--format", "CSV",
-      "--import-mode", "UPSERT",
-      "--file", filePath.toString(),
-      "--delimiter", ",",
-      "--header", "id,name,email"
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
-    assertEquals(0, exitCode);
-  }
-
-  @Test
-  void testImportFromFileWithImportModeUpdateAndFileFormatCsvWithoutHeader() throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("import_data/import_single_without_header.csv"))
-                .toURI());
-    String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "employee",
-      "--log-dir", tempDir.toString(),
-      "--format", "CSV",
-      "--import-mode", "UPDATE",
-      "--file", filePath.toString(),
-      "--delimiter", ",",
-      "--header", "id,name,email"
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
-    assertEquals(0, exitCode);
-  }
-
-  @Test
-  void testImportFromFileWithImportModeUpsertAndFileFormatCsvWithDifferentDelimiter()
-      throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("import_data/import_single_delimiter.csv"))
-                .toURI());
-    String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "employee",
-      "--log-dir", tempDir.toString(),
-      "--format", "CSV",
-      "--import-mode", "UPSERT",
-      "--file", filePath.toString(),
-      "--delimiter", ":",
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
-    assertEquals(0, exitCode);
+    assertEquals(0, runImportCommand(args.toArray(new String[0])));
   }
 }

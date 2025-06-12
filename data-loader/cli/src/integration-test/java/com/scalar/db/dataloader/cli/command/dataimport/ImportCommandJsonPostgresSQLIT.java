@@ -31,9 +31,7 @@ public class ImportCommandJsonPostgresSQLIT {
   static void startContainers() {
     postgres.withCopyFileToContainer(
         MountableFile.forClasspathResource("init_postgres_import.sql"),
-        "/docker-entrypoint-initdb.d/init_postgres_import.sql"); // Ensures the SQL file is
-    // available before
-    // container starts
+        "/docker-entrypoint-initdb.d/init_postgres_import.sql");
     postgres.start();
   }
 
@@ -46,7 +44,6 @@ public class ImportCommandJsonPostgresSQLIT {
 
   @BeforeEach
   void setup() throws Exception {
-    // Setup ScalarDB schema
     configFilePath = tempDir.resolve("scalardb.properties");
     FileUtils.writeStringToFile(configFilePath.toFile(), getScalarDbConfig(), "UTF-8");
   }
@@ -67,294 +64,169 @@ public class ImportCommandJsonPostgresSQLIT {
         + "scalar.db.cross_partition_scan.enabled=true\n";
   }
 
-  @Test
-  void testImportFromFileWithImportModeUpsertAndFileFormatJsonWithAllColumns() throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("import_data/import_single.json"))
-                .toURI());
-    String[] args = {
-      "--config",
-      configFilePath.toString(),
-      "--namespace",
-      "test",
-      "--table",
-      "employee",
-      "--log-dir",
-      tempDir.toString(),
-      "--format",
-      "JSON",
-      "--import-mode",
-      "UPSERT",
-      "--file",
-      filePath.toString(),
-      "--require-all-columns"
-    };
+  private Path getResourcePath(String resource) throws Exception {
+    return Paths.get(
+        Objects.requireNonNull(getClass().getClassLoader().getResource(resource)).toURI());
+  }
 
+  private void executeImport(String... args) {
     ImportCommand importCommand = new ImportCommand();
     CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
-    assertEquals(0, exitCode);
+    assertEquals(0, commandLine.execute(args));
   }
 
   @Test
-  void testImportFromFileWithImportModeUpsertAndFileFormatJsonWithPrettyPrints() throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("import_data/import_single.json"))
-                .toURI());
-    String[] args = {
-      "--config",
-      configFilePath.toString(),
-      "--namespace",
-      "test",
-      "--table",
-      "employee",
-      "--log-dir",
-      tempDir.toString(),
-      "--format",
-      "JSON",
-      "--import-mode",
-      "UPSERT",
-      "--file",
-      filePath.toString(),
-      "--pretty-print"
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
-    assertEquals(0, exitCode);
+  void testImportAllColumns() throws Exception {
+    executeImport(
+        "--config",
+        configFilePath.toString(),
+        "--namespace",
+        "test",
+        "--table",
+        "employee",
+        "--log-dir",
+        tempDir.toString(),
+        "--format",
+        "JSON",
+        "--import-mode",
+        "UPSERT",
+        "--file",
+        getResourcePath("import_data/import_single.json").toString(),
+        "--require-all-columns");
   }
 
   @Test
-  void testImportFromFileAndFileFormatJsonWithIgnoreNulls() throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("import_data/import_data_with_null.json"))
-                .toURI());
-    String[] args = {
-      "--config",
-      configFilePath.toString(),
-      "--namespace",
-      "test",
-      "--table",
-      "employee",
-      "--log-dir",
-      tempDir.toString(),
-      "--format",
-      "JSON",
-      "--import-mode",
-      "UPSERT",
-      "--file",
-      filePath.toString(),
-      "--ignore-nulls"
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
-    assertEquals(0, exitCode);
+  void testImportWithPrettyPrint() throws Exception {
+    executeImport(
+        "--config",
+        configFilePath.toString(),
+        "--namespace",
+        "test",
+        "--table",
+        "employee",
+        "--log-dir",
+        tempDir.toString(),
+        "--format",
+        "JSON",
+        "--import-mode",
+        "UPSERT",
+        "--file",
+        getResourcePath("import_data/import_single.json").toString(),
+        "--pretty-print");
   }
 
   @Test
-  void testImportFromFileWithImportModeUpsertAndFileFormatJson() throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("import_data/import_single.json"))
-                .toURI());
-    String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "employee",
-      "--log-dir", tempDir.toString(),
-      "--format", "JSON",
-      "--import-mode", "UPSERT",
-      "--file", filePath.toString()
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
-    assertEquals(0, exitCode);
+  void testImportWithIgnoreNulls() throws Exception {
+    executeImport(
+        "--config",
+        configFilePath.toString(),
+        "--namespace",
+        "test",
+        "--table",
+        "employee",
+        "--log-dir",
+        tempDir.toString(),
+        "--format",
+        "JSON",
+        "--import-mode",
+        "UPSERT",
+        "--file",
+        getResourcePath("import_data/import_data_with_null.json").toString(),
+        "--ignore-nulls");
   }
 
   @Test
-  void testImportFromFileWithImportModeUpdateAndFileFormatJson() throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("import_data/import_single.json"))
-                .toURI());
-    String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "employee",
-      "--log-dir", tempDir.toString(),
-      "--format", "JSON",
-      "--import-mode", "UPDATE",
-      "--file", filePath.toString()
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
-    assertEquals(0, exitCode);
+  void testImportBasicUpsert() throws Exception {
+    executeImport(
+        "--config", configFilePath.toString(),
+        "--namespace", "test",
+        "--table", "employee",
+        "--log-dir", tempDir.toString(),
+        "--format", "JSON",
+        "--import-mode", "UPSERT",
+        "--file", getResourcePath("import_data/import_single.json").toString());
   }
 
   @Test
-  void
-      testImportFromFileWithImportModeUpsertWithControlFileWithStorageModeTransactionAndFileFormatJSON()
-          throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("import_data/import_single_trn_full.json"))
-                .toURI());
-    Path controlFilePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("control_files/control_file_trn.json"))
-                .toURI());
-    String[] args = {
-      "--config",
-      configFilePath.toString(),
-      "--namespace",
-      "test",
-      "--table",
-      "employee_trn",
-      "--log-dir",
-      tempDir.toString(),
-      "--format",
-      "JSON",
-      "--mode",
-      "TRANSACTION",
-      "--import-mode",
-      "UPSERT",
-      "--file",
-      filePath.toString(),
-      "--control-file",
-      controlFilePath.toString(),
-      "--control-file-validation",
-      "FULL"
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
-    assertEquals(0, exitCode);
+  void testImportWithUpdateMode() throws Exception {
+    executeImport(
+        "--config", configFilePath.toString(),
+        "--namespace", "test",
+        "--table", "employee",
+        "--log-dir", tempDir.toString(),
+        "--format", "JSON",
+        "--import-mode", "UPDATE",
+        "--file", getResourcePath("import_data/import_single.json").toString());
   }
 
   @Test
-  void
-      testImportFromFileWithImportModeUpsertWithControlFileWithStorageModeAndFileFormatJSONWithTwoTables()
-          throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("import_data/import_multi_mapped.json"))
-                .toURI());
-    Path controlFilePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("control_files/control_file_multi.json"))
-                .toURI());
-    String[] args = {
-      "--config",
-      configFilePath.toString(),
-      "--namespace",
-      "test",
-      "--table",
-      "employee",
-      "--log-dir",
-      tempDir.toString(),
-      "--format",
-      "JSON",
-      "--import-mode",
-      "UPSERT",
-      "--file",
-      filePath.toString(),
-      "--control-file",
-      controlFilePath.toString(),
-      "--control-file-validation",
-      "FULL",
-      "--log-success"
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
-    assertEquals(0, exitCode);
+  void testImportWithControlFileFullValidation() throws Exception {
+    executeImport(
+        "--config", configFilePath.toString(),
+        "--namespace", "test",
+        "--table", "employee_trn",
+        "--log-dir", tempDir.toString(),
+        "--format", "JSON",
+        "--mode", "TRANSACTION",
+        "--import-mode", "UPSERT",
+        "--file", getResourcePath("import_data/import_single_trn_full.json").toString(),
+        "--control-file", getResourcePath("control_files/control_file_trn.json").toString(),
+        "--control-file-validation", "FULL");
   }
 
   @Test
-  void testImportFromFileWithTransactionModeAndDataChunkSizeAndTransactionSizeWithFormatJson()
-      throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("import_data/import_single_mapped.json"))
-                .toURI());
-    Path controlFilePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("control_files/control_file_trn_mapped.json"))
-                .toURI());
-    Path logPath =
-        Paths.get(Objects.requireNonNull(getClass().getClassLoader().getResource("logs")).toURI());
-    String[] args = {
-      "--config",
-      configFilePath.toString(),
-      "--namespace",
-      "test",
-      "--table",
-      "employee_trn",
-      "--log-dir",
-      logPath.toString(),
-      "--format",
-      "JSON",
-      "--import-mode",
-      "UPSERT",
-      "--mode",
-      "TRANSACTION",
-      "--file",
-      filePath.toString(),
-      "--control-file",
-      controlFilePath.toString(),
-      "--control-file-validation",
-      "MAPPED",
-      "--log-raw-record",
-      "--log-success",
-      "--transaction-size",
-      "1",
-      "--data-chunk-size",
-      "5"
-    };
+  void testImportMultipleTablesWithControlFile() throws Exception {
+    executeImport(
+        "--config",
+        configFilePath.toString(),
+        "--namespace",
+        "test",
+        "--table",
+        "employee",
+        "--log-dir",
+        tempDir.toString(),
+        "--format",
+        "JSON",
+        "--import-mode",
+        "UPSERT",
+        "--file",
+        getResourcePath("import_data/import_multi_mapped.json").toString(),
+        "--control-file",
+        getResourcePath("control_files/control_file_multi.json").toString(),
+        "--control-file-validation",
+        "FULL",
+        "--log-success");
+  }
 
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-    assertEquals(0, exitCode);
+  @Test
+  void testImportWithChunksAndTransactions() throws Exception {
+    Path logPath = getResourcePath("logs");
+    executeImport(
+        "--config",
+        configFilePath.toString(),
+        "--namespace",
+        "test",
+        "--table",
+        "employee_trn",
+        "--log-dir",
+        logPath.toString(),
+        "--format",
+        "JSON",
+        "--import-mode",
+        "UPSERT",
+        "--mode",
+        "TRANSACTION",
+        "--file",
+        getResourcePath("import_data/import_single_mapped.json").toString(),
+        "--control-file",
+        getResourcePath("control_files/control_file_trn_mapped.json").toString(),
+        "--control-file-validation",
+        "MAPPED",
+        "--log-raw-record",
+        "--log-success",
+        "--transaction-size",
+        "1",
+        "--data-chunk-size",
+        "5");
   }
 }

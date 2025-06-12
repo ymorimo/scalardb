@@ -17,7 +17,7 @@ import picocli.CommandLine;
 
 public class ImportCommandJsonLinesPostgresSQLIT {
 
-  private static final PostgreSQLContainer<?> postgres =
+  private static final PostgreSQLContainer<?> POSTGRES =
       new PostgreSQLContainer<>("postgres:15")
           .withDatabaseName("scalardb")
           .withUsername("postgres")
@@ -29,24 +29,21 @@ public class ImportCommandJsonLinesPostgresSQLIT {
 
   @BeforeAll
   static void startContainers() {
-    postgres.withCopyFileToContainer(
+    POSTGRES.withCopyFileToContainer(
         MountableFile.forClasspathResource("init_postgres_import.sql"),
-        "/docker-entrypoint-initdb.d/init_postgres_import.sql"); // Ensures the SQL file is
-    // available before
-    // container starts
-    postgres.start();
+        "/docker-entrypoint-initdb.d/init_postgres_import.sql");
+    POSTGRES.start();
   }
 
   @AfterAll
   static void stopContainers() {
-    if (postgres != null) {
-      postgres.stop();
+    if (POSTGRES != null) {
+      POSTGRES.stop();
     }
   }
 
   @BeforeEach
   void setup() throws Exception {
-    // Setup ScalarDB schema
     configFilePath = tempDir.resolve("scalardb.properties");
     FileUtils.writeStringToFile(configFilePath.toFile(), getScalarDbConfig(), "UTF-8");
   }
@@ -54,345 +51,181 @@ public class ImportCommandJsonLinesPostgresSQLIT {
   private static String getScalarDbConfig() {
     return "scalar.db.storage=jdbc\n"
         + "scalar.db.contact_points="
-        + postgres.getJdbcUrl()
+        + POSTGRES.getJdbcUrl()
         + "\n"
         + "scalar.db.username="
-        + postgres.getUsername()
+        + POSTGRES.getUsername()
         + "\n"
         + "scalar.db.password="
-        + postgres.getPassword()
+        + POSTGRES.getPassword()
         + "\n"
         + "scalar.db.jdbc.driver_class=org.postgresql.Driver\n"
         + "scalar.db.namespace=test\n"
         + "scalar.db.cross_partition_scan.enabled=true\n";
   }
 
+  private Path getResourcePath(String resource) throws Exception {
+    return Paths.get(
+        Objects.requireNonNull(getClass().getClassLoader().getResource(resource)).toURI());
+  }
+
+  private int executeImportCommand(String... args) {
+    return new CommandLine(new ImportCommand()).execute(args);
+  }
+
   @Test
-  void
-      testImportFromFileWithImportModeUpsertWithControlFileWithStorageModeTransactionAndFileFormatJSONLines()
-          throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("import_data/import_single_trn_full.jsonl"))
-                .toURI());
-    Path controlFilePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("control_files/control_file_trn.json"))
-                .toURI());
-    String[] args = {
-      "--config",
-      configFilePath.toString(),
-      "--namespace",
-      "test",
-      "--table",
-      "employee_trn",
-      "--log-dir",
-      tempDir.toString(),
-      "--format",
-      "JSONL",
-      "--import-mode",
-      "UPSERT",
-      "--mode",
-      "TRANSACTION",
-      "--file",
-      filePath.toString(),
-      "--control-file",
-      controlFilePath.toString(),
-      "--control-file-validation",
-      "FULL"
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
+  void testUpsertWithControlFileAndTransactionMode() throws Exception {
+    int exitCode =
+        executeImportCommand(
+            "--config", configFilePath.toString(),
+            "--namespace", "test",
+            "--table", "employee_trn",
+            "--log-dir", tempDir.toString(),
+            "--format", "JSONL",
+            "--import-mode", "UPSERT",
+            "--mode", "TRANSACTION",
+            "--file", getResourcePath("import_data/import_single_trn_full.jsonl").toString(),
+            "--control-file", getResourcePath("control_files/control_file_trn.json").toString(),
+            "--control-file-validation", "FULL");
     assertEquals(0, exitCode);
   }
 
   @Test
-  void testImportFromFileWithRequiredInputsOnlyAndFileFormatJsonLines() throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("import_data/import_single.jsonl"))
-                .toURI());
-    String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "employee",
-      "--log-dir", tempDir.toString(),
-      "--format", "JSONL",
-      "--import-mode", "INSERT",
-      "--file", filePath.toString()
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
+  void testRequiredInputsOnly() throws Exception {
+    int exitCode =
+        executeImportCommand(
+            "--config", configFilePath.toString(),
+            "--namespace", "test",
+            "--table", "employee",
+            "--log-dir", tempDir.toString(),
+            "--format", "JSONL",
+            "--import-mode", "INSERT",
+            "--file", getResourcePath("import_data/import_single.jsonl").toString());
     assertEquals(0, exitCode);
   }
 
   @Test
-  void testImportFromFileWithImportModeUpsertWithControlFile() throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("import_data/import_single_mapped.jsonl"))
-                .toURI());
-    Path controlFilePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("control_files/control_file.json"))
-                .toURI());
-    String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "employee",
-      "--log-dir", tempDir.toString(),
-      "--format", "JSONL",
-      "--import-mode", "UPSERT",
-      "--file", filePath.toString(),
-      "--control-file", controlFilePath.toString(),
-      "--control-file-validation", "FULL"
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
+  void testUpsertWithControlFile() throws Exception {
+    int exitCode =
+        executeImportCommand(
+            "--config", configFilePath.toString(),
+            "--namespace", "test",
+            "--table", "employee",
+            "--log-dir", tempDir.toString(),
+            "--format", "JSONL",
+            "--import-mode", "UPSERT",
+            "--file", getResourcePath("import_data/import_single_mapped.jsonl").toString(),
+            "--control-file", getResourcePath("control_files/control_file.json").toString(),
+            "--control-file-validation", "FULL");
     assertEquals(0, exitCode);
   }
 
   @Test
-  void testImportFromFileWithRequiredInputsOnlyAndFileFormatJsonLinesWithMaxThreads()
-      throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("import_data/import_single.jsonl"))
-                .toURI());
-    String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "employee",
-      "--log-dir", tempDir.toString(),
-      "--format", "JSONL",
-      "--import-mode", "INSERT",
-      "--file", filePath.toString(),
-      "--max-threads", "4"
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
+  void testWithMaxThreads() throws Exception {
+    int exitCode =
+        executeImportCommand(
+            "--config", configFilePath.toString(),
+            "--namespace", "test",
+            "--table", "employee",
+            "--log-dir", tempDir.toString(),
+            "--format", "JSONL",
+            "--import-mode", "INSERT",
+            "--file", getResourcePath("import_data/import_single.jsonl").toString(),
+            "--max-threads", "4");
     assertEquals(0, exitCode);
   }
 
   @Test
-  void testImportFromFileAndFileFormatJsonLines() throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("import_data/import_single.jsonl"))
-                .toURI());
-    String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "employee",
-      "--log-dir", tempDir.toString(),
-      "--format", "JSONL",
-      "--import-mode", "UPDATE",
-      "--file", filePath.toString()
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
+  void testUpdateImport() throws Exception {
+    int exitCode =
+        executeImportCommand(
+            "--config", configFilePath.toString(),
+            "--namespace", "test",
+            "--table", "employee",
+            "--log-dir", tempDir.toString(),
+            "--format", "JSONL",
+            "--import-mode", "UPDATE",
+            "--file", getResourcePath("import_data/import_single.jsonl").toString());
     assertEquals(0, exitCode);
   }
 
   @Test
-  void testImportFromFileWithImportModeUpsertAndFileFormatJsonLines() throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass().getClassLoader().getResource("import_data/import_single.jsonl"))
-                .toURI());
-    String[] args = {
-      "--config", configFilePath.toString(),
-      "--namespace", "test",
-      "--table", "employee",
-      "--log-dir", tempDir.toString(),
-      "--format", "JSONL",
-      "--import-mode", "UPSERT",
-      "--file", filePath.toString()
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
+  void testUpsertImport() throws Exception {
+    int exitCode =
+        executeImportCommand(
+            "--config", configFilePath.toString(),
+            "--namespace", "test",
+            "--table", "employee",
+            "--log-dir", tempDir.toString(),
+            "--format", "JSONL",
+            "--import-mode", "UPSERT",
+            "--file", getResourcePath("import_data/import_single.jsonl").toString());
     assertEquals(0, exitCode);
   }
 
   @Test
-  void
-      testImportFromFileWithImportModeUpsertWithControlFileMappedWithStorageModeTransactionAndFileFormatCSV_WithLogRawRecordsEnabled()
-          throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("import_data/import_single_mapped.jsonl"))
-                .toURI());
-    Path controlFilePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("control_files/control_file_trn_mapped.json"))
-                .toURI());
-    Path logPath =
-        Paths.get(Objects.requireNonNull(getClass().getClassLoader().getResource("logs")).toURI());
-    String[] args = {
-      "--config",
-      configFilePath.toString(),
-      "--namespace",
-      "test",
-      "--table",
-      "employee_trn",
-      "--log-dir",
-      logPath.toString(),
-      "--format",
-      "JSONL",
-      "--import-mode",
-      "UPSERT",
-      "--mode",
-      "TRANSACTION",
-      "--file",
-      filePath.toString(),
-      "--control-file",
-      controlFilePath.toString(),
-      "--control-file-validation",
-      "MAPPED",
-      "--log-raw-record",
-      "--log-success"
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
+  void testMappedControlFileWithLoggingEnabled() throws Exception {
+    int exitCode =
+        executeImportCommand(
+            "--config", configFilePath.toString(),
+            "--namespace", "test",
+            "--table", "employee_trn",
+            "--log-dir", getResourcePath("logs").toString(),
+            "--format", "JSONL",
+            "--import-mode", "UPSERT",
+            "--mode", "TRANSACTION",
+            "--file", getResourcePath("import_data/import_single_mapped.jsonl").toString(),
+            "--control-file",
+                getResourcePath("control_files/control_file_trn_mapped.json").toString(),
+            "--control-file-validation", "MAPPED",
+            "--log-raw-record", "--log-success");
     assertEquals(0, exitCode);
   }
 
   @Test
-  void
-      testImportFromFileWithImportModeUpsertWithControlFileWithStorageModeAndFileFormatJSONLinesWithTwoTables()
-          throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("import_data/import_multi_mapped.jsonl"))
-                .toURI());
-    Path controlFilePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("control_files/control_file_multi.json"))
-                .toURI());
-    String[] args = {
-      "--config",
-      configFilePath.toString(),
-      "--namespace",
-      "test",
-      "--table",
-      "employee",
-      "--log-dir",
-      tempDir.toString(),
-      "--format",
-      "JSONL",
-      "--import-mode",
-      "UPSERT",
-      "--file",
-      filePath.toString(),
-      "--control-file",
-      controlFilePath.toString(),
-      "--control-file-validation",
-      "FULL",
-      "--log-success"
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
-
+  void testMultiTableControlFile() throws Exception {
+    int exitCode =
+        executeImportCommand(
+            "--config",
+            configFilePath.toString(),
+            "--namespace",
+            "test",
+            "--table",
+            "employee",
+            "--log-dir",
+            tempDir.toString(),
+            "--format",
+            "JSONL",
+            "--import-mode",
+            "UPSERT",
+            "--file",
+            getResourcePath("import_data/import_multi_mapped.jsonl").toString(),
+            "--control-file",
+            getResourcePath("control_files/control_file_multi.json").toString(),
+            "--control-file-validation",
+            "FULL",
+            "--log-success");
     assertEquals(0, exitCode);
   }
 
   @Test
-  void testImportFromFileWithTransactionModeAndDataChunkSizeAndTransactionSizeWithFormatJSONLines()
-      throws Exception {
-    Path filePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("import_data/import_single_mapped.jsonl"))
-                .toURI());
-    Path controlFilePath =
-        Paths.get(
-            Objects.requireNonNull(
-                    getClass()
-                        .getClassLoader()
-                        .getResource("control_files/control_file_trn_mapped.json"))
-                .toURI());
-    Path logPath =
-        Paths.get(Objects.requireNonNull(getClass().getClassLoader().getResource("logs")).toURI());
-    String[] args = {
-      "--config",
-      configFilePath.toString(),
-      "--namespace",
-      "test",
-      "--table",
-      "employee_trn",
-      "--log-dir",
-      logPath.toString(),
-      "--format",
-      "JSONL",
-      "--import-mode",
-      "UPSERT",
-      "--mode",
-      "TRANSACTION",
-      "--file",
-      filePath.toString(),
-      "--control-file",
-      controlFilePath.toString(),
-      "--control-file-validation",
-      "MAPPED",
-      "--log-raw-record",
-      "--log-success",
-      "--transaction-size",
-      "1",
-      "--data-chunk-size",
-      "5"
-    };
-
-    ImportCommand importCommand = new ImportCommand();
-    CommandLine commandLine = new CommandLine(importCommand);
-    int exitCode = commandLine.execute(args);
+  void testTransactionAndChunkSize() throws Exception {
+    int exitCode =
+        executeImportCommand(
+            "--config", configFilePath.toString(),
+            "--namespace", "test",
+            "--table", "employee_trn",
+            "--log-dir", getResourcePath("logs").toString(),
+            "--format", "JSONL",
+            "--import-mode", "UPSERT",
+            "--mode", "TRANSACTION",
+            "--file", getResourcePath("import_data/import_single_mapped.jsonl").toString(),
+            "--control-file",
+                getResourcePath("control_files/control_file_trn_mapped.json").toString(),
+            "--control-file-validation", "MAPPED",
+            "--log-raw-record", "--log-success",
+            "--transaction-size", "1",
+            "--data-chunk-size", "5");
     assertEquals(0, exitCode);
   }
 }
