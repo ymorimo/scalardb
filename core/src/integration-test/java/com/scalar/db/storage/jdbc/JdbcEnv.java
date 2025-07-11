@@ -27,7 +27,7 @@ public final class JdbcEnv {
     properties.setProperty(DatabaseConfig.CROSS_PARTITION_SCAN, "true");
     properties.setProperty(DatabaseConfig.CROSS_PARTITION_SCAN_FILTERING, "true");
     properties.setProperty(DatabaseConfig.CROSS_PARTITION_SCAN_ORDERING, "true");
-
+    properties.setProperty(JdbcConfig.ISOLATION_LEVEL, Isolation.READ_COMMITTED.toString());
     // Add testName as a metadata schema suffix
     properties.setProperty(
         DatabaseConfig.SYSTEM_NAMESPACE_NAME,
