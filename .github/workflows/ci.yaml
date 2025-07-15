@@ -45,12 +45,13 @@ env:
 
 jobs:
   integration-test-for-tidb:
-    name: TiDB integration test (${{ matrix.mode.label }})
+    name: TiDB integration test (${{ matrix.tidb_version }}, ${{ matrix.mode.label }})
     runs-on: ubuntu-latest
 
     strategy:
       fail-fast: false
       matrix:
+        tidb_version: ['v8.5', 'v8.1', 'v7.5', 'v7.1', 'v6.5', 'v6.1']
         mode:
           - label: default
             group_commit_enabled: false
@@ -66,7 +67,7 @@ jobs:
       - name: Start TiDB with TiUP Playground
         timeout-minutes: 3
         run: |
-          tiup playground --db 1 --pd 1 --kv 1 --tiflash 0 --without-monitor > tiup.log 2>&1 &
+          tiup playground ${{ matrix.tidb_version }} --db 1 --pd 1 --kv 1 --tiflash 0 --without-monitor > tiup.log 2>&1 &
           # Check if TiDB is running
           while true; do
             if mysql -h 127.0.0.1 -P 4000 -u root -e "SELECT 1" > /dev/null 2>&1; then
@@ -116,5 +117,5 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tidb_integration_test_reports_${{ matrix.mode.label }}
+          name: tidb_integration_test_reports_${{ matrix.tidb_version }}_${{ matrix.mode.label }}
           path: core/build/reports/tests/integrationTestJdbc
