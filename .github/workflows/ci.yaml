@@ -45,12 +45,12 @@ env:
 
 jobs:
   integration-test-for-alloydb-omni:
-    name: AlloyDB omni integration test (${{ matrix.mode.label }})
+    name: AlloyDB omni ${{ matrix.version }} integration test (${{ matrix.mode.label }})
     runs-on: ubuntu-latest
 
     services:
       alloydb:
-        image: google/alloydbomni:16-ubi
+        image: google/alloydbomni:${{ matrix.version }}
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -59,6 +59,7 @@ jobs:
 
     strategy:
       matrix:
+        version: [15, 16]
         mode:
           - label: default
             group_commit_enabled: false
@@ -99,11 +100,11 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Execute Gradle 'integrationTestJdbc' task
-        run: ./gradlew integrationTestJdbc -Dscalardb.jdbc.url=jdbc:postgresql://localhost:5432/ -Dscalardb.jdbc.username=postgres -Dscalardb.jdbc.password=postgrescom ${{ matrix.mode.group_commit_enabled && env.INT_TEST_GRADLE_OPTIONS_FOR_GROUP_COMMIT || '' }}
+        run: ./gradlew integrationTestJdbc -Dscalardb.jdbc.url=jdbc:postgresql://localhost:5432/ -Dscalardb.jdbc.username=postgres -Dscalardb.jdbc.password=postgres ${{ matrix.mode.group_commit_enabled && env.INT_TEST_GRADLE_OPTIONS_FOR_GROUP_COMMIT || '' }}
 
       - name: Upload Gradle test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: alloydb_omni_integration_test_reports_${{ matrix.mode.label }}
+          name: alloydb_omni_${{ matrix.version }}_integration_test_reports_${{ matrix.mode.label }}
           path: core/build/reports/tests/integrationTestJdbc
