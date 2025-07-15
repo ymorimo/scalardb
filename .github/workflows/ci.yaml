@@ -58,6 +58,7 @@ jobs:
           - 5432:5432
 
     strategy:
+      fail-fast: false
       matrix:
         version: [15, 16]
         mode:
