@@ -54,6 +54,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
+          POSTGRES_INITDB_ARGS: "--icu-locale=en-US-u-va-posix"
         ports:
           - 5432:5432
 
